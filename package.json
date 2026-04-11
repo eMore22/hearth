@@ -1,0 +1,16 @@
+{
+  "name": "hearth",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/mobile",
+    "apps/web",
+    "shared/*"
+  ],
+  "scripts": {
+    "mobile": "cd apps/mobile && npx expo start",
+    "web": "cd apps/web && npm run dev",
+    "backend": "cd backend/api && uvicorn app.main:app --reload --port 8000",
+    "workers": "cd backend/api && celery -A app.workers.celery_app worker --loglevel=info"
+  }
+}

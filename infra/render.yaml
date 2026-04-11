@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: hearth-api
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r backend/api/requirements.txt
+    startCommand: cd backend/api && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: us-east-1
+      - key: REDIS_URL
+        fromService:
+          name: hearth-redis
+          type: redis
+          property: connectionString
+      - key: PADDLE_API_KEY
+        sync: false
+      - key: PADDLE_WEBHOOK_SECRET
+        sync: false
+
+  - type: worker
+    name: hearth-worker
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r backend/api/requirements.txt
+    startCommand: cd backend/api && celery -A app.workers.celery_app worker --loglevel=info
+    envVars:
+      - fromGroup: hearth-env
+
+  - type: worker
+    name: hearth-beat
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r backend/api/requirements.txt
+    startCommand: cd backend/api && celery -A app.workers.celery_app beat --loglevel=info
+    envVars:
+      - fromGroup: hearth-env
+
+  - type: redis
+    name: hearth-redis
+    region: oregon
+    plan: starter
+    maxmemoryPolicy: noeviction
