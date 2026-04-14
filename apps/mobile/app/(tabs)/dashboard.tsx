@@ -7,21 +7,48 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../src/stores/authStore'
 import { useDocumentStore } from '../../src/stores/documentStore'
+import { useBillStore } from '../../src/stores/billStore'
+import { useGroceryStore } from '../../src/stores/groceryStore'
+import { useMaintenanceStore } from '../../src/stores/maintenanceStore'
+import { useHealthStore } from '../../src/stores/healthStore'
+import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore'
 import { COLORS } from '../../src/utils/theme'
 import { formatDate, daysUntil } from '../../src/utils/dates'
 
 export default function DashboardScreen() {
   const { user, signOut } = useAuthStore()
-  const { documents, alerts, fetchDocuments, fetchAlerts, loading } = useDocumentStore()
+  const { documents, alerts, fetchDocuments, fetchAlerts, loading: docsLoading } = useDocumentStore()
+  const { bills, monthlyReport, fetchBills, fetchMonthlyReport, isLoading: billsLoading } = useBillStore()
+  const { inventory, mealPlan, fetchInventory, isLoading: groceryLoading } = useGroceryStore()
+  const { tasks, fetchTasks, isLoading: maintenanceLoading } = useMaintenanceStore()
+  const { triageHistory, fetchMedications, isLoading: healthLoading } = useHealthStore()
+  const { dashboardSummary, fetchDashboardSummary } = useChiefOfStaffStore()
+
+  const loading = docsLoading || billsLoading || groceryLoading || maintenanceLoading || healthLoading
 
   useEffect(() => {
     fetchDocuments()
     fetchAlerts()
+    fetchBills()
+    fetchMonthlyReport()
+    fetchInventory()
+    fetchTasks()
+    fetchMedications()
+    fetchDashboardSummary()
   }, [])
 
   const urgentAlerts = alerts.filter(a =>
     a.urgency === 'critical' || a.urgency === 'expired'
   )
+
+  // Get counts for module cards
+  const documentCount = documents.length
+  const billCount = bills.length
+  const inventoryCount = inventory.length
+  const taskCount = tasks.filter(t => !t.completed).length
+  const healthEventCount = triageHistory.length
+
+  const monthlySpend = monthlyReport?.total_spent || 0
 
   return (
     <ScrollView
@@ -29,7 +56,15 @@ export default function DashboardScreen() {
       refreshControl={
         <RefreshControl
           refreshing={loading}
-          onRefresh={() => { fetchDocuments(); fetchAlerts() }}
+          onRefresh={() => {
+            fetchDocuments()
+            fetchAlerts()
+            fetchBills()
+            fetchMonthlyReport()
+            fetchInventory()
+            fetchTasks()
+            fetchDashboardSummary()
+          }}
           tintColor={COLORS.primary}
         />
       }
@@ -37,7 +72,9 @@ export default function DashboardScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Good morning 👋</Text>
+          <Text style={styles.greeting}>
+            {dashboardSummary?.chief_message || 'Good morning 👋'}
+          </Text>
           <Text style={styles.name}>{user?.user_metadata?.full_name || 'Welcome'}</Text>
         </View>
         <TouchableOpacity onPress={signOut}>
@@ -67,7 +104,7 @@ export default function DashboardScreen() {
         <ModuleCard
           icon="document-text"
           title="Documents"
-          subtitle={`${documents.length} stored`}
+          subtitle={`${documentCount} stored`}
           color="#2E86AB"
           active={true}
           onPress={() => router.push('/(tabs)/documents')}
@@ -75,36 +112,46 @@ export default function DashboardScreen() {
         <ModuleCard
           icon="card"
           title="Bills"
-          subtitle="Coming soon"
+          subtitle={billCount > 0 ? `${billCount} bills · $${monthlySpend}/mo` : 'Add your first bill'}
           color="#A23B72"
-          active={false}
-          onPress={() => {}}
+          active={true}
+          onPress={() => router.push('/(tabs)/bills')}
         />
         <ModuleCard
           icon="basket"
           title="Grocery"
-          subtitle="Coming soon"
+          subtitle={inventoryCount > 0 ? `${inventoryCount} items` : 'Plan your meals'}
           color="#F18F01"
-          active={false}
-          onPress={() => {}}
+          active={true}
+          onPress={() => router.push('/(tabs)/grocery')}
         />
         <ModuleCard
           icon="construct"
           title="Maintenance"
-          subtitle="Coming soon"
+          subtitle={taskCount > 0 ? `${taskCount} tasks pending` : 'Set up home profile'}
           color="#4CAF50"
-          active={false}
-          onPress={() => {}}
+          active={true}
+          onPress={() => router.push('/(tabs)/maintenance')}
         />
         <ModuleCard
           icon="heart"
           title="Health"
-          subtitle="Coming soon"
+          subtitle={healthEventCount > 0 ? `${healthEventCount} recent checks` : 'Health triage'}
           color="#E74C3C"
-          active={false}
-          onPress={() => {}}
+          active={true}
+          onPress={() => router.push('/(tabs)/health')}
         />
       </View>
+
+      {/* Quick Chat with Chief of Staff */}
+      <TouchableOpacity
+        style={styles.chiefButton}
+        onPress={() => router.push('/chief-of-staff')}
+      >
+        <Ionicons name="chatbubble-ellipses" size={24} color="#fff" />
+        <Text style={styles.chiefButtonText}>Ask Hearth Chief of Staff</Text>
+        <Ionicons name="chevron-forward" size={20} color="#fff" />
+      </TouchableOpacity>
 
       {/* Upcoming Expiries */}
       {alerts.length > 0 && (
@@ -233,5 +280,22 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border
   },
   expiryTitle: { fontSize: 14, color: COLORS.text, flex: 1 },
-  expiryDays: { fontSize: 13, fontWeight: '600', color: COLORS.primary }
+  expiryDays: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
+  chiefButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    marginHorizontal: 20,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 16,
+    justifyContent: 'space-between'
+  },
+  chiefButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+    marginLeft: 12
+  }
 })

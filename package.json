@@ -12,5 +12,13 @@
     "web": "cd apps/web && npm run dev",
     "backend": "cd backend/api && uvicorn app.main:app --reload --port 8000",
     "workers": "cd backend/api && celery -A app.workers.celery_app worker --loglevel=info"
+  },
+  "dependencies": {
+    "react-native-worklets": "^0.8.1",
+    "react-native-worklets-core": "^1.6.3"
+  },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
   }
 }

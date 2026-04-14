@@ -1,6 +1,6 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- HEARTH — Full Database Schema
--- Run this in your Supabase SQL editor to set up all tables
+-- HEARTH — Full Database Schema (Corrected)
+-- Run this in your Supabase SQL editor
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- Enable UUID extension
@@ -33,10 +33,10 @@ CREATE TABLE documents (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   household_id    UUID REFERENCES households(id) ON DELETE CASCADE,
   uploaded_by     UUID REFERENCES auth.users(id),
-  member_name     TEXT,                          -- which family member this belongs to
+  member_name     TEXT,
   file_url        TEXT,
   file_name       TEXT,
-  document_type   TEXT,                          -- passport, insurance, warranty, etc.
+  document_type   TEXT,
   title           TEXT,
   issuer          TEXT,
   holder_name     TEXT,
@@ -66,10 +66,10 @@ CREATE TABLE bills (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   household_id    UUID REFERENCES households(id) ON DELETE CASCADE,
   name            TEXT NOT NULL,
-  category        TEXT,                          -- utilities, subscriptions, insurance, etc.
+  category        TEXT,
   amount          DECIMAL(10,2),
   currency        TEXT DEFAULT 'USD',
-  billing_cycle   TEXT DEFAULT 'monthly',        -- monthly, annual, weekly
+  billing_cycle   TEXT DEFAULT 'monthly',
   next_due_date   DATE,
   provider        TEXT,
   notes           TEXT,
@@ -81,7 +81,7 @@ CREATE TABLE bill_history (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   bill_id     UUID REFERENCES bills(id) ON DELETE CASCADE,
   amount      DECIMAL(10,2),
-  period      TEXT,                              -- e.g. "2026-04"
+  period      TEXT,
   recorded_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -97,22 +97,22 @@ CREATE TABLE savings_log (
 -- ─── MODULE 3: GROCERY ───────────────────────────────────────────────────────
 
 CREATE TABLE household_preferences (
-  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  household_id        UUID REFERENCES households(id) ON DELETE CASCADE UNIQUE,
-  household_size      INT DEFAULT 2,
-  weekly_budget       DECIMAL(10,2),
-  currency            TEXT DEFAULT 'USD',
-  dietary_restrictions TEXT[],                   -- ['vegetarian', 'gluten-free', etc.]
-  cuisine_preferences TEXT[],
-  disliked_ingredients TEXT[],
-  updated_at          TIMESTAMPTZ DEFAULT NOW()
+  id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  household_id          UUID REFERENCES households(id) ON DELETE CASCADE UNIQUE,
+  household_size        INT DEFAULT 2,
+  weekly_budget         DECIMAL(10,2),
+  currency              TEXT DEFAULT 'USD',
+  dietary_restrictions  TEXT[],
+  cuisine_preferences   TEXT[],
+  disliked_ingredients  TEXT[],
+  updated_at            TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE meal_plans (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   household_id  UUID REFERENCES households(id) ON DELETE CASCADE,
   week_start    DATE,
-  plan_data     JSONB,                           -- full 7-day plan with meals + recipes
+  plan_data     JSONB,
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -120,18 +120,18 @@ CREATE TABLE shopping_lists (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   household_id  UUID REFERENCES households(id) ON DELETE CASCADE,
   meal_plan_id  UUID REFERENCES meal_plans(id),
-  items         JSONB,                           -- [{name, quantity, unit, checked}]
+  items         JSONB,
   week_start    DATE,
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE waste_log (
-  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  household_id  UUID REFERENCES households(id) ON DELETE CASCADE,
-  item_name     TEXT,
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  household_id    UUID REFERENCES households(id) ON DELETE CASCADE,
+  item_name       TEXT,
   estimated_value DECIMAL(10,2),
-  week_start    DATE,
-  logged_at     TIMESTAMPTZ DEFAULT NOW()
+  week_start      DATE,
+  logged_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ─── MODULE 4: MAINTENANCE ───────────────────────────────────────────────────
@@ -139,10 +139,10 @@ CREATE TABLE waste_log (
 CREATE TABLE home_profiles (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   household_id    UUID REFERENCES households(id) ON DELETE CASCADE UNIQUE,
-  property_type   TEXT,                          -- apartment, house, etc.
+  property_type   TEXT,
   year_built      INT,
-  appliances      JSONB DEFAULT '[]',            -- [{name, brand, year_installed}]
-  vehicles        JSONB DEFAULT '[]',            -- [{make, model, year, mileage}]
+  appliances      JSONB DEFAULT '[]',
+  vehicles        JSONB DEFAULT '[]',
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -151,8 +151,8 @@ CREATE TABLE maintenance_tasks (
   household_id    UUID REFERENCES households(id) ON DELETE CASCADE,
   title           TEXT NOT NULL,
   description     TEXT,
-  category        TEXT,                          -- hvac, plumbing, vehicle, appliance, etc.
-  frequency_days  INT,                           -- how often in days
+  category        TEXT,
+  frequency_days  INT,
   next_due_date   DATE,
   last_done_date  DATE,
   estimated_cost  DECIMAL(10,2),
@@ -166,7 +166,7 @@ CREATE TABLE maintenance_history (
   completed_at  TIMESTAMPTZ DEFAULT NOW(),
   cost          DECIMAL(10,2),
   notes         TEXT,
-  done_by       TEXT                             -- 'self' or tradesperson name
+  done_by       TEXT
 );
 
 CREATE TABLE repair_log (
@@ -177,7 +177,7 @@ CREATE TABLE repair_log (
   photo_url     TEXT,
   ai_diagnosis  TEXT,
   ai_fix        TEXT,
-  status        TEXT DEFAULT 'open',             -- open, in_progress, resolved
+  status        TEXT DEFAULT 'open',
   reported_at   TIMESTAMPTZ DEFAULT NOW(),
   resolved_at   TIMESTAMPTZ
 );
@@ -185,14 +185,14 @@ CREATE TABLE repair_log (
 -- ─── MODULE 5: HEALTH ────────────────────────────────────────────────────────
 
 CREATE TABLE family_health_profiles (
-  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  household_id    UUID REFERENCES households(id) ON DELETE CASCADE,
-  member_name     TEXT NOT NULL,
-  date_of_birth   DATE,
-  blood_type      TEXT,
-  allergies       TEXT[],
-  chronic_conditions TEXT[],
-  created_at      TIMESTAMPTZ DEFAULT NOW()
+  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  household_id        UUID REFERENCES households(id) ON DELETE CASCADE,
+  member_name         TEXT NOT NULL,
+  date_of_birth       DATE,
+  blood_type          TEXT,
+  allergies           TEXT[],
+  chronic_conditions  TEXT[],
+  created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE health_events (
@@ -200,7 +200,7 @@ CREATE TABLE health_events (
   household_id    UUID REFERENCES households(id) ON DELETE CASCADE,
   member_name     TEXT,
   symptoms        TEXT,
-  triage_result   TEXT,                          -- home | pharmacy | gp | emergency
+  triage_result   TEXT,
   ai_response     TEXT,
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
@@ -222,36 +222,36 @@ CREATE TABLE health_reminders (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   household_id    UUID REFERENCES households(id) ON DELETE CASCADE,
   member_name     TEXT,
-  reminder_type   TEXT,                          -- medication | appointment | checkup
+  reminder_type   TEXT,
   title           TEXT,
   due_at          TIMESTAMPTZ,
   is_sent         BOOLEAN DEFAULT FALSE
 );
 
--- ─── ROW LEVEL SECURITY ──────────────────────────────────────────────────────
--- Users can only see data belonging to their household
+-- ─── ENABLE ROW LEVEL SECURITY ───────────────────────────────────────────────
 
-ALTER TABLE households           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE household_members    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE documents            ENABLE ROW LEVEL SECURITY;
-ALTER TABLE document_alerts      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE bills                ENABLE ROW LEVEL SECURITY;
-ALTER TABLE bill_history         ENABLE ROW LEVEL SECURITY;
-ALTER TABLE savings_log          ENABLE ROW LEVEL SECURITY;
-ALTER TABLE household_preferences ENABLE ROW LEVEL SECURITY;
-ALTER TABLE meal_plans           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE shopping_lists       ENABLE ROW LEVEL SECURITY;
-ALTER TABLE waste_log            ENABLE ROW LEVEL SECURITY;
-ALTER TABLE home_profiles        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE maintenance_tasks    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE maintenance_history  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE repair_log           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE family_health_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE health_events        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE medications          ENABLE ROW LEVEL SECURITY;
-ALTER TABLE health_reminders     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE households              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE household_members       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE documents               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE document_alerts         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bills                   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bill_history            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE savings_log             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE household_preferences   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE meal_plans              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shopping_lists          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE waste_log               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE home_profiles           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE maintenance_tasks       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE maintenance_history     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE repair_log              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE family_health_profiles  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE health_events           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE medications             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE health_reminders        ENABLE ROW LEVEL SECURITY;
 
--- Helper function: get user's household_id
+-- ─── HELPER FUNCTION ─────────────────────────────────────────────────────────
+
 CREATE OR REPLACE FUNCTION get_my_household_id()
 RETURNS UUID AS $$
   SELECT household_id FROM household_members
@@ -259,34 +259,73 @@ RETURNS UUID AS $$
   LIMIT 1;
 $$ LANGUAGE sql SECURITY DEFINER;
 
--- Apply policy to all tables
-DO $$
-DECLARE
-  t TEXT;
-BEGIN
-  FOREACH t IN ARRAY ARRAY[
-    'documents', 'document_alerts', 'bills', 'bill_history',
-    'savings_log', 'household_preferences', 'meal_plans',
-    'shopping_lists', 'waste_log', 'home_profiles',
-    'maintenance_tasks', 'maintenance_history', 'repair_log',
-    'family_health_profiles', 'health_events', 'medications', 'health_reminders'
-  ] LOOP
-    EXECUTE format(
-      'CREATE POLICY "household_access" ON %I
-       FOR ALL USING (household_id = get_my_household_id())', t
-    );
-  END LOOP;
-END $$;
+-- ─── RLS POLICIES: tables with direct household_id ───────────────────────────
 
--- Household members policy
+CREATE POLICY "household_access" ON documents
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON document_alerts
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON bills
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON savings_log
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON household_preferences
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON meal_plans
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON shopping_lists
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON waste_log
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON home_profiles
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON maintenance_tasks
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON repair_log
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON family_health_profiles
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON health_events
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON medications
+  FOR ALL USING (household_id = get_my_household_id());
+
+CREATE POLICY "household_access" ON health_reminders
+  FOR ALL USING (household_id = get_my_household_id());
+
+-- ─── RLS POLICIES: tables without direct household_id ────────────────────────
+
+CREATE POLICY "household_access" ON bill_history
+  FOR ALL USING (
+    bill_id IN (
+      SELECT id FROM bills WHERE household_id = get_my_household_id()
+    )
+  );
+
+CREATE POLICY "household_access" ON maintenance_history
+  FOR ALL USING (
+    task_id IN (
+      SELECT id FROM maintenance_tasks WHERE household_id = get_my_household_id()
+    )
+  );
+
+-- ─── RLS POLICIES: core tables ───────────────────────────────────────────────
+
 CREATE POLICY "members_access" ON household_members
   FOR ALL USING (user_id = auth.uid() OR household_id = get_my_household_id());
 
--- Households policy
 CREATE POLICY "households_access" ON households
   FOR ALL USING (id = get_my_household_id());
-
--- ─── STORAGE BUCKET ──────────────────────────────────────────────────────────
--- Run this separately in Supabase dashboard > Storage > New bucket
--- Name: documents
--- Public: false (private encrypted storage)
