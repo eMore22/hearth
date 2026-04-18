@@ -3,7 +3,11 @@ from app.dependencies import get_current_user
 from app.agents.health_agent import HealthAgent
 from app.models.user import User
 
-router = APIRouter(prefix="/health", tags=["health"])
+router = APIRouter(tags=["health"])
+
+@router.get("/medications")
+async def get_medications(current_user: User = Depends(get_current_user)):
+    return []
 
 @router.post("/triage")
 async def triage(request: Request, current_user: User = Depends(get_current_user)):

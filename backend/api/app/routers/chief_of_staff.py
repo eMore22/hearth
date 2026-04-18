@@ -3,7 +3,7 @@ from app.dependencies import get_current_user
 from app.agents.chief_of_staff_agent import ChiefOfStaffAgent
 from app.models.user import User
 
-router = APIRouter(prefix="/chief", tags=["chief_of_staff"])
+router = APIRouter(tags=["chief_of_staff"])
 
 @router.post("/chat")
 async def chat(request: Request, current_user: User = Depends(get_current_user)):

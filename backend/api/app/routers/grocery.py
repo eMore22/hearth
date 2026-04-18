@@ -3,7 +3,11 @@ from app.dependencies import get_current_user
 from app.agents.grocery_agent import GroceryAgent
 from app.models.user import User
 
-router = APIRouter(prefix="/grocery", tags=["grocery"])
+router = APIRouter(tags=["grocery"])
+
+@router.get("/inventory")
+async def get_inventory(current_user: User = Depends(get_current_user)):
+    return []
 
 @router.post("/meal-plan/generate")
 async def generate_meal_plan(request: Request, current_user: User = Depends(get_current_user)):

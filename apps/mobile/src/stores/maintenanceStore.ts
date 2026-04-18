@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api } from '../services/api';
+import { maintenanceService } from '../services/api';
 
 export interface MaintenanceTask {
   id?: string;
@@ -59,9 +59,7 @@ export const useMaintenanceStore = create<MaintenanceState>((set, get) => ({
     if (!prof) throw new Error('No home profile');
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/maintenance/calendar/generate', {
-        home_profile: prof,
-      });
+      const response = await maintenanceService.generateCalendar(prof);
       set({ calendar: response.data, tasks: response.data.tasks, isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -73,10 +71,7 @@ export const useMaintenanceStore = create<MaintenanceState>((set, get) => ({
   diagnoseProblem: async (description, photos) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/maintenance/diagnose', {
-        description,
-        photos,
-      });
+      const response = await maintenanceService.diagnose(description, photos);
       set({ isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -88,10 +83,7 @@ export const useMaintenanceStore = create<MaintenanceState>((set, get) => ({
   estimateCost: async (appliance, issue) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/maintenance/estimate-cost', {
-        appliance,
-        issue,
-      });
+      const response = await maintenanceService.estimateCost(appliance, issue);
       set({ isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -103,7 +95,7 @@ export const useMaintenanceStore = create<MaintenanceState>((set, get) => ({
   getDIYInstructions: async (taskName) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.get(`/maintenance/diy/${encodeURIComponent(taskName)}`);
+      const response = await maintenanceService.getDIYInstructions(taskName);
       set({ isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -115,7 +107,7 @@ export const useMaintenanceStore = create<MaintenanceState>((set, get) => ({
   fetchTasks: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.get('/maintenance/tasks');
+      const response = await maintenanceService.getTasks();
       set({ tasks: response.data, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
@@ -125,7 +117,7 @@ export const useMaintenanceStore = create<MaintenanceState>((set, get) => ({
   completeTask: async (taskId) => {
     set({ isLoading: true, error: null });
     try {
-      await api.post(`/maintenance/tasks/${taskId}/complete`);
+      await maintenanceService.completeTask(taskId);
       set({
         tasks: get().tasks.map((t) =>
           t.id === taskId ? { ...t, completed: true } : t

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api } from '../services/api';
+import { groceryService } from '../services/api';
 
 export interface MealPlan {
   week_of: string;
@@ -69,10 +69,10 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
   generateMealPlan: async (preferences, inventory) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/grocery/meal-plan/generate', {
-        preferences: preferences || get().preferences,
-        inventory: inventory || get().inventory,
-      });
+      const response = await groceryService.generateMealPlan(
+        preferences || get().preferences,
+        inventory || get().inventory
+      );
       set({ mealPlan: response.data, isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -84,10 +84,10 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
   createShoppingList: async (mealPlan, inventory) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/grocery/shopping-list', {
-        meal_plan: mealPlan,
-        inventory: inventory || get().inventory,
-      });
+      const response = await groceryService.createShoppingList(
+        mealPlan,
+        inventory || get().inventory
+      );
       set({ shoppingList: response.data, isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -100,7 +100,7 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
     const inv = inventory || get().inventory;
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/grocery/waste-alert', { inventory: inv });
+      const response = await groceryService.wasteAlert(inv);
       set({ wasteAlerts: response.data, isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -112,11 +112,7 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
   modifyMeal: async (currentPlan, day, newPreference) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/grocery/meal-plan/modify', {
-        current_plan: currentPlan,
-        day,
-        new_preference: newPreference,
-      });
+      const response = await groceryService.modifyMeal(currentPlan, day, newPreference);
       set({ isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -128,7 +124,7 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
   fetchInventory: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.get('/grocery/inventory');
+      const response = await groceryService.getInventory();
       set({ inventory: response.data, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
@@ -138,7 +134,7 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
   addInventoryItem: async (item) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/grocery/inventory', item);
+      const response = await groceryService.addInventory(item);
       set({ inventory: [...get().inventory, response.data], isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });

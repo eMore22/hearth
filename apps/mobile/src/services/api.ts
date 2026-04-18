@@ -5,12 +5,42 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
 
 const api = axios.create({ baseURL: API_URL })
 
-// Auto-attach auth token
-api.interceptors.request.use(async (config) => {
+// Cache token in memory so interceptor doesn't miss it on fast requests
+let cachedToken: string | null = null
+
+export const setAuthToken = (token: string | null) => {
+  cachedToken = token
+}
+
+export const getAuthToken = async (): Promise<string | null> => {
+  if (cachedToken) return cachedToken
   const token = await SecureStore.getItemAsync('access_token')
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  if (token) cachedToken = token
+  return token
+}
+
+// Auto-attach auth token on every request
+api.interceptors.request.use(async (config) => {
+  const token = await getAuthToken()
+  if (token) {
+    config.headers = config.headers || {}
+    config.headers.Authorization = `Bearer ${token}`
+  }
   return config
 })
+
+// Handle 401 globally — clear token and force re-login
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      cachedToken = null
+      await SecureStore.deleteItemAsync('access_token')
+      await SecureStore.deleteItemAsync('user')
+    }
+    return Promise.reject(error)
+  }
+)
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 export const authService = {
@@ -43,61 +73,47 @@ export const documentService = {
       name: asset.fileName || 'document.jpg'
     } as any)
     if (memberName) formData.append('member_name', memberName)
-
     return api.post('/api/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
-
   list: () => api.get('/api/documents/'),
-
-  ask: (question: string) =>
-    api.post('/api/documents/ask', { question }),
-
+  ask: (question: string) => api.post('/api/documents/ask', { question }),
   getExpiring: () => api.get('/api/documents/expiring'),
-
   delete: (id: string) => api.delete(`/api/documents/${id}`),
 }
 
 // ─── BILLS ───────────────────────────────────────────────────────────────────
 export const billService = {
   list: () => api.get('/api/bills/'),
-
   create: (data: any) => api.post('/api/bills/', data),
-
   analyze: (billData: any) => api.post('/api/bills/analyze', billData),
-
   detectUnused: (bills?: any[]) => api.post('/api/bills/detect-unused', { bills }),
-
   negotiationScript: (provider: string, currentPlan: string, accountAgeMonths?: number) =>
     api.post('/api/bills/negotiation-script', {
       provider,
       current_plan: currentPlan,
       account_age_months: accountAgeMonths || 12,
     }),
-
   monthlyReport: () => api.get('/api/bills/monthly-report'),
+  update: (id: string, data: any) => api.put(`/api/bills/${id}`, data),
+  delete: (id: string) => api.delete(`/api/bills/${id}`),
 }
 
 // ─── GROCERY ─────────────────────────────────────────────────────────────────
 export const groceryService = {
   generateMealPlan: (preferences: any, inventory?: any[]) =>
     api.post('/api/grocery/meal-plan/generate', { preferences, inventory }),
-
   createShoppingList: (mealPlan: any, inventory?: any[]) =>
     api.post('/api/grocery/shopping-list', { meal_plan: mealPlan, inventory }),
-
   wasteAlert: (inventory: any[]) => api.post('/api/grocery/waste-alert', { inventory }),
-
   modifyMeal: (currentPlan: any, day: string, newPreference: string) =>
     api.post('/api/grocery/meal-plan/modify', {
       current_plan: currentPlan,
       day,
       new_preference: newPreference,
     }),
-
   getInventory: () => api.get('/api/grocery/inventory'),
-
   addInventory: (item: any) => api.post('/api/grocery/inventory', item),
 }
 
@@ -105,18 +121,14 @@ export const groceryService = {
 export const maintenanceService = {
   generateCalendar: (homeProfile: any) =>
     api.post('/api/maintenance/calendar/generate', { home_profile: homeProfile }),
-
   diagnose: (description: string, photos?: string[]) =>
     api.post('/api/maintenance/diagnose', { description, photos }),
-
   estimateCost: (appliance: string, issue: string) =>
     api.post('/api/maintenance/estimate-cost', { appliance, issue }),
-
   getDIYInstructions: (taskName: string) =>
     api.get(`/api/maintenance/diy/${encodeURIComponent(taskName)}`),
-
   getTasks: () => api.get('/api/maintenance/tasks'),
-
+  createTask: (data: any) => api.post('/api/maintenance/tasks', data),
   completeTask: (taskId: string) => api.post(`/api/maintenance/tasks/${taskId}/complete`),
 }
 
@@ -124,24 +136,24 @@ export const maintenanceService = {
 export const healthService = {
   triage: (symptoms: string, patientProfile?: any) =>
     api.post('/api/health/triage', { symptoms, patient_profile: patientProfile }),
-
   homeCare: (condition: string) => api.post('/api/health/home-care', { condition }),
-
   medicationSchedule: (medications: any[]) =>
     api.post('/api/health/medication-schedule', { medications }),
-
   getMedications: () => api.get('/api/health/medications'),
-
   addMedication: (med: any) => api.post('/api/health/medications', med),
+  getFamilyProfiles: () => api.get('/api/health/family-profiles'),
+  addFamilyProfile: (profile: any) => api.post('/api/health/family-profiles', profile),
+  getHealthEvents: () => api.get('/api/health/events'),
 }
 
 // ─── CHIEF OF STAFF ──────────────────────────────────────────────────────────
 export const chiefService = {
-  chat: (message: string, context?: any) =>
-    api.post('/api/chief/chat', { message, context }),
-
-  dashboardSummary: (householdData?: any) =>
-    api.post('/api/chief/dashboard-summary', { household_data: householdData }),
+  chat: (message: string, conversationHistory?: any[]) =>
+    api.post('/api/chief/chat', {
+      message,
+      conversation_history: conversationHistory || []
+    }),
+  dashboardSummary: () => api.post('/api/chief/dashboard-summary', {}),
 }
 
 // ─── NOTIFICATIONS ───────────────────────────────────────────────────────────

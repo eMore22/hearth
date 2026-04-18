@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api } from '../services/api';
+import { healthService } from '../services/api';
 
 export interface TriageResult {
   triage_level: 'home_care' | 'pharmacy' | 'gp_visit' | 'urgent_care' | 'emergency';
@@ -41,10 +41,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
   triageSymptoms: async (symptoms, patientProfile = {}) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/health/triage', {
-        symptoms,
-        patient_profile: patientProfile,
-      });
+      const response = await healthService.triage(symptoms, patientProfile);
       const result = response.data;
       set({
         triageHistory: [
@@ -63,7 +60,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
   getHomeCare: async (condition) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/health/home-care', { condition });
+      const response = await healthService.homeCare(condition);
       set({ isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -75,7 +72,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
   createMedicationSchedule: async (medications) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/health/medication-schedule', { medications });
+      const response = await healthService.medicationSchedule(medications);
       set({ isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -87,7 +84,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
   fetchMedications: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.get('/health/medications');
+      const response = await healthService.getMedications();
       set({ medications: response.data, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
@@ -97,7 +94,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
   addMedication: async (med) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/health/medications', med);
+      const response = await healthService.addMedication(med);
       set({
         medications: [...get().medications, response.data],
         isLoading: false,

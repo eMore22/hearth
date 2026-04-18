@@ -10,9 +10,11 @@ import {
 import { router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
-import * as Notifications from 'expo-notifications'
 import { useCameraPermissions } from 'expo-camera'
 import { COLORS, TYPOGRAPHY, SPACING } from '../../src/utils/theme'
+
+// Notifications temporarily disabled in Expo Go
+// import * as Notifications from 'expo-notifications'
 
 interface PermissionItem {
   id: string
@@ -34,14 +36,15 @@ export default function PermissionsScreen() {
       granted: cameraPerms?.granted ?? null,
       loading: false,
     },
-    {
-      id: 'notifications',
-      icon: 'notifications',
-      title: 'Notifications',
-      description: 'Get alerts for expiries, bills, and reminders',
-      granted: null,
-      loading: false,
-    },
+    // Notifications disabled for Expo Go testing
+    // {
+    //   id: 'notifications',
+    //   icon: 'notifications',
+    //   title: 'Notifications',
+    //   description: 'Get alerts for expiries, bills, and reminders',
+    //   granted: null,
+    //   loading: false,
+    // },
   ])
 
   const requestPermission = async (id: string) => {
@@ -57,19 +60,18 @@ export default function PermissionsScreen() {
               : p
           )
         )
-      } else if (id === 'notifications') {
-        const { status } = await Notifications.requestPermissionsAsync()
-        setPermissions(prev =>
-          prev.map(p =>
-            p.id === id
-              ? { ...p, granted: status === 'granted', loading: false }
-              : p
-          )
-        )
-        if (status === 'granted') {
-          // Register device token (optional)
-        }
       }
+      // Notifications disabled
+      // else if (id === 'notifications') {
+      //   const { status } = await Notifications.requestPermissionsAsync()
+      //   setPermissions(prev =>
+      //     prev.map(p =>
+      //       p.id === id
+      //         ? { ...p, granted: status === 'granted', loading: false }
+      //         : p
+      //     )
+      //   )
+      // }
     } catch (error) {
       Alert.alert('Error', 'Could not request permission')
       setPermissions(prev => prev.map(p => (p.id === id ? { ...p, loading: false } : p)))

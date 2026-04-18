@@ -11,7 +11,6 @@ def get_supabase() -> Client:
 
 
 def get_supabase_admin() -> Client:
-    """Admin client — bypasses RLS. Use only in workers/server-side ops."""
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
 
 
@@ -21,14 +20,24 @@ async def get_current_user(
 ):
     token = credentials.credentials
     try:
-        user = supabase.auth.get_user(token)
-        if not user or not user.user:
+        supabase_user = supabase.auth.get_user(token)
+        if not supabase_user or not supabase_user.user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired token"
             )
-        return user.user
-    except Exception:
+        
+        # Fetch additional user data from public.users
+        db_user = supabase.table("users").select("*").eq("id", supabase_user.user.id).maybe_single().execute()
+        
+        user_data = {
+            "id": supabase_user.user.id,
+            "email": supabase_user.user.email,
+            "household_id": db_user.data.get("household_id") if db_user.data else None,
+            "full_name": supabase_user.user.user_metadata.get("full_name", "")
+        }
+        return user_data
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"
@@ -36,10 +45,9 @@ async def get_current_user(
 
 
 def require_module(module_name: str):
-    """Dependency factory — gates a route behind a feature flag."""
     def check():
-        flag = getattr(settings, f"MODULE_{module_name.upper()}", False)
-        if not flag:
+        active_modules = getattr(settings, "ACTIVE_MODULES", {})
+        if not active_modules.get(module_name, False):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Module '{module_name}' is not yet available"

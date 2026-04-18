@@ -3,7 +3,11 @@ from app.dependencies import get_current_user
 from app.agents.bill_agent import BillAgent
 from app.models.user import User
 
-router = APIRouter(prefix="/bills", tags=["bills"])
+router = APIRouter(tags=["bills"])
+
+@router.get("/")
+async def list_bills(current_user: User = Depends(get_current_user)):
+    return []
 
 @router.post("/analyze")
 async def analyze_bill(request: Request, current_user: User = Depends(get_current_user)):
@@ -30,7 +34,6 @@ async def negotiation_script(request: Request, current_user: User = Depends(get_
 
 @router.get("/monthly-report")
 async def monthly_report(current_user: User = Depends(get_current_user)):
-    # Placeholder: fetch from DB later
     bills = []
     previous = []
     agent = BillAgent(household_id=current_user.household_id, user_id=str(current_user.id))

@@ -23,7 +23,9 @@ async def create_household(
     user=Depends(get_current_user),
     supabase=Depends(get_supabase)
 ):
+    """Create a new household and set the current user as owner."""
     try:
+        # Insert household with created_by
         household = supabase.table("households").insert({
             "name": payload.name,
             "address": payload.address,
@@ -31,9 +33,11 @@ async def create_household(
             "created_by": user.id
         }).execute()
 
-        # Add creator as owner
+        household_id = household.data[0]["id"]
+
+        # Add creator as owner in household_members
         supabase.table("household_members").insert({
-            "household_id": household.data[0]["id"],
+            "household_id": household_id,
             "user_id": user.id,
             "role": "owner"
         }).execute()
@@ -48,14 +52,15 @@ async def get_my_household(
     user=Depends(get_current_user),
     supabase=Depends(get_supabase)
 ):
+    """Get the current user's household (if any)."""
     member = supabase.table("household_members")\
         .select("household_id, role, households(*)")\
         .eq("user_id", user.id)\
-        .single()\
+        .maybe_single()\
         .execute()
 
     if not member.data:
-        raise HTTPException(status_code=404, detail="No household found. Create one first.")
+        return {}
 
     return member.data
 
@@ -65,10 +70,11 @@ async def get_members(
     user=Depends(get_current_user),
     supabase=Depends(get_supabase)
 ):
+    """Get all members of the current user's household."""
     member_row = supabase.table("household_members")\
         .select("household_id")\
         .eq("user_id", user.id)\
-        .single()\
+        .maybe_single()\
         .execute()
 
     if not member_row.data:

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api } from '../services/api';
+import { chiefService } from '../services/api';
 
 export interface ChatMessage {
   id: string;
@@ -49,10 +49,7 @@ export const useChiefOfStaffStore = create<ChiefOfStaffState>((set, get) => ({
     set({ messages: [...get().messages, userMessage], isTyping: true, error: null });
 
     try {
-      const response = await api.post('/chief/chat', {
-        message,
-        context,
-      });
+      const response = await chiefService.chat(message, context);
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -75,9 +72,7 @@ export const useChiefOfStaffStore = create<ChiefOfStaffState>((set, get) => ({
   fetchDashboardSummary: async (householdData = {}) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/chief/dashboard-summary', {
-        household_data: householdData,
-      });
+      const response = await chiefService.dashboardSummary(householdData);
       set({ dashboardSummary: response.data, isLoading: false });
       return response.data;
     } catch (error: any) {

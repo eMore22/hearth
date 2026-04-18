@@ -3,7 +3,11 @@ from app.dependencies import get_current_user
 from app.agents.maintenance_agent import MaintenanceAgent
 from app.models.user import User
 
-router = APIRouter(prefix="/maintenance", tags=["maintenance"])
+router = APIRouter(tags=["maintenance"])
+
+@router.get("/tasks")
+async def get_tasks(current_user: User = Depends(get_current_user)):
+    return []
 
 @router.post("/calendar/generate")
 async def generate_calendar(request: Request, current_user: User = Depends(get_current_user)):

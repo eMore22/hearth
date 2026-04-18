@@ -1,6 +1,6 @@
 import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { useState, useRef } from 'react';
-import { useChiefOfStaffStore } from '../src/stores/chiefOfStaffStore';
+import { useChiefOfStaffStore } from 'src/stores/chiefOfStaffStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
@@ -15,7 +15,6 @@ export default function ChiefOfStaffScreen() {
     const message = inputText;
     setInputText('');
     await sendMessage(message);
-    // Scroll to bottom
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   };
 

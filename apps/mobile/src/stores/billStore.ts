@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api } from '../services/api';
+import { billService } from '../services/api';
 
 export interface Bill {
   id: string;
@@ -58,7 +58,7 @@ export const useBillStore = create<BillState>((set, get) => ({
   fetchBills: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.get('/bills');
+      const response = await billService.list();
       set({ bills: response.data, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
@@ -68,7 +68,7 @@ export const useBillStore = create<BillState>((set, get) => ({
   createBill: async (data) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/bills', data);
+      const response = await billService.create(data);
       const newBill = response.data;
       set({ bills: [...get().bills, newBill], isLoading: false });
       return newBill;
@@ -81,7 +81,7 @@ export const useBillStore = create<BillState>((set, get) => ({
   analyzeBill: async (billData) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/bills/analyze', billData);
+      const response = await billService.analyze(billData);
       set({ isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -94,7 +94,7 @@ export const useBillStore = create<BillState>((set, get) => ({
     const billsToCheck = bills || get().bills;
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/bills/detect-unused', { bills: billsToCheck });
+      const response = await billService.detectUnused(billsToCheck);
       set({ unusedSubscriptions: response.data, isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -106,11 +106,7 @@ export const useBillStore = create<BillState>((set, get) => ({
   generateNegotiationScript: async (provider, currentPlan, accountAgeMonths = 12) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/bills/negotiation-script', {
-        provider,
-        current_plan: currentPlan,
-        account_age_months: accountAgeMonths,
-      });
+      const response = await billService.negotiationScript(provider, currentPlan, accountAgeMonths);
       set({ negotiationScript: response.data, isLoading: false });
       return response.data;
     } catch (error: any) {
@@ -122,7 +118,7 @@ export const useBillStore = create<BillState>((set, get) => ({
   fetchMonthlyReport: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.get('/bills/monthly-report');
+      const response = await billService.monthlyReport();
       set({ monthlyReport: response.data, isLoading: false });
       return response.data;
     } catch (error: any) {

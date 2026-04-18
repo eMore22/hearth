@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+celery
+redis
+anthropic
+boto3
+python-dotenv
+pydantic-settings
+supabase
+sqlalchemy
+psycopg2-binary
+alembic

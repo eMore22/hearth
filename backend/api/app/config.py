@@ -1,47 +1,45 @@
 from pydantic_settings import BaseSettings
-from typing import List
-
+from typing import List, Optional, Dict
 
 class Settings(BaseSettings):
     # App
-    APP_NAME: str = "Hearth"
     APP_ENV: str = "development"
-    SECRET_KEY: str = "change-this-in-production"
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8081"]
-
+    SECRET_KEY: str = "change-me"
+    
     # Supabase
-    SUPABASE_URL: str = ""
-    SUPABASE_KEY: str = ""
-    SUPABASE_SERVICE_KEY: str = ""
-
-    # Anthropic (Claude API)
-    ANTHROPIC_API_KEY: str = ""
-
-    # AWS (Textract for OCR)
-    AWS_ACCESS_KEY_ID: str = ""
-    AWS_SECRET_ACCESS_KEY: str = ""
+    SUPABASE_URL: str
+    SUPABASE_KEY: str
+    SUPABASE_SERVICE_KEY: Optional[str] = None
+    
+    # Database
+    DATABASE_URL: str
+    
+    # Anthropic
+    ANTHROPIC_API_KEY: str
+    
+    # AWS
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
     AWS_REGION: str = "us-east-1"
-
-    # Redis (Celery background jobs)
+    
+    # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
-
-    # Paddle (payments)
-    PADDLE_API_KEY: str = ""
-    PADDLE_WEBHOOK_SECRET: str = ""
-
-    # Firebase (push notifications)
-    FIREBASE_CREDENTIALS_PATH: str = ""
-
-    # ─── FEATURE FLAGS ────────────────────────────────────────────────────
-    # Flip to True as each module is ready to ship
-    MODULE_DOCUMENTS:   bool = True    # Live — building now
-    MODULE_BILLS:       bool = False   # Coming soon
-    MODULE_GROCERY:     bool = False   # Coming soon
-    MODULE_MAINTENANCE: bool = False   # Coming soon
-    MODULE_HEALTH:      bool = False   # Coming soon
-
+    
+    # CORS
+    ALLOWED_ORIGINS: List[str] = ["http://localhost:19006", "http://localhost:8081", "http://localhost:3000"]
+    
+    # Feature flags
+    ACTIVE_MODULES: Dict[str, bool] = {
+        "documents": True,
+        "bills": True,
+        "grocery": True,
+        "maintenance": True,
+        "health": True,
+    }
+    
     class Config:
         env_file = ".env"
-
+        env_file_encoding = "utf-8"
+        extra = "ignore"
 
 settings = Settings()
