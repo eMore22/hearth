@@ -9,10 +9,11 @@ class GroceryAgent(BaseHouseholdAgent):
     Module 3: Grocery & Meal Intelligence Agent
 
     Handles:
-    - Weekly meal plan generation
+    - Weekly meal plan generation (NVIDIA Nano for speed/cost)
     - Shopping list creation
     - Food waste tracking and alerts
     - Dietary preference management
+    - Translation stub for future Riva integration
     """
 
     SYSTEM_PROMPT = """You are Hearth's Grocery Agent.
@@ -30,13 +31,12 @@ Be practical, creative, and mindful of dietary restrictions."""
             return self.generate_waste_alert(input_data["inventory"])
         elif action == "modify_meal":
             return self.modify_meal(input_data["current_plan"], input_data["day"], input_data["new_preference"])
+        elif action == "translate_meal_plan":
+            return self.translate_meal_plan(input_data["meal_plan"], input_data.get("target_language", "Spanish"))
         else:
             raise ValueError(f"Unknown action: {action}")
 
     def generate_meal_plan(self, preferences: Dict, inventory: List[Dict] = None) -> Dict:
-        """
-        Generate a 7-day meal plan based on household size, dietary restrictions, budget, cuisine preferences.
-        """
         household_size = preferences.get("household_size", 2)
         diet = preferences.get("dietary_restrictions", [])
         budget = preferences.get("weekly_budget", 150)
@@ -70,21 +70,25 @@ Return ONLY valid JSON with this structure:
   "notes": "any special tips"
 }}"""
 
-        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=2000)
+        # Try NVIDIA Nano first
         try:
+            from app.services.nvidia_client import get_nvidia_client
+            nvidia = get_nvidia_client()
+            response = nvidia.complete(task="simple_chat", messages=[{"role": "user", "content": prompt}], max_tokens=2000)
             plan = json.loads(response)
-        except json.JSONDecodeError:
-            plan = {"error": "Could not generate plan", "days": []}
+            self.log_action("generate_meal_plan_nvidia", f"{len(plan.get('days', []))} days")
+        except:
+            # Fallback to Claude
+            response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=2000)
+            try:
+                plan = json.loads(response)
+            except:
+                plan = {"error": "Could not generate plan", "days": []}
+            self.log_action("generate_meal_plan_claude", f"{len(plan.get('days', []))} days")
 
-        self.log_action("generate_meal_plan", f"{len(plan.get('days', []))} days")
         return plan
 
     def create_shopping_list(self, meal_plan: Dict, inventory: List[Dict] = None) -> Dict:
-        """
-        Convert meal plan ingredients into a categorized shopping list,
-        deducting items already in inventory.
-        """
-        # Flatten all ingredients from meal plan
         all_ingredients = []
         for day in meal_plan.get("days", []):
             for meal in ["breakfast", "lunch", "dinner"]:
@@ -94,7 +98,6 @@ Return ONLY valid JSON with this structure:
 
         inventory_names = [i.get("name", "").lower() for i in (inventory or [])]
 
-        # Deduplicate and categorize
         unique_ingredients = list(set(all_ingredients))
         need_to_buy = [ing for ing in unique_ingredients if ing.lower() not in inventory_names]
 
@@ -129,9 +132,6 @@ Return JSON:
         return shopping_list
 
     def generate_waste_alert(self, inventory: List[Dict]) -> List[Dict]:
-        """
-        Check inventory for items nearing expiry and suggest recipes to use them.
-        """
         today = date.today()
         alerts = []
         for item in inventory:
@@ -142,7 +142,6 @@ Return JSON:
                 expiry = date.fromisoformat(expiry_str)
                 days_left = (expiry - today).days
                 if days_left <= 3:
-                    # Suggest recipe using this item
                     prompt = f"Suggest one simple recipe that uses {item.get('name')} as a main ingredient. Return JSON: {{'recipe_name': '...', 'quick_instructions': '...'}}"
                     response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=200)
                     try:
@@ -164,7 +163,6 @@ Return JSON:
         return alerts
 
     def modify_meal(self, current_plan: Dict, day: str, new_preference: str) -> Dict:
-        """Replace a specific day's meal based on user feedback."""
         prompt = f"""The user wants to replace the dinner for {day} because: "{new_preference}".
 Current meal plan context: {json.dumps(current_plan)}
 
@@ -179,3 +177,17 @@ Return JSON: {{"name": "...", "ingredients": ["..."]}}"""
 
         self.log_action("modify_meal", day)
         return new_meal
+
+    def translate_meal_plan(self, meal_plan: Dict, target_language: str = "Spanish") -> Dict:
+        """
+        Translate meal plan using NVIDIA Riva Translate (stub – will be implemented when endpoint is available).
+        For now, falls back to Claude.
+        """
+        prompt = f"""Translate this meal plan to {target_language}. Keep the same JSON structure, just translate the meal names and ingredients.
+Meal plan: {json.dumps(meal_plan)}
+Return ONLY valid JSON."""
+        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=2000)
+        try:
+            return json.loads(response)
+        except:
+            return meal_plan

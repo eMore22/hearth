@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import * as SecureStore from 'expo-secure-store'
-import { authService, setAuthToken } from '../services/api'
+import { authService } from '../services/api'
 
 interface AuthState {
   session: string | null
@@ -18,42 +18,42 @@ export const useAuthStore = create<AuthState>((set) => ({
   loading: true,
 
   loadSession: async () => {
-    try {
-      const token = await SecureStore.getItemAsync('access_token')
-      const userStr = await SecureStore.getItemAsync('user')
-      if (token && userStr) {
-        // Set token in memory cache immediately so interceptor has it
-        setAuthToken(token)
-        set({ session: token, user: JSON.parse(userStr), loading: false })
-      } else {
-        set({ loading: false })
-      }
-    } catch {
+    console.log('📂 loadSession called');
+    const token = await SecureStore.getItemAsync('access_token')
+    const userStr = await SecureStore.getItemAsync('user')
+    console.log('📂 Token from storage:', token ? 'present' : 'missing');
+    if (token && userStr) {
+      set({ session: token, user: JSON.parse(userStr), loading: false })
+      console.log('📂 Session restored from storage');
+    } else {
       set({ loading: false })
+      console.log('📂 No session found in storage');
     }
   },
 
   signIn: async (email, password) => {
+    console.log('🔐 signIn called with email:', email);
     const res = await authService.signIn(email, password)
     const { access_token, user } = res.data
-    // Save to secure storage
+    console.log('✅ signIn response received, token:', access_token ? 'present' : 'MISSING');
     await SecureStore.setItemAsync('access_token', access_token)
     await SecureStore.setItemAsync('user', JSON.stringify(user))
-    // Set in memory cache immediately — this is what fixes the 401s
-    setAuthToken(access_token)
+    console.log('💾 Token stored in SecureStore');
     set({ session: access_token, user })
+    console.log('🔄 Zustand state updated, session:', access_token ? 'set' : 'null');
   },
 
   signUp: async (email, password, fullName) => {
+    console.log('📝 signUp called with email:', email);
     await authService.signUp(email, password, fullName)
-    // Don't auto sign-in — user needs to verify email first
+    console.log('📝 signUp completed');
   },
 
   signOut: async () => {
-    try { await authService.signOut() } catch {}
+    console.log('🚪 signOut called');
     await SecureStore.deleteItemAsync('access_token')
     await SecureStore.deleteItemAsync('user')
-    setAuthToken(null)
     set({ session: null, user: null })
+    console.log('🚪 Session cleared');
   }
 }))

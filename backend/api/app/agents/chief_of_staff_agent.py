@@ -13,6 +13,7 @@ class ChiefOfStaffAgent(BaseHouseholdAgent):
     Meta-Agent that orchestrates all module agents.
     Handles natural language queries, routes to appropriate sub-agent,
     and provides unified household overview.
+    Now with NVIDIA intent routing and RAG memory.
     """
 
     SYSTEM_PROMPT = """You are Hearth's Chief of Staff AI.
@@ -23,7 +24,6 @@ Be warm, efficient, and always helpful."""
 
     def __init__(self, household_id: str, user_id: str):
         super().__init__(household_id, user_id)
-        # Initialize all sub-agents
         self.document_agent = DocumentAgent(household_id, user_id)
         self.bill_agent = BillAgent(household_id, user_id)
         self.grocery_agent = GroceryAgent(household_id, user_id)
@@ -31,7 +31,6 @@ Be warm, efficient, and always helpful."""
         self.health_agent = HealthAgent(household_id, user_id)
 
     def run(self, input_data: Any) -> Any:
-        """Main entry: process a user command and return response."""
         action = input_data.get("action")
         if action == "chat":
             return self.process_chat(input_data["message"], input_data.get("context", {}))
@@ -40,42 +39,39 @@ Be warm, efficient, and always helpful."""
         else:
             raise ValueError(f"Unknown action: {action}")
 
-    def process_chat(self, message: str, context: Dict) -> Dict:
-        """
-        Process a natural language message from the user.
-        Classify intent, route to appropriate agent, and format response.
-        """
-        # Step 1: Intent classification using Claude
-        intent_prompt = f"""Classify this user request into one category:
-"documents", "bills", "grocery", "maintenance", "health", "general".
+    async def process_chat(self, message: str, context: Dict) -> Dict:
+        """Process with NVIDIA intent routing and RAG memory."""
+        from app.services.nvidia_client import get_nvidia_client
+        from app.services.rag_service import RAGService
 
-User: "{message}"
+        nvidia = get_nvidia_client()
+        rag = RAGService()
 
-Return JSON: {{"category": "...", "confidence": 0.0-1.0, "sub_question": "refined question for specialist"}}"""
-
-        intent_response = self.ask_claude(intent_prompt, system=self.SYSTEM_PROMPT, max_tokens=150)
+        # 1. Classify intent using NVIDIA Nano (free)
         try:
-            intent = json.loads(intent_response)
-            category = intent.get("category", "general")
-            sub_question = intent.get("sub_question", message)
+            category = nvidia.classify_intent(message)
         except:
             category = "general"
-            sub_question = message
 
-        # Step 2: Route to specialist agent
+        # 2. Retrieve relevant household context
+        household_context_text = rag.retrieve_context(message, top_k=3)
+
+        # 3. Build enriched context for agents
+        enriched_input = {
+            "action": "chat",
+            "message": message,
+            "context": context,
+            "household_context": household_context_text
+        }
+
+        # 4. Route to specialist or handle with Claude
         response = {"category": category, "message": "", "proactive_suggestions": []}
 
         if category == "documents":
-            # Simulate document query (in production, fetch actual docs from DB)
             docs = context.get("documents", [])
-            answer = self.document_agent.answer_question(sub_question, docs)
+            answer = self.document_agent.answer_question(message, docs)
             response["message"] = answer
-            # Add proactive expiry alert if relevant
-            if "expire" in message.lower():
-                response["proactive_suggestions"].append("Would you like me to set up automatic renewal reminders?")
-
         elif category == "bills":
-            # For chat, we might just give a quick insight
             bills = context.get("bills", [])
             if "save" in message.lower() or "subscription" in message.lower():
                 unused = self.bill_agent.detect_unused_subscriptions(bills)
@@ -86,39 +82,32 @@ Return JSON: {{"category": "...", "confidence": 0.0-1.0, "sub_question": "refine
             else:
                 total = sum(b.get('amount', 0) for b in bills)
                 response["message"] = f"You have {len(bills)} recurring bills totaling ${total:.2f} per month."
-
         elif category == "grocery":
             response["message"] = "I can create a meal plan for this week based on your preferences. Want me to generate one now?"
             response["proactive_suggestions"].append("Generate weekly meal plan")
-
         elif category == "maintenance":
             response["message"] = "I can check your home maintenance calendar or help diagnose an issue. What's going on?"
             response["proactive_suggestions"].append("Show upcoming maintenance tasks")
-
         elif category == "health":
             response["message"] = "I'm here to help with health triage. Please describe the symptoms you're experiencing, and I'll provide guidance on next steps."
-
-        else:  # general
-            response["message"] = self._general_chat_response(message, context)
+        else:
+            response["message"] = self._general_chat_with_context(message, household_context_text)
 
         self.log_action("chat", f"{category}: {message[:50]}")
         return response
 
-    def _general_chat_response(self, message: str, context: Dict) -> str:
-        """Handle general household questions not specific to one module."""
+    def _general_chat_with_context(self, message: str, household_context: str) -> str:
+        """Handle general questions with household memory."""
         prompt = f"""The user asked: "{message}"
-Household context: {context}
+Household context for this query:
+{household_context if household_context else 'No specific context available.'}
 
 Provide a helpful, warm response as the household chief of staff.
-If you can, mention something useful about their home (e.g., upcoming tasks, recent activity)."""
+If you can draw from the household context, mention something relevant about their home (e.g., upcoming tasks, recent activity)."""
 
         return self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
 
     def get_dashboard_summary(self, household_data: Dict) -> Dict:
-        """
-        Generate a unified dashboard summary pulling from all modules.
-        Used by the mobile dashboard screen.
-        """
         summary = {
             "documents": self._get_document_snapshot(household_data.get("documents", [])),
             "bills": self._get_bill_snapshot(household_data.get("bills", [])),
@@ -128,7 +117,6 @@ If you can, mention something useful about their home (e.g., upcoming tasks, rec
             "chief_message": ""
         }
 
-        # Generate a personalized chief of staff message
         prompt = f"""Write a one-sentence friendly greeting for a household dashboard.
 Context: {len(household_data.get('documents', []))} documents, {len(household_data.get('bills', []))} bills.
 Make it warm and helpful."""
@@ -171,5 +159,5 @@ Make it warm and helpful."""
     def _get_health_snapshot(self, events: List) -> Dict:
         return {
             "recent_events": len(events),
-            "active_medications": 0  # placeholder
+            "active_medications": 0
         }

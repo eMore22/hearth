@@ -4,6 +4,7 @@ from datetime import datetime, date
 from typing import Any, Dict, Optional
 from app.agents.base_agent import BaseHouseholdAgent
 from app.config import settings
+from app.services.ocr_service import perform_ocr
 
 
 class DocumentAgent(BaseHouseholdAgent):
@@ -11,10 +12,11 @@ class DocumentAgent(BaseHouseholdAgent):
     Module 1: Document Vault & Expiry Agent
 
     Handles:
-    - OCR extraction from document photos
+    - OCR extraction from document photos (now NVIDIA, fallback AWS Textract)
     - Expiry date detection and monitoring
     - Natural language Q&A over stored documents
     - Proactive expiry alerts
+    - Vision-based document understanding for complex images
     """
 
     SYSTEM_PROMPT = """You are Hearth's Document Agent.
@@ -37,12 +39,21 @@ Be precise, helpful, and concise."""
 
     def extract_document(self, image_bytes: bytes) -> Dict:
         """
-        Step 1: Run AWS Textract OCR on document image.
+        Step 1: Run NVIDIA OCR on document image (fallback AWS Textract).
         Step 2: Send extracted text to Claude for structured extraction.
+        Step 3 (optional): If OCR fails, try Vision model.
         Returns: dict with type, expiry_date, key_fields, summary
         """
-        # OCR via AWS Textract
-        raw_text = self._run_textract(image_bytes)
+        # OCR via NVIDIA (preferred) or fallback to Textract
+        raw_text = self._run_ocr(image_bytes)
+        if not raw_text or len(raw_text.strip()) < 10:
+            # If OCR produced nothing useful, try vision-based extraction
+            vision_result = self.extract_with_vision(image_bytes)
+            if vision_result and vision_result.get("document_type"):
+                self.log_action("extract_document_vision", vision_result.get("document_type", "unknown"))
+                return vision_result
+            # Still nothing, fallback to old Textract
+            raw_text = self._run_textract(image_bytes)
 
         # Structured extraction via Claude
         prompt = f"""Extract structured information from this document text.
@@ -68,7 +79,6 @@ Return ONLY valid JSON with this exact structure:
         try:
             extracted = json.loads(response)
         except json.JSONDecodeError:
-            # Fallback if Claude returns non-JSON
             extracted = {
                 "document_type": "other",
                 "title": "Unknown Document",
@@ -88,7 +98,6 @@ Return ONLY valid JSON with this exact structure:
         if not documents:
             return "You haven't added any documents to your vault yet. Add a document first and I can answer questions about it."
 
-        # Build context from stored documents
         doc_context = "\n\n".join([
             f"Document: {d.get('title', 'Unknown')}\n"
             f"Type: {d.get('document_type', 'unknown')}\n"
@@ -138,7 +147,7 @@ If the answer isn't in their documents, say so clearly."""
                 elif days_until <= 90:
                     urgency = "upcoming"
                 else:
-                    continue  # Not due for alert yet
+                    continue
 
                 alerts.append({
                     "document_id": doc.get("id"),
@@ -166,8 +175,16 @@ If the answer isn't in their documents, say so clearly."""
         else:
             return f"📅 Your {title} expires in {days} days. Plan ahead."
 
+    def _run_ocr(self, image_bytes: bytes) -> str:
+        """Use NVIDIA OCR (preferred)."""
+        try:
+            return perform_ocr(image_bytes)
+        except Exception as e:
+            print(f"NVIDIA OCR failed: {e}")
+            return ""
+
     def _run_textract(self, image_bytes: bytes) -> str:
-        """Run AWS Textract OCR on image bytes. Returns raw extracted text."""
+        """Fallback: Run AWS Textract OCR on image bytes. Returns raw extracted text."""
         try:
             textract = boto3.client(
                 "textract",
@@ -185,5 +202,39 @@ If the answer isn't in their documents, say so clearly."""
             ]
             return "\n".join(lines)
         except Exception as e:
-            # Fallback: return empty string, Claude will handle gracefully
             return f"[OCR failed: {str(e)}]"
+
+    def extract_with_vision(self, image_bytes: bytes) -> Dict:
+        """Use NVIDIA vision model to understand document directly."""
+        try:
+            from app.services.nvidia_client import get_nvidia_client
+            import base64
+            client = get_nvidia_client()
+            img_b64 = base64.b64encode(image_bytes).decode()
+            prompt = """Extract structured information from this document image.
+Return ONLY valid JSON with this exact structure:
+{
+  "document_type": "passport|insurance|warranty|lease|medical|vehicle_registration|other",
+  "title": "short human-readable title",
+  "issuer": "who issued this document",
+  "holder_name": "name on the document if present",
+  "issue_date": "YYYY-MM-DD or null",
+  "expiry_date": "YYYY-MM-DD or null",
+  "document_number": "policy/passport/reference number if present",
+  "key_fields": {"field_name": "value"},
+  "summary": "one sentence plain English summary of what this document is"
+}"""
+            response = client.complete(
+                task="vision",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                    ]
+                }],
+                max_tokens=1024
+            )
+            return json.loads(response)
+        except Exception:
+            return {}

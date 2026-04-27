@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
     
+    # NVIDIA
+    NVIDIA_API_KEY: str = ""
+    
     # CORS
     ALLOWED_ORIGINS: List[str] = ["http://localhost:19006", "http://localhost:8081", "http://localhost:3000"]
     

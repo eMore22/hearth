@@ -20,6 +20,13 @@ export default function RootLayout() {
   }, [])
 
   useEffect(() => {
+    console.log('🧭 Navigation check:', { 
+      isMounted, 
+      isLoading, 
+      session: !!session, 
+      segment: segments[0] 
+    });
+    
     if (!isMounted || isLoading) return
 
     const inAuthGroup = segments[0] === '(auth)'
@@ -27,8 +34,10 @@ export default function RootLayout() {
     const inTabs = segments[0] === '(tabs)'
 
     if (!session && !inAuthGroup) {
+      console.log('➡️ No session, redirecting to login');
       router.replace('/(auth)/login')
     } else if (session && !inOnboarding && !inTabs) {
+      console.log('➡️ Session exists, checking household...');
       checkHouseholdAndRoute()
     }
   }, [isMounted, session, segments, isLoading])
@@ -36,12 +45,16 @@ export default function RootLayout() {
   const checkHouseholdAndRoute = async () => {
     try {
       const response = await householdService.get()
-      if (response.data) {
+      console.log('🏠 Household response:', response.data);
+      if (response.data && Object.keys(response.data).length > 0) {
+        console.log('➡️ Household found, redirecting to dashboard');
         router.replace('/(tabs)/dashboard')
       } else {
+        console.log('➡️ No household, redirecting to onboarding');
         router.replace('/onboarding/welcome')
       }
     } catch (error) {
+      console.log('❌ Household check error, going to onboarding');
       router.replace('/onboarding/welcome')
     }
   }
@@ -53,7 +66,6 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="onboarding" />
-        {/* Removed duplicate chief-of-staff route */}
       </Stack>
     </GestureHandlerRootView>
   )

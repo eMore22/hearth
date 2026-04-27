@@ -13,6 +13,7 @@ class BillAgent(BaseHouseholdAgent):
     - Subscription pattern detection
     - Negotiation script generation
     - Savings tracking and monthly reports
+    - Lightweight tasks now routed through NVIDIA Nano (fallback to Claude)
     """
 
     SYSTEM_PROMPT = """You are Hearth's Bill Agent.
@@ -39,8 +40,7 @@ Be practical, money-saving, and friendly. Use concrete numbers when possible."""
 
     def analyze_bill(self, bill_data: Dict) -> Dict:
         """
-        Analyze a single bill entry (manually input or extracted from photo).
-        Returns structured insights: category, average cost, potential savings flags.
+        Analyze a single bill entry. Try NVIDIA Nano first for cost reasons.
         """
         prompt = f"""Analyze this bill/subscription entry:
 
@@ -61,25 +61,28 @@ Return ONLY valid JSON with:
   "confidence": 0.0-1.0
 }}"""
 
-        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
+        # Try NVIDIA Nano for simple analysis
         try:
+            from app.services.nvidia_client import get_nvidia_client
+            nvidia = get_nvidia_client()
+            response = nvidia.complete(task="simple_chat", messages=[{"role": "user", "content": prompt}], max_tokens=300)
             analysis = json.loads(response)
-        except json.JSONDecodeError:
-            analysis = {"category": "other", "savings_potential": "low", "savings_tip": "Review manually"}
+            self.log_action("analyze_bill_nvidia", bill_data.get("provider"))
+        except Exception:
+            # Fallback to Claude
+            response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
+            try:
+                analysis = json.loads(response)
+            except:
+                analysis = {"category": "other", "savings_potential": "low", "savings_tip": "Review manually"}
+            self.log_action("analyze_bill_claude", bill_data.get("provider"))
 
-        self.log_action("analyze_bill", bill_data.get("provider"))
         return analysis
 
     def detect_unused_subscriptions(self, bills: List[Dict]) -> List[Dict]:
-        """
-        Identify subscriptions that may be unused based on patterns.
-        In production, this would integrate with bank data or user feedback.
-        Here we use heuristics + Claude reasoning.
-        """
         if not bills:
             return []
 
-        # Format bills for Claude
         bills_text = "\n".join([
             f"- {b.get('provider')}: ${b.get('amount')}/month, category {b.get('category')}, "
             f"last used: {b.get('last_used', 'unknown')}, notes: {b.get('notes', '')}"
@@ -105,17 +108,13 @@ If none seem unused, return empty list."""
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
         try:
             unused = json.loads(response)
-        except json.JSONDecodeError:
+        except:
             unused = []
 
         self.log_action("detect_unused", f"{len(unused)} subscriptions flagged")
         return unused
 
     def generate_negotiation_script(self, provider: str, current_plan: str, account_age_months: int = 12) -> Dict:
-        """
-        Generate a personalized negotiation script to lower a bill.
-        Returns a script the user can use when calling customer service.
-        """
         prompt = f"""Create a friendly negotiation script for someone calling {provider} to lower their bill.
 
 Current plan: {current_plan}
@@ -133,21 +132,17 @@ Return JSON with:
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
         try:
             script_data = json.loads(response)
-        except json.JSONDecodeError:
+        except:
             script_data = {"script": "Could not generate script. Try again later."}
 
         self.log_action("generate_script", provider)
         return script_data
 
     def generate_monthly_report(self, current_bills: List[Dict], previous_bills: List[Dict] = None) -> Dict:
-        """
-        Generate a monthly household cost report with insights and savings counter.
-        """
         total_current = sum(b.get('amount', 0) for b in current_bills)
         total_previous = sum(b.get('amount', 0) for b in (previous_bills or []))
         change = total_current - total_previous
 
-        # Identify biggest changes
         provider_map_curr = {b.get('provider'): b.get('amount', 0) for b in current_bills}
         provider_map_prev = {b.get('provider'): b.get('amount', 0) for b in (previous_bills or [])}
         biggest_increases = []
@@ -156,7 +151,6 @@ Return JSON with:
             if amt > prev_amt:
                 biggest_increases.append({"provider": provider, "increase": amt - prev_amt})
 
-        # Use Claude to add narrative insights
         prompt = f"""You are generating a monthly bill summary for a household.
 Total spent this month: ${total_current:.2f}
 Change from last month: ${change:+.2f}

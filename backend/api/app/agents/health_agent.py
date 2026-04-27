@@ -12,6 +12,7 @@ class HealthAgent(BaseHouseholdAgent):
     - Home care recommendations
     - Medication reminders
     - Family health history summaries
+    - Content safety check and PII redaction
     """
 
     SYSTEM_PROMPT = """You are Hearth's Health Triage Agent.
@@ -20,7 +21,6 @@ You help families decide between home care, pharmacy, GP visit, or emergency car
 Always err on the side of caution and include clear disclaimers.
 Your responses are for informational purposes only."""
 
-    # Hardcoded emergency keywords that bypass AI and return immediate emergency response
     EMERGENCY_KEYWORDS = [
         "chest pain", "difficulty breathing", "unconscious", "severe bleeding",
         "stroke", "heart attack", "seizure", "head injury", "poisoning",
@@ -39,11 +39,7 @@ Your responses are for informational purposes only."""
             raise ValueError(f"Unknown action: {action}")
 
     def triage_symptoms(self, symptoms: str, patient_profile: Dict = None) -> Dict:
-        """
-        Main triage function. Checks for emergency keywords first, then uses Claude.
-        Returns a structured triage recommendation.
-        """
-        # Emergency keyword check (hardcoded safety)
+        # Emergency keyword check
         symptoms_lower = symptoms.lower()
         for keyword in self.EMERGENCY_KEYWORDS:
             if keyword in symptoms_lower:
@@ -53,11 +49,33 @@ Your responses are for informational purposes only."""
                     "disclaimer": "This is not a diagnosis. If you are experiencing a medical emergency, seek immediate care."
                 }
 
+        # Content safety check (NVIDIA)
+        try:
+            from app.services.nvidia_client import get_nvidia_client
+            nvidia = get_nvidia_client()
+            safety_msg = [{"role": "user", "content": f"Assess the safety of this health query. If unsafe, respond 'UNSAFE'.\nQuery: {symptoms}"}]
+            safety_response = nvidia.complete(task="content_safety", messages=safety_msg, max_tokens=50)
+            if "UNSAFE" in safety_response.upper():
+                return {
+                    "triage_level": "emergency",
+                    "recommendation": "Please contact emergency services or your GP immediately.",
+                    "disclaimer": "This is not medical advice."
+                }
+        except Exception:
+            pass  # Continue with normal triage
+
+        # Redact PII before sending to model
+        try:
+            from app.services.pii_service import redact_pii
+            safe_symptoms = redact_pii(symptoms)
+        except:
+            safe_symptoms = symptoms
+
         profile_text = ""
         if patient_profile:
             profile_text = f"Patient age: {patient_profile.get('age', 'unknown')}, existing conditions: {patient_profile.get('conditions', [])}"
 
-        prompt = f"""A user reports these symptoms: "{symptoms}"
+        prompt = f"""A user reports these symptoms: "{safe_symptoms}"
 {profile_text}
 
 Provide triage guidance (NOT diagnosis). Return ONLY valid JSON:
@@ -85,9 +103,6 @@ Provide triage guidance (NOT diagnosis). Return ONLY valid JSON:
         return triage
 
     def get_home_care_instructions(self, condition: str) -> Dict:
-        """
-        Provide evidence-based home care for minor conditions (e.g., common cold, mild fever).
-        """
         prompt = f"""Provide safe home care instructions for managing: {condition}.
 Include when to seek medical attention.
 Return JSON:
@@ -109,9 +124,6 @@ Return JSON:
         return care
 
     def create_medication_schedule(self, medications: List[Dict]) -> Dict:
-        """
-        Generate a daily medication schedule from a list of meds with dosages.
-        """
         meds_text = "\n".join([f"- {m.get('name')}: {m.get('dosage')}, {m.get('frequency')}" for m in medications])
         prompt = f"""Create a clear daily medication schedule from this list:
 {meds_text}

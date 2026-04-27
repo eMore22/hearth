@@ -11,8 +11,9 @@ class MaintenanceAgent(BaseHouseholdAgent):
     Handles:
     - Personalized maintenance calendar
     - Reminders with DIY instructions
-    - Problem diagnosis from user description
+    - Problem diagnosis from user description (text + photo)
     - Repair history and cost tracking
+    - Vision-based diagnosis using NVIDIA
     """
 
     SYSTEM_PROMPT = """You are Hearth's Home Maintenance Agent.
@@ -20,7 +21,6 @@ You help homeowners stay on top of seasonal maintenance tasks.
 You provide DIY instructions when safe and recommend professionals when needed.
 Be practical, safety-conscious, and empowering."""
 
-    # Common maintenance tasks with default schedules
     DEFAULT_TASKS = {
         "HVAC filter replacement": {"interval_days": 90, "season": None},
         "Smoke detector battery test": {"interval_days": 180, "season": None},
@@ -39,7 +39,14 @@ Be practical, safety-conscious, and empowering."""
         if action == "generate_calendar":
             return self.generate_maintenance_calendar(input_data["home_profile"])
         elif action == "diagnose_problem":
-            return self.diagnose_problem(input_data["description"], input_data.get("photos", []))
+            # If there's an image, use vision-based diagnosis
+            if input_data.get("image_bytes"):
+                return self.diagnose_with_photo(
+                    input_data.get("description", ""),
+                    input_data["image_bytes"]
+                )
+            else:
+                return self.diagnose_problem(input_data.get("description", ""), input_data.get("photos", []))
         elif action == "estimate_cost":
             return self.estimate_repair_cost(input_data["appliance"], input_data["issue"])
         elif action == "get_diy_instructions":
@@ -48,14 +55,11 @@ Be practical, safety-conscious, and empowering."""
             raise ValueError(f"Unknown action: {action}")
 
     def generate_maintenance_calendar(self, home_profile: Dict) -> Dict:
-        """
-        Create a personalized maintenance schedule based on home type, appliances, and location.
-        """
+        """Create a personalized maintenance schedule."""
         property_type = home_profile.get("property_type", "house")
         appliances = home_profile.get("appliances", [])
         location_climate = home_profile.get("climate", "temperate")
 
-        # Start with default tasks
         tasks = []
         today = date.today()
 
@@ -69,7 +73,6 @@ Be practical, safety-conscious, and empowering."""
                 "diy_friendly": True
             })
 
-        # Add appliance-specific tasks
         for app in appliances:
             if "HVAC" in app or "AC" in app:
                 tasks.append({
@@ -79,7 +82,6 @@ Be practical, safety-conscious, and empowering."""
                     "diy_friendly": False
                 })
 
-        # Use Claude to customize based on climate
         prompt = f"""Given this home profile:
 Property: {property_type}
 Climate: {location_climate}
@@ -106,9 +108,7 @@ Return JSON list of tasks like:
         }
 
     def diagnose_problem(self, description: str, photos: List[str] = None) -> Dict:
-        """
-        User describes an issue (e.g., "fridge not cooling"). Agent returns likely causes and next steps.
-        """
+        """Text-based diagnosis."""
         photo_context = ""
         if photos:
             photo_context = f"User has uploaded {len(photos)} photo(s) of the issue."
@@ -130,19 +130,41 @@ Return JSON:
 
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
         try:
-            diagnosis = json.loads(response)
+            return json.loads(response)
         except:
-            diagnosis = {
+            return {
                 "likely_causes": ["Unable to diagnose remotely"],
                 "professional_needed": True,
                 "tradesperson_type": "general handyman"
             }
 
-        self.log_action("diagnose", description[:50])
-        return diagnosis
+    def diagnose_with_photo(self, description: str, image_bytes: bytes) -> Dict:
+        """Vision-based diagnosis using NVIDIA."""
+        try:
+            from app.services.nvidia_client import get_nvidia_client
+            import base64
+            client = get_nvidia_client()
+            img_b64 = base64.b64encode(image_bytes).decode()
+            prompt = f"""A homeowner reports this issue: "{description}".
+Look at the photo and provide a structured diagnosis.
+Return JSON with: likely_causes (list), diy_check_steps (list), professional_needed (bool), tradesperson_type, urgency, estimated_cost_range."""
+            response = client.complete(
+                task="vision",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                    ]
+                }],
+                max_tokens=1024
+            )
+            return json.loads(response)
+        except Exception as e:
+            self.log_action("vision_diagnose_failed", str(e))
+            return self.diagnose_problem(description)
 
     def estimate_repair_cost(self, appliance: str, issue: str) -> Dict:
-        """Provide a rough cost estimate for repair vs. replace."""
         prompt = f"""Estimate the cost to repair a {appliance} with issue: "{issue}".
 Also suggest if replacement makes more sense.
 Return JSON:
@@ -157,15 +179,11 @@ Return JSON:
 
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
         try:
-            estimate = json.loads(response)
+            return json.loads(response)
         except:
-            estimate = {"recommendation": "Get a professional quote"}
-
-        self.log_action("estimate_cost", appliance)
-        return estimate
+            return {"recommendation": "Get a professional quote"}
 
     def get_diy_instructions(self, task_name: str) -> Dict:
-        """Provide step-by-step DIY instructions for a maintenance task."""
         prompt = f"""Provide safe, clear DIY instructions for a homeowner to: {task_name}.
 Include safety warnings, tools needed, and estimated time.
 Return JSON:
@@ -180,9 +198,6 @@ Return JSON:
 
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=1024)
         try:
-            instructions = json.loads(response)
+            return json.loads(response)
         except:
-            instructions = {"steps": ["Consult a professional for this task."]}
-
-        self.log_action("diy_instructions", task_name)
-        return instructions
+            return {"steps": ["Consult a professional for this task."]}

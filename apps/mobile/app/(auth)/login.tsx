@@ -1,108 +1,181 @@
 import { useState } from 'react'
 import {
-  View, Text, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, Alert
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native'
-import { Link, router } from 'expo-router'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { Link, useRouter } from 'expo-router'
 import { useAuthStore } from '../../src/stores/authStore'
-import { COLORS, FONTS } from '../../src/utils/theme'
+import { householdService } from '../../src/services/api'
+import { COLORS, TYPOGRAPHY, SPACING } from '../../src/utils/theme'
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const { signIn } = useAuthStore()
+  const router = useRouter()
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Missing fields', 'Please enter your email and password.')
+  const handleSignIn = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter email and password')
       return
     }
+
     setLoading(true)
+    console.log('📤 Submitting signin...');
     try {
       await signIn(email, password)
-      router.replace('/(tabs)/dashboard')
-    } catch (err: any) {
-      Alert.alert('Sign in failed', err.message || 'Please check your credentials.')
+      console.log('🎉 signIn completed successfully');
+      
+      // Check if household exists and navigate accordingly
+      try {
+        const householdRes = await householdService.get()
+        console.log('🏠 Household check:', householdRes.data);
+        if (householdRes.data && Object.keys(householdRes.data).length > 0) {
+          console.log('➡️ Navigating to dashboard');
+          router.replace('/(tabs)/dashboard')
+        } else {
+          console.log('➡️ Navigating to onboarding');
+          router.replace('/onboarding/welcome')
+        }
+      } catch (householdError) {
+        console.log('🏠 No household found, going to onboarding');
+        router.replace('/onboarding/welcome')
+      }
+    } catch (error: any) {
+      console.log('❌ signIn error:', error);
+      Alert.alert('Sign In Failed', error.response?.data?.detail || error.message || 'An error occurred')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <View style={styles.inner}>
-        <Text style={styles.logo}>🏠 Hearth</Text>
-        <Text style={styles.tagline}>Your household's AI chief of staff</Text>
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.content}>
+          <Text style={styles.title}>Hearth</Text>
+          <Text style={styles.subtitle}>Your household's AI chief of staff</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor={COLORS.muted}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor={COLORS.muted}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+          <View style={styles.form}>
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!loading}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              editable={!loading}
+            />
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Signing in...' : 'Sign In'}
-          </Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleSignIn}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Sign In</Text>
+              )}
+            </TouchableOpacity>
 
-        <Link href="/(auth)/register" asChild>
-          <TouchableOpacity style={styles.linkRow}>
-            <Text style={styles.linkText}>
-              Don't have an account? <Text style={styles.linkAccent}>Create one</Text>
-            </Text>
-          </TouchableOpacity>
-        </Link>
-      </View>
-    </KeyboardAvoidingView>
+            <Link href="/(auth)/register" asChild>
+              <TouchableOpacity style={styles.linkButton} disabled={loading}>
+                <Text style={styles.linkText}>
+                  Don't have an account? <Text style={styles.linkTextBold}>Create one</Text>
+                </Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  inner: { flex: 1, justifyContent: 'center', padding: 28 },
-  logo: { fontSize: 36, fontWeight: '700', color: COLORS.primary, textAlign: 'center', marginBottom: 8 },
-  tagline: { fontSize: 15, color: COLORS.muted, textAlign: 'center', marginBottom: 40 },
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+  },
+  title: {
+    ...TYPOGRAPHY.heading1,
+    color: COLORS.primary,
+    textAlign: 'center',
+    marginBottom: SPACING.xs,
+  },
+  subtitle: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.muted,
+    textAlign: 'center',
+    marginBottom: SPACING.xl,
+  },
+  form: {
+    width: '100%',
+  },
   input: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 14,
-    fontSize: 15,
-    color: COLORS.text,
     borderWidth: 1,
-    borderColor: COLORS.border
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    marginBottom: SPACING.md,
+    ...TYPOGRAPHY.body,
   },
   button: {
     backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 10,
+    paddingVertical: SPACING.md,
     alignItems: 'center',
-    marginTop: 8
+    marginTop: SPACING.sm,
   },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  linkRow: { marginTop: 24, alignItems: 'center' },
-  linkText: { color: COLORS.muted, fontSize: 14 },
-  linkAccent: { color: COLORS.accent, fontWeight: '600' }
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    ...TYPOGRAPHY.body,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  linkButton: {
+    marginTop: SPACING.lg,
+    alignItems: 'center',
+  },
+  linkText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.muted,
+  },
+  linkTextBold: {
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
 })
