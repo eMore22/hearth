@@ -5,21 +5,34 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
 
 const api = axios.create({ baseURL: API_URL })
 
-// Add setAuthToken method to match legacy code expectations
-api.setAuthToken = (token: string | null) => {
-  if (token) {
-    api.defaults.headers.common.Authorization = `Bearer ${token}`;
-  } else {
-    delete api.defaults.headers.common.Authorization;
-  }
-};
+// ─── IN-MEMORY TOKEN CACHE ───────────────────────────────────────────────────
+let _cachedToken: string | null = null
 
-// Auto-attach auth token from SecureStore
-api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync('access_token')
-  console.log('📱 Attaching token:', token ? 'present' : 'MISSING')
+export const setAuthToken = (token: string | null) => {
+  _cachedToken = token
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+  } else {
+    delete api.defaults.headers.common['Authorization']
+  }
+}
+
+export const clearAuthToken = () => {
+  _cachedToken = null
+  delete api.defaults.headers.common['Authorization']
+}
+
+// Interceptor as safety net
+api.interceptors.request.use(async (config) => {
+  if (!_cachedToken) {
+    const stored = await SecureStore.getItemAsync('access_token')
+    if (stored) {
+      _cachedToken = stored
+      api.defaults.headers.common['Authorization'] = `Bearer ${stored}`
+    }
+  }
+  if (_cachedToken) {
+    config.headers['Authorization'] = `Bearer ${_cachedToken}`
   }
   return config
 })
@@ -28,20 +41,18 @@ api.interceptors.request.use(async (config) => {
 export const authService = {
   signUp: (email: string, password: string, fullName: string) =>
     api.post('/api/auth/signup', { email, password, full_name: fullName }),
-
   signIn: (email: string, password: string) =>
     api.post('/api/auth/signin', { email, password }),
-
   signOut: () => api.post('/api/auth/signout'),
+  refresh: (refreshToken: string) =>
+    api.post('/api/auth/refresh', { refresh_token: refreshToken }),
 }
 
 // ─── HOUSEHOLD ───────────────────────────────────────────────────────────────
 export const householdService = {
   create: (name: string, country?: string) =>
     api.post('/api/household/', { name, country }),
-
   get: () => api.get('/api/household/'),
-
   getMembers: () => api.get('/api/household/members'),
 }
 
@@ -55,61 +66,48 @@ export const documentService = {
       name: asset.fileName || 'document.jpg'
     } as any)
     if (memberName) formData.append('member_name', memberName)
-
     return api.post('/api/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
-
   list: () => api.get('/api/documents/'),
-
-  ask: (question: string) =>
-    api.post('/api/documents/ask', { question }),
-
+  ask: (question: string) => api.post('/api/documents/ask', { question }),
   getExpiring: () => api.get('/api/documents/expiring'),
-
   delete: (id: string) => api.delete(`/api/documents/${id}`),
 }
 
 // ─── BILLS ───────────────────────────────────────────────────────────────────
 export const billService = {
   list: () => api.get('/api/bills/'),
-
   create: (data: any) => api.post('/api/bills/', data),
-
   analyze: (billData: any) => api.post('/api/bills/analyze', billData),
-
   detectUnused: (bills?: any[]) => api.post('/api/bills/detect-unused', { bills }),
-
   negotiationScript: (provider: string, currentPlan: string, accountAgeMonths?: number) =>
     api.post('/api/bills/negotiation-script', {
       provider,
       current_plan: currentPlan,
       account_age_months: accountAgeMonths || 12,
     }),
-
   monthlyReport: () => api.get('/api/bills/monthly-report'),
+  update: (id: string, data: any) => api.put(`/api/bills/${id}`, data),
+  delete: (id: string) => api.delete(`/api/bills/${id}`),
 }
 
 // ─── GROCERY ─────────────────────────────────────────────────────────────────
 export const groceryService = {
   generateMealPlan: (preferences: any, inventory?: any[]) =>
     api.post('/api/grocery/meal-plan/generate', { preferences, inventory }),
-
   createShoppingList: (mealPlan: any, inventory?: any[]) =>
     api.post('/api/grocery/shopping-list', { meal_plan: mealPlan, inventory }),
-
-  wasteAlert: (inventory: any[]) => api.post('/api/grocery/waste-alert', { inventory }),
-
+  wasteAlert: (inventory: any[]) =>
+    api.post('/api/grocery/waste-alert', { inventory }),
   modifyMeal: (currentPlan: any, day: string, newPreference: string) =>
     api.post('/api/grocery/meal-plan/modify', {
       current_plan: currentPlan,
       day,
       new_preference: newPreference,
     }),
-
   getInventory: () => api.get('/api/grocery/inventory'),
-
   addInventory: (item: any) => api.post('/api/grocery/inventory', item),
 }
 
@@ -117,49 +115,51 @@ export const groceryService = {
 export const maintenanceService = {
   generateCalendar: (homeProfile: any) =>
     api.post('/api/maintenance/calendar/generate', { home_profile: homeProfile }),
-
   diagnose: (description: string, photos?: string[]) =>
     api.post('/api/maintenance/diagnose', { description, photos }),
-
   estimateCost: (appliance: string, issue: string) =>
     api.post('/api/maintenance/estimate-cost', { appliance, issue }),
-
   getDIYInstructions: (taskName: string) =>
     api.get(`/api/maintenance/diy/${encodeURIComponent(taskName)}`),
-
   getTasks: () => api.get('/api/maintenance/tasks'),
-
-  completeTask: (taskId: string) => api.post(`/api/maintenance/tasks/${taskId}/complete`),
+  createTask: (data: any) => api.post('/api/maintenance/tasks', data),
+  completeTask: (taskId: string) =>
+    api.post(`/api/maintenance/tasks/${taskId}/complete`),
 }
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
 export const healthService = {
   triage: (symptoms: string, patientProfile?: any) =>
     api.post('/api/health/triage', { symptoms, patient_profile: patientProfile }),
-
-  homeCare: (condition: string) => api.post('/api/health/home-care', { condition }),
-
+  homeCare: (condition: string) =>
+    api.post('/api/health/home-care', { condition }),
   medicationSchedule: (medications: any[]) =>
     api.post('/api/health/medication-schedule', { medications }),
-
   getMedications: () => api.get('/api/health/medications'),
-
   addMedication: (med: any) => api.post('/api/health/medications', med),
+  getFamilyProfiles: () => api.get('/api/health/family-profiles'),
+  addFamilyProfile: (profile: any) =>
+    api.post('/api/health/family-profiles', profile),
+  getHealthEvents: () => api.get('/api/health/events'),
 }
 
 // ─── CHIEF OF STAFF ──────────────────────────────────────────────────────────
 export const chiefService = {
-  chat: (message: string, context?: any) =>
-    api.post('/api/chief/chat', { message, context }),
-
-  dashboardSummary: (householdData?: any) =>
-    api.post('/api/chief/dashboard-summary', { household_data: householdData }),
+  chat: (message: string, conversationHistory?: any[]) =>
+    api.post('/api/chief/chat', {
+      message,
+      conversation_history: conversationHistory || [],
+    }),
+  dashboardSummary: () => api.post('/api/chief/dashboard-summary', {}),
 }
 
 // ─── NOTIFICATIONS ───────────────────────────────────────────────────────────
 export const notificationService = {
   registerToken: (token: string, deviceType: 'ios' | 'android') =>
-    api.post('/api/notifications/register-token', { token, device_type: deviceType }),
+    api.post('/api/notifications/register-token', {
+      token,
+      device_type: deviceType,
+    }),
 }
 
 export default api

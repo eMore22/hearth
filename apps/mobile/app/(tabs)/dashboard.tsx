@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, RefreshControl
+  StyleSheet, RefreshControl, Animated, StatusBar
 } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useAuthStore } from '../../src/stores/authStore'
 import { useDocumentStore } from '../../src/stores/documentStore'
 import { useBillStore } from '../../src/stores/billStore'
@@ -12,21 +13,48 @@ import { useGroceryStore } from '../../src/stores/groceryStore'
 import { useMaintenanceStore } from '../../src/stores/maintenanceStore'
 import { useHealthStore } from '../../src/stores/healthStore'
 import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore'
-import { COLORS } from '../../src/utils/theme'
-import { formatDate, daysUntil } from '../../src/utils/dates'
+
+const NAVY = '#0A1628'
+const NAVY_LIGHT = '#112240'
+const ACCENT = '#4FC3F7'
+const GOLD = '#FFD166'
+const WHITE = '#F8FAFF'
+const MUTED = '#8899AA'
+const SURFACE = '#162035'
+const DANGER = '#FF6B6B'
+const SUCCESS = '#06D6A0'
+
+const MODULE_COLORS = {
+  documents: { bg: '#1A3A5C', accent: '#4FC3F7', icon: 'document-text' },
+  bills: { bg: '#2D1B4E', accent: '#C77DFF', icon: 'card' },
+  grocery: { bg: '#1A3A2A', accent: '#06D6A0', icon: 'basket' },
+  maintenance: { bg: '#3A2A0A', accent: '#FFD166', icon: 'construct' },
+  health: { bg: '#3A0A1A', accent: '#FF6B6B', icon: 'heart' },
+}
 
 export default function DashboardScreen() {
   const { user, signOut } = useAuthStore()
   const { documents, alerts, fetchDocuments, fetchAlerts, loading: docsLoading } = useDocumentStore()
   const { bills, monthlyReport, fetchBills, fetchMonthlyReport, isLoading: billsLoading } = useBillStore()
-  const { inventory, mealPlan, fetchInventory, isLoading: groceryLoading } = useGroceryStore()
-  const { tasks, fetchTasks, isLoading: maintenanceLoading } = useMaintenanceStore()
-  const { triageHistory, fetchMedications, isLoading: healthLoading } = useHealthStore()
+  const { inventory, fetchInventory } = useGroceryStore()
+  const { tasks, fetchTasks } = useMaintenanceStore()
+  const { triageHistory, fetchMedications } = useHealthStore()
   const { dashboardSummary, fetchDashboardSummary } = useChiefOfStaffStore()
 
-  const loading = docsLoading || billsLoading || groceryLoading || maintenanceLoading || healthLoading
+  const fadeAnim = useRef(new Animated.Value(0)).current
+  const slideAnim = useRef(new Animated.Value(30)).current
+
+  const loading = docsLoading || billsLoading
 
   useEffect(() => {
+    loadAll()
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+    ]).start()
+  }, [])
+
+  const loadAll = () => {
     fetchDocuments()
     fetchAlerts()
     fetchBills()
@@ -35,267 +63,344 @@ export default function DashboardScreen() {
     fetchTasks()
     fetchMedications()
     fetchDashboardSummary()
-  }, [])
+  }
 
-  const urgentAlerts = alerts.filter(a =>
-    a.urgency === 'critical' || a.urgency === 'expired'
-  )
-
-  // Get counts for module cards
-  const documentCount = documents.length
-  const billCount = bills.length
-  const inventoryCount = inventory.length
-  const taskCount = tasks.filter(t => !t.completed).length
-  const healthEventCount = triageHistory.length
-
+  const urgentAlerts = alerts.filter(a => a.urgency === 'critical' || a.urgency === 'expired')
+  const pendingTasks = tasks.filter((t: any) => !t.completed).length
   const monthlySpend = monthlyReport?.total_spent || 0
 
+  const greeting = () => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Good morning'
+    if (h < 17) return 'Good afternoon'
+    return 'Good evening'
+  }
+
+  const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'there'
+
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={loading}
-          onRefresh={() => {
-            fetchDocuments()
-            fetchAlerts()
-            fetchBills()
-            fetchMonthlyReport()
-            fetchInventory()
-            fetchTasks()
-            fetchDashboardSummary()
-          }}
-          tintColor={COLORS.primary}
-        />
-      }
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>
-            {dashboardSummary?.chief_message || 'Good morning 👋'}
-          </Text>
-          <Text style={styles.name}>{user?.user_metadata?.full_name || 'Welcome'}</Text>
-        </View>
-        <TouchableOpacity onPress={signOut}>
-          <Ionicons name="log-out-outline" size={24} color={COLORS.muted} />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
 
-      {/* Urgent Alerts */}
-      {urgentAlerts.length > 0 && (
-        <View style={styles.alertsSection}>
-          <Text style={styles.sectionTitle}>⚠️ Needs Attention</Text>
-          {urgentAlerts.map((alert, i) => (
-            <TouchableOpacity
-              key={i}
-              style={styles.alertCard}
-              onPress={() => router.push('/(tabs)/documents')}
-            >
-              <Text style={styles.alertText}>{alert.message}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* Module Grid */}
-      <Text style={styles.sectionTitle}>Your Household</Text>
-      <View style={styles.moduleGrid}>
-        <ModuleCard
-          icon="document-text"
-          title="Documents"
-          subtitle={`${documentCount} stored`}
-          color="#2E86AB"
-          active={true}
-          onPress={() => router.push('/(tabs)/documents')}
-        />
-        <ModuleCard
-          icon="card"
-          title="Bills"
-          subtitle={billCount > 0 ? `${billCount} bills · $${monthlySpend}/mo` : 'Add your first bill'}
-          color="#A23B72"
-          active={true}
-          onPress={() => router.push('/(tabs)/bills')}
-        />
-        <ModuleCard
-          icon="basket"
-          title="Grocery"
-          subtitle={inventoryCount > 0 ? `${inventoryCount} items` : 'Plan your meals'}
-          color="#F18F01"
-          active={true}
-          onPress={() => router.push('/(tabs)/grocery')}
-        />
-        <ModuleCard
-          icon="construct"
-          title="Maintenance"
-          subtitle={taskCount > 0 ? `${taskCount} tasks pending` : 'Set up home profile'}
-          color="#4CAF50"
-          active={true}
-          onPress={() => router.push('/(tabs)/maintenance')}
-        />
-        <ModuleCard
-          icon="heart"
-          title="Health"
-          subtitle={healthEventCount > 0 ? `${healthEventCount} recent checks` : 'Health triage'}
-          color="#E74C3C"
-          active={true}
-          onPress={() => router.push('/(tabs)/health')}
-        />
-      </View>
-
-      {/* Quick Chat with Chief of Staff */}
-      <TouchableOpacity
-        style={styles.chiefButton}
-        onPress={() => router.push('/chief-of-staff')}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={loadAll} tintColor={ACCENT} />
+        }
       >
-        <Ionicons name="chatbubble-ellipses" size={24} color="#fff" />
-        <Text style={styles.chiefButtonText}>Ask Hearth Chief of Staff</Text>
-        <Ionicons name="chevron-forward" size={20} color="#fff" />
-      </TouchableOpacity>
+        {/* Header */}
+        <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
+          <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+            <View style={styles.headerTop}>
+              <View>
+                <Text style={styles.greeting}>{greeting()},</Text>
+                <Text style={styles.userName}>{firstName} 👋</Text>
+              </View>
+              <TouchableOpacity onPress={signOut} style={styles.signOutBtn}>
+                <Ionicons name="log-out-outline" size={20} color={MUTED} />
+              </TouchableOpacity>
+            </View>
 
-      {/* Upcoming Expiries */}
-      {alerts.length > 0 && (
+            {/* Chief message */}
+            {dashboardSummary?.chief_message && (
+              <View style={styles.chiefMessageBox}>
+                <Text style={styles.chiefMessageIcon}>✦</Text>
+                <Text style={styles.chiefMessage}>
+                  {dashboardSummary.chief_message}
+                </Text>
+              </View>
+            )}
+          </Animated.View>
+        </LinearGradient>
+
+        {/* Urgent alerts */}
+        {urgentAlerts.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.alertDot} />
+              <Text style={styles.sectionTitle}>Needs Attention</Text>
+            </View>
+            {urgentAlerts.map((alert, i) => (
+              <TouchableOpacity
+                key={i}
+                style={styles.alertCard}
+                onPress={() => router.push('/(tabs)/documents')}
+              >
+                <Ionicons name="warning-outline" size={16} color={DANGER} />
+                <Text style={styles.alertText} numberOfLines={2}>{alert.message}</Text>
+                <Ionicons name="chevron-forward" size={14} color={MUTED} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Stats Row */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{documents.length}</Text>
+            <Text style={styles.statLabel}>Documents</Text>
+          </View>
+          <View style={[styles.statCard, styles.statCardMiddle]}>
+            <Text style={styles.statValue}>
+              ${monthlySpend > 0 ? monthlySpend.toFixed(0) : '0'}
+            </Text>
+            <Text style={styles.statLabel}>Monthly bills</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{pendingTasks}</Text>
+            <Text style={styles.statLabel}>Tasks due</Text>
+          </View>
+        </View>
+
+        {/* Module Grid */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📅 Upcoming Expiries</Text>
-          {alerts.slice(0, 3).map((alert, i) => (
-            <View key={i} style={styles.expiryRow}>
-              <Text style={styles.expiryTitle}>{alert.title}</Text>
-              <Text style={[
-                styles.expiryDays,
-                alert.urgency === 'expired' && { color: COLORS.danger },
-                alert.urgency === 'critical' && { color: COLORS.warning }
-              ]}>
-                {alert.days_until_expiry < 0
-                  ? 'Expired'
-                  : `${alert.days_until_expiry}d`
-                }
+          <Text style={styles.sectionTitle}>Your Household</Text>
+          <View style={styles.moduleGrid}>
+            <ModuleCard
+              module="documents"
+              title="Documents"
+              subtitle={`${documents.length} stored`}
+              badge={urgentAlerts.length > 0 ? urgentAlerts.length : null}
+              onPress={() => router.push('/(tabs)/documents')}
+            />
+            <ModuleCard
+              module="bills"
+              title="Bills"
+              subtitle={bills.length > 0 ? `${bills.length} active` : 'Add first bill'}
+              onPress={() => router.push('/(tabs)/bills')}
+            />
+            <ModuleCard
+              module="grocery"
+              title="Grocery"
+              subtitle={inventory.length > 0 ? `${inventory.length} items` : 'Plan meals'}
+              onPress={() => router.push('/(tabs)/grocery')}
+            />
+            <ModuleCard
+              module="maintenance"
+              title="Maintenance"
+              subtitle={pendingTasks > 0 ? `${pendingTasks} pending` : 'All clear'}
+              onPress={() => router.push('/(tabs)/maintenance')}
+            />
+          </View>
+          {/* Health — full width */}
+          <TouchableOpacity
+            style={styles.healthCard}
+            onPress={() => router.push('/(tabs)/health')}
+          >
+            <View style={[styles.healthIconBox, { backgroundColor: MODULE_COLORS.health.bg }]}>
+              <Ionicons name="heart" size={22} color={MODULE_COLORS.health.accent} />
+            </View>
+            <View style={styles.healthInfo}>
+              <Text style={styles.moduleTitle}>Health</Text>
+              <Text style={styles.moduleSubtitle}>
+                {triageHistory.length > 0 ? `${triageHistory.length} recent checks` : 'Family health triage'}
               </Text>
             </View>
-          ))}
+            <Ionicons name="chevron-forward" size={18} color={MUTED} />
+          </TouchableOpacity>
         </View>
-      )}
 
-      <View style={{ height: 32 }} />
-    </ScrollView>
+        {/* Ask Chief of Staff CTA */}
+        <TouchableOpacity
+          style={styles.chiefCTA}
+          onPress={() => router.push('/(tabs)/chief-of-staff')}
+        >
+          <LinearGradient
+            colors={['#1A3A5C', '#2D1B4E']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.chiefCTAGradient}
+          >
+            <View style={styles.chiefCTALeft}>
+              <Text style={styles.chiefCTAIcon}>✦</Text>
+              <View>
+                <Text style={styles.chiefCTATitle}>Ask Chief of Staff</Text>
+                <Text style={styles.chiefCTASub}>Your household AI — ask anything</Text>
+              </View>
+            </View>
+            <View style={styles.chiefCTAArrow}>
+              <Ionicons name="arrow-forward" size={18} color={ACCENT} />
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* Upcoming expiries */}
+        {alerts.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Upcoming Expiries</Text>
+            {alerts.slice(0, 3).map((alert, i) => (
+              <View key={i} style={styles.expiryRow}>
+                <View style={[styles.expiryDot, {
+                  backgroundColor: alert.urgency === 'expired' ? DANGER
+                    : alert.urgency === 'critical' ? '#FF9F1C'
+                    : ACCENT
+                }]} />
+                <Text style={styles.expiryTitle} numberOfLines={1}>{alert.title}</Text>
+                <Text style={[styles.expiryDays, {
+                  color: alert.urgency === 'expired' ? DANGER
+                    : alert.urgency === 'critical' ? '#FF9F1C'
+                    : MUTED
+                }]}>
+                  {alert.days_until_expiry < 0 ? 'Expired' : `${alert.days_until_expiry}d`}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
   )
 }
 
-function ModuleCard({ icon, title, subtitle, color, active, onPress }: any) {
+function ModuleCard({ module, title, subtitle, badge, onPress }: any) {
+  const config = MODULE_COLORS[module as keyof typeof MODULE_COLORS]
   return (
-    <TouchableOpacity
-      style={[styles.moduleCard, !active && styles.moduleCardInactive]}
-      onPress={onPress}
-      disabled={!active}
-    >
-      <View style={[styles.moduleIcon, { backgroundColor: active ? color : COLORS.border }]}>
-        <Ionicons name={`${icon}-outline` as any} size={24} color="#fff" />
+    <TouchableOpacity style={styles.moduleCard} onPress={onPress}>
+      <View style={[styles.moduleIconBox, { backgroundColor: config.bg }]}>
+        <Ionicons name={config.icon as any} size={22} color={config.accent} />
+        {badge && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badge}</Text>
+          </View>
+        )}
       </View>
-      <Text style={[styles.moduleTitle, !active && styles.moduleTitleInactive]}>{title}</Text>
-      <Text style={styles.moduleSubtitle}>{subtitle}</Text>
-      {!active && (
-        <View style={styles.comingSoonBadge}>
-          <Text style={styles.comingSoonText}>Soon</Text>
-        </View>
-      )}
+      <Text style={styles.moduleTitle}>{title}</Text>
+      <Text style={styles.moduleSubtitle} numberOfLines={1}>{subtitle}</Text>
     </TouchableOpacity>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  header: {
+  container: { flex: 1, backgroundColor: NAVY },
+  header: { paddingTop: 60, paddingBottom: 28, paddingHorizontal: 24 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  greeting: { fontSize: 14, color: MUTED, letterSpacing: 0.5 },
+  userName: { fontSize: 28, fontWeight: '700', color: WHITE, marginTop: 2 },
+  signOutBtn: { padding: 8, backgroundColor: SURFACE, borderRadius: 10 },
+  chiefMessageBox: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 24,
-    paddingTop: 60
-  },
-  greeting: { fontSize: 14, color: COLORS.muted },
-  name: { fontSize: 22, fontWeight: '700', color: COLORS.text },
-  alertsSection: { marginHorizontal: 20, marginBottom: 16 },
-  alertCard: {
-    backgroundColor: '#FFF3CD',
-    borderRadius: 10,
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(79,195,247,0.08)',
+    borderRadius: 12,
     padding: 14,
-    marginBottom: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.warning
+    borderWidth: 1,
+    borderColor: 'rgba(79,195,247,0.15)',
+    gap: 10
   },
-  alertText: { fontSize: 14, color: '#856404' },
-  section: { marginHorizontal: 20, marginBottom: 16 },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginHorizontal: 20,
-    marginBottom: 12,
-    marginTop: 8
-  },
-  moduleGrid: {
+  chiefMessageIcon: { fontSize: 14, color: ACCENT, marginTop: 1 },
+  chiefMessage: { flex: 1, fontSize: 13, color: '#B8D4E8', lineHeight: 19, fontStyle: 'italic' },
+  section: { paddingHorizontal: 20, marginBottom: 8 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  alertDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: DANGER },
+  sectionTitle: { fontSize: 13, fontWeight: '600', color: MUTED, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 12 },
+  alertCard: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 14,
-    marginBottom: 24
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,107,107,0.08)',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,107,0.2)',
+    gap: 10
   },
+  alertText: { flex: 1, fontSize: 13, color: '#FFB3B3' },
+  statsRow: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 28,
+    backgroundColor: SURFACE,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)'
+  },
+  statCard: { flex: 1, alignItems: 'center' },
+  statCardMiddle: {
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)'
+  },
+  statValue: { fontSize: 22, fontWeight: '700', color: WHITE, marginBottom: 4 },
+  statLabel: { fontSize: 11, color: MUTED, letterSpacing: 0.3 },
+  moduleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 12 },
   moduleCard: {
-    width: '46%',
-    margin: '2%',
-    backgroundColor: COLORS.surface,
-    borderRadius: 14,
+    width: '47%',
+    backgroundColor: SURFACE,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: COLORS.border
+    borderColor: 'rgba(255,255,255,0.05)'
   },
-  moduleCardInactive: { opacity: 0.6 },
-  moduleIcon: {
+  moduleIconBox: {
     width: 44,
     height: 44,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10
+    marginBottom: 12,
+    position: 'relative'
   },
-  moduleTitle: { fontSize: 15, fontWeight: '600', color: COLORS.text },
-  moduleTitleInactive: { color: COLORS.muted },
-  moduleSubtitle: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  comingSoonBadge: {
+  badge: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: COLORS.border,
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2
+    top: -4,
+    right: -4,
+    backgroundColor: DANGER,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3
   },
-  comingSoonText: { fontSize: 10, color: COLORS.muted },
+  badgeText: { fontSize: 10, color: WHITE, fontWeight: '700' },
+  moduleTitle: { fontSize: 14, fontWeight: '600', color: WHITE, marginBottom: 3 },
+  moduleSubtitle: { fontSize: 12, color: MUTED },
+  healthCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: SURFACE,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    gap: 14
+  },
+  healthIconBox: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  healthInfo: { flex: 1 },
+  chiefCTA: { marginHorizontal: 20, marginBottom: 28, borderRadius: 16, overflow: 'hidden' },
+  chiefCTAGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 18
+  },
+  chiefCTALeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  chiefCTAIcon: { fontSize: 20, color: ACCENT },
+  chiefCTATitle: { fontSize: 15, fontWeight: '700', color: WHITE, marginBottom: 2 },
+  chiefCTASub: { fontSize: 12, color: MUTED },
+  chiefCTAArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(79,195,247,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   expiryRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    backgroundColor: SURFACE,
     borderRadius: 10,
     padding: 14,
     marginBottom: 8,
+    gap: 12,
     borderWidth: 1,
-    borderColor: COLORS.border
+    borderColor: 'rgba(255,255,255,0.04)'
   },
-  expiryTitle: { fontSize: 14, color: COLORS.text, flex: 1 },
-  expiryDays: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
-  chiefButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    marginHorizontal: 20,
-    marginBottom: 24,
-    padding: 16,
-    borderRadius: 16,
-    justifyContent: 'space-between'
-  },
-  chiefButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
-    marginLeft: 12
-  }
+  expiryDot: { width: 8, height: 8, borderRadius: 4 },
+  expiryTitle: { flex: 1, fontSize: 14, color: WHITE },
+  expiryDays: { fontSize: 13, fontWeight: '600' },
 })

@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, TextInput, Modal, ActivityIndicator, RefreshControl
+  Alert, TextInput, Modal, ActivityIndicator, RefreshControl, StatusBar
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useDocumentStore } from '../../src/stores/documentStore'
-import { COLORS } from '../../src/utils/theme'
+
+const NAVY = '#0A1628'
+const NAVY_LIGHT = '#112240'
+const SURFACE = '#162035'
+const ACCENT = '#4FC3F7'
+const WHITE = '#F8FAFF'
+const MUTED = '#8899AA'
+const DANGER = '#FF6B6B'
+const WARNING = '#FF9F1C'
+const SUCCESS = '#06D6A0'
 
 export default function DocumentsScreen() {
   const { documents, alerts, fetchDocuments, fetchAlerts, uploadDocument, askQuestion, loading } = useDocumentStore()
@@ -27,19 +37,16 @@ export default function DocumentsScreen() {
       Alert.alert('Permission needed', 'Please allow photo access to upload documents.')
       return
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
       quality: 0.8
     })
-
     if (result.canceled) return
-
     setUploadLoading(true)
     try {
       await uploadDocument(result.assets[0])
-      Alert.alert('✅ Document added', 'Your document has been scanned and saved.')
+      Alert.alert('✅ Document saved', 'Expiry dates and key fields extracted automatically.')
       fetchDocuments()
       fetchAlerts()
     } catch (err: any) {
@@ -55,18 +62,12 @@ export default function DocumentsScreen() {
       Alert.alert('Permission needed', 'Please allow camera access.')
       return
     }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: false,
-      quality: 0.8
-    })
-
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: false, quality: 0.8 })
     if (result.canceled) return
-
     setUploadLoading(true)
     try {
       await uploadDocument(result.assets[0])
-      Alert.alert('✅ Document added', 'Your document has been scanned and saved.')
+      Alert.alert('✅ Document saved', 'Expiry dates and key fields extracted automatically.')
       fetchDocuments()
       fetchAlerts()
     } catch (err: any) {
@@ -82,57 +83,90 @@ export default function DocumentsScreen() {
     try {
       const result = await askQuestion(question)
       setAnswer(result)
-    } catch (err) {
-      setAnswer('Sorry, I could not find an answer. Please try again.')
+    } catch {
+      setAnswer('Could not find an answer. Please try again.')
     } finally {
       setAskLoading(false)
     }
   }
 
-  const urgencyColor = (urgency: string) => {
-    if (urgency === 'expired') return COLORS.danger
-    if (urgency === 'critical') return COLORS.warning
-    if (urgency === 'urgent') return '#F59E0B'
-    return COLORS.primary
+  const urgencyConfig = (urgency: string) => {
+    if (urgency === 'expired') return { color: DANGER, label: 'EXPIRED' }
+    if (urgency === 'critical') return { color: DANGER, label: 'CRITICAL' }
+    if (urgency === 'urgent') return { color: WARNING, label: 'URGENT' }
+    return { color: ACCENT, label: 'UPCOMING' }
   }
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>📄 Document Vault</Text>
-        <TouchableOpacity onPress={() => setShowAskModal(true)} style={styles.askButton}>
-          <Ionicons name="chatbubble-outline" size={20} color={COLORS.accent} />
-          <Text style={styles.askButtonText}>Ask AI</Text>
-        </TouchableOpacity>
-      </View>
+      <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.headerLabel}>VAULT</Text>
+            <Text style={styles.headerTitle}>Documents</Text>
+          </View>
+          <TouchableOpacity onPress={() => setShowAskModal(true)} style={styles.askBtn}>
+            <Ionicons name="sparkles" size={16} color={ACCENT} />
+            <Text style={styles.askBtnText}>Ask AI</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Summary pills */}
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryPill}>
+            <Text style={styles.summaryValue}>{documents.length}</Text>
+            <Text style={styles.summaryLabel}>Stored</Text>
+          </View>
+          <View style={[styles.summaryPill, alerts.length > 0 && styles.summaryPillAlert]}>
+            <Text style={[styles.summaryValue, alerts.length > 0 && { color: WARNING }]}>
+              {alerts.length}
+            </Text>
+            <Text style={styles.summaryLabel}>Alerts</Text>
+          </View>
+        </View>
+      </LinearGradient>
 
       <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={() => { fetchDocuments(); fetchAlerts() }} />
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={() => { fetchDocuments(); fetchAlerts() }}
+            tintColor={ACCENT}
+          />
         }
       >
         {/* Alerts */}
         {alerts.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Expiry Alerts</Text>
-            {alerts.map((alert, i) => (
-              <View key={i} style={[styles.alertCard, { borderLeftColor: urgencyColor(alert.urgency) }]}>
-                <Text style={styles.alertMessage}>{alert.message}</Text>
-              </View>
-            ))}
+            {alerts.map((alert: any, i: number) => {
+              const cfg = urgencyConfig(alert.urgency)
+              return (
+                <View key={i} style={[styles.alertCard, { borderLeftColor: cfg.color }]}>
+                  <View style={[styles.alertBadge, { backgroundColor: cfg.color + '22' }]}>
+                    <Text style={[styles.alertBadgeText, { color: cfg.color }]}>{cfg.label}</Text>
+                  </View>
+                  <Text style={styles.alertMessage}>{alert.message}</Text>
+                </View>
+              )
+            })}
           </View>
         )}
 
-        {/* Document list */}
+        {/* Documents */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Your Documents ({documents.length})
-          </Text>
+          <Text style={styles.sectionTitle}>Your Documents</Text>
 
           {documents.length === 0 && !loading && (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>📂</Text>
+              <View style={styles.emptyIconBox}>
+                <Ionicons name="document-text-outline" size={32} color={MUTED} />
+              </View>
               <Text style={styles.emptyTitle}>No documents yet</Text>
               <Text style={styles.emptySubtitle}>
                 Photograph your passport, insurance, warranty — Hearth extracts expiry dates automatically.
@@ -140,54 +174,51 @@ export default function DocumentsScreen() {
             </View>
           )}
 
-          {documents.map((doc, i) => (
+          {documents.map((doc: any, i: number) => (
             <View key={i} style={styles.docCard}>
-              <View style={styles.docCardLeft}>
+              <View style={styles.docIconBox}>
                 <Text style={styles.docIcon}>{docTypeIcon(doc.document_type)}</Text>
               </View>
-              <View style={styles.docCardContent}>
-                <Text style={styles.docTitle}>{doc.title || 'Document'}</Text>
+              <View style={styles.docContent}>
+                <Text style={styles.docTitle} numberOfLines={1}>{doc.title || 'Document'}</Text>
                 {doc.member_name && (
                   <Text style={styles.docMember}>👤 {doc.member_name}</Text>
                 )}
                 {doc.expiry_date ? (
-                  <Text style={[
-                    styles.docExpiry,
-                    isExpiringSoon(doc.expiry_date) && { color: COLORS.warning }
-                  ]}>
-                    Expires {formatExpiry(doc.expiry_date)}
-                  </Text>
+                  <View style={styles.expiryRow}>
+                    <View style={[styles.expiryDot, { backgroundColor: isExpiringSoon(doc.expiry_date) ? WARNING : SUCCESS }]} />
+                    <Text style={[styles.docExpiry, isExpiringSoon(doc.expiry_date) && { color: WARNING }]}>
+                      {formatExpiry(doc.expiry_date)}
+                    </Text>
+                  </View>
                 ) : (
-                  <Text style={styles.docNoExpiry}>No expiry date</Text>
+                  <Text style={styles.docNoExpiry}>No expiry</Text>
                 )}
                 {doc.summary && (
-                  <Text style={styles.docSummary} numberOfLines={2}>{doc.summary}</Text>
+                  <Text style={styles.docSummary} numberOfLines={1}>{doc.summary}</Text>
                 )}
               </View>
+              <Ionicons name="chevron-forward" size={16} color={MUTED} />
             </View>
           ))}
         </View>
-        <View style={{ height: 100 }} />
+
+        <View style={{ height: 120 }} />
       </ScrollView>
 
       {/* Upload buttons */}
       <View style={styles.uploadRow}>
-        <TouchableOpacity
-          style={[styles.uploadBtn, styles.uploadBtnSecondary]}
-          onPress={handleUpload}
-          disabled={uploadLoading}
-        >
-          <Ionicons name="image-outline" size={20} color={COLORS.primary} />
-          <Text style={styles.uploadBtnTextSecondary}>Gallery</Text>
+        <TouchableOpacity style={styles.galleryBtn} onPress={handleUpload} disabled={uploadLoading}>
+          <Ionicons name="image-outline" size={20} color={ACCENT} />
+          <Text style={styles.galleryBtnText}>Gallery</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.uploadBtn, styles.uploadBtnPrimary]}
-          onPress={handleCamera}
-          disabled={uploadLoading}
-        >
+        <TouchableOpacity style={styles.scanBtn} onPress={handleCamera} disabled={uploadLoading}>
           {uploadLoading
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <><Ionicons name="camera-outline" size={20} color="#fff" /><Text style={styles.uploadBtnTextPrimary}>Scan Document</Text></>
+            ? <ActivityIndicator color={WHITE} size="small" />
+            : <>
+                <Ionicons name="camera-outline" size={20} color={WHITE} />
+                <Text style={styles.scanBtnText}>Scan Document</Text>
+              </>
           }
         </TouchableOpacity>
       </View>
@@ -196,35 +227,44 @@ export default function DocumentsScreen() {
       <Modal visible={showAskModal} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modal}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Ask about your documents</Text>
-            <TouchableOpacity onPress={() => { setShowAskModal(false); setAnswer(''); setQuestion('') }}>
-              <Ionicons name="close" size={24} color={COLORS.text} />
+            <View>
+              <Text style={styles.modalTitle}>Ask about your documents</Text>
+              <Text style={styles.modalHint}>e.g. "When does my passport expire?"</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => { setShowAskModal(false); setAnswer(''); setQuestion('') }}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={20} color={WHITE} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.modalHint}>
-            Try: "When does my passport expire?" or "What's my insurance policy number?"
-          </Text>
+
           <TextInput
             style={styles.questionInput}
             placeholder="Ask anything about your documents..."
-            placeholderTextColor={COLORS.muted}
+            placeholderTextColor={MUTED}
             value={question}
             onChangeText={setQuestion}
             multiline
           />
+
           {answer ? (
             <View style={styles.answerBox}>
-              <Text style={styles.answerLabel}>Hearth says:</Text>
+              <View style={styles.answerHeader}>
+                <Text style={styles.answerIconText}>✦</Text>
+                <Text style={styles.answerLabel}>Hearth says</Text>
+              </View>
               <Text style={styles.answerText}>{answer}</Text>
             </View>
           ) : null}
+
           <TouchableOpacity
             style={[styles.askSubmitBtn, askLoading && { opacity: 0.6 }]}
             onPress={handleAsk}
             disabled={askLoading}
           >
             {askLoading
-              ? <ActivityIndicator color="#fff" />
+              ? <ActivityIndicator color={WHITE} />
               : <Text style={styles.askSubmitText}>Ask</Text>
             }
           </TouchableOpacity>
@@ -236,13 +276,8 @@ export default function DocumentsScreen() {
 
 function docTypeIcon(type: string) {
   const icons: Record<string, string> = {
-    passport: '🛂',
-    insurance: '🛡️',
-    warranty: '🔧',
-    lease: '🏠',
-    medical: '🏥',
-    vehicle_registration: '🚗',
-    other: '📄'
+    passport: '🛂', insurance: '🛡️', warranty: '🔧',
+    lease: '🏠', medical: '🏥', vehicle_registration: '🚗', other: '📄'
   }
   return icons[type] || '📄'
 }
@@ -259,58 +294,92 @@ function isExpiringSoon(dateStr: string) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 24,
-    paddingTop: 60
-  },
-  title: { fontSize: 22, fontWeight: '700', color: COLORS.text },
-  askButton: {
+  container: { flex: 1, backgroundColor: NAVY },
+  header: { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 20 },
+  headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 },
+  headerLabel: { fontSize: 11, color: MUTED, letterSpacing: 2, marginBottom: 4 },
+  headerTitle: { fontSize: 28, fontWeight: '700', color: WHITE },
+  askBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.surface,
-    borderRadius: 10,
-    paddingHorizontal: 12,
+    gap: 6,
+    backgroundColor: 'rgba(79,195,247,0.1)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: COLORS.accent
+    borderColor: 'rgba(79,195,247,0.25)'
   },
-  askButtonText: { color: COLORS.accent, fontWeight: '600', fontSize: 14 },
-  section: { paddingHorizontal: 20, marginBottom: 16 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 10 },
+  askBtnText: { color: ACCENT, fontSize: 13, fontWeight: '600' },
+  summaryRow: { flexDirection: 'row', gap: 10 },
+  summaryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7
+  },
+  summaryPillAlert: { backgroundColor: 'rgba(255,159,28,0.1)' },
+  summaryValue: { fontSize: 15, fontWeight: '700', color: WHITE },
+  summaryLabel: { fontSize: 12, color: MUTED },
+  scroll: { flex: 1 },
+  section: { paddingHorizontal: 20, marginTop: 24, marginBottom: 8 },
+  sectionTitle: { fontSize: 11, fontWeight: '600', color: MUTED, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12 },
   alertCard: {
-    backgroundColor: '#FFFBEB',
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: SURFACE,
+    borderRadius: 12,
+    padding: 14,
     marginBottom: 8,
-    borderLeftWidth: 4
+    borderLeftWidth: 3,
+    gap: 8
   },
-  alertMessage: { fontSize: 13, color: COLORS.text },
+  alertBadge: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  alertBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  alertMessage: { fontSize: 13, color: '#D0E8F5', lineHeight: 19 },
   emptyState: { alignItems: 'center', paddingVertical: 40 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: COLORS.text, marginBottom: 8 },
-  emptySubtitle: { fontSize: 14, color: COLORS.muted, textAlign: 'center', lineHeight: 20, paddingHorizontal: 20 },
+  emptyIconBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: SURFACE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)'
+  },
+  emptyTitle: { fontSize: 18, fontWeight: '600', color: WHITE, marginBottom: 8 },
+  emptySubtitle: { fontSize: 13, color: MUTED, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24 },
   docCard: {
     flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: SURFACE,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: COLORS.border
+    borderColor: 'rgba(255,255,255,0.05)',
+    gap: 12
   },
-  docCardLeft: { marginRight: 12, justifyContent: 'center' },
-  docIcon: { fontSize: 28 },
-  docCardContent: { flex: 1 },
-  docTitle: { fontSize: 15, fontWeight: '600', color: COLORS.text, marginBottom: 2 },
-  docMember: { fontSize: 12, color: COLORS.muted, marginBottom: 2 },
-  docExpiry: { fontSize: 12, color: COLORS.primary, marginBottom: 4 },
-  docNoExpiry: { fontSize: 12, color: COLORS.muted, marginBottom: 4 },
-  docSummary: { fontSize: 12, color: COLORS.muted, lineHeight: 16 },
+  docIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(79,195,247,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  docIcon: { fontSize: 22 },
+  docContent: { flex: 1 },
+  docTitle: { fontSize: 15, fontWeight: '600', color: WHITE, marginBottom: 3 },
+  docMember: { fontSize: 12, color: MUTED, marginBottom: 3 },
+  expiryRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  expiryDot: { width: 6, height: 6, borderRadius: 3 },
+  docExpiry: { fontSize: 12, color: SUCCESS },
+  docNoExpiry: { fontSize: 12, color: MUTED },
+  docSummary: { fontSize: 12, color: MUTED, marginTop: 3 },
   uploadRow: {
     position: 'absolute',
     bottom: 24,
@@ -319,50 +388,64 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10
   },
-  uploadBtn: {
+  galleryBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     padding: 14,
-    borderRadius: 12
-  },
-  uploadBtnPrimary: { backgroundColor: COLORS.primary, flex: 2 },
-  uploadBtnSecondary: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary },
-  uploadBtnTextPrimary: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  uploadBtnTextSecondary: { color: COLORS.primary, fontWeight: '600', fontSize: 15 },
-  modal: { flex: 1, backgroundColor: COLORS.background, padding: 24 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 12 },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: COLORS.text },
-  modalHint: { fontSize: 13, color: COLORS.muted, marginBottom: 16, lineHeight: 18 },
-  questionInput: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 15,
-    color: COLORS.text,
+    borderRadius: 14,
+    backgroundColor: SURFACE,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(79,195,247,0.3)'
+  },
+  galleryBtnText: { color: ACCENT, fontWeight: '600', fontSize: 14 },
+  scanBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: ACCENT
+  },
+  scanBtnText: { color: NAVY, fontWeight: '700', fontSize: 14 },
+  modal: { flex: 1, backgroundColor: NAVY, padding: 24 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 20 },
+  modalTitle: { fontSize: 22, fontWeight: '700', color: WHITE, marginBottom: 4 },
+  modalHint: { fontSize: 13, color: MUTED },
+  modalClose: { padding: 6, backgroundColor: SURFACE, borderRadius: 10 },
+  questionInput: {
+    backgroundColor: SURFACE,
+    borderRadius: 14,
+    padding: 16,
+    fontSize: 14,
+    color: WHITE,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
     minHeight: 80,
     textAlignVertical: 'top',
-    marginBottom: 12
+    marginBottom: 14
   },
   answerBox: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    backgroundColor: 'rgba(79,195,247,0.07)',
+    borderRadius: 14,
     padding: 16,
     marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.accent
+    borderWidth: 1,
+    borderColor: 'rgba(79,195,247,0.2)'
   },
-  answerLabel: { fontSize: 12, fontWeight: '600', color: COLORS.accent, marginBottom: 6 },
-  answerText: { fontSize: 15, color: COLORS.text, lineHeight: 22 },
+  answerHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  answerIconText: { fontSize: 14, color: ACCENT },
+  answerLabel: { fontSize: 12, fontWeight: '600', color: ACCENT, textTransform: 'uppercase', letterSpacing: 0.5 },
+  answerText: { fontSize: 14, color: '#D0E8F5', lineHeight: 22 },
   askSubmitBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
+    backgroundColor: ACCENT,
+    borderRadius: 14,
     padding: 16,
     alignItems: 'center'
   },
-  askSubmitText: { color: '#fff', fontWeight: '600', fontSize: 16 }
+  askSubmitText: { color: NAVY, fontWeight: '700', fontSize: 16 }
 })
