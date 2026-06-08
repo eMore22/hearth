@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons'
 const NAVY = '#0A1628'
 const NAVY_LIGHT = '#112240'
 const SURFACE = '#162035'
-const ACCENT = '#FF6B6B'
 const WHITE = '#F8FAFF'
 const MUTED = '#8899AA'
 const SUCCESS = '#06D6A0'
@@ -32,9 +31,7 @@ export default function HealthScreen() {
       const result = await triageSymptoms(symptoms)
       setLastTriage(result)
       setSymptoms('')
-    } catch {
-      Alert.alert('Error', 'Could not complete triage. Please try again.')
-    }
+    } catch { Alert.alert('Error', 'Could not complete triage. Please try again.') }
   }
 
   const cfg = lastTriage ? (TRIAGE_CONFIG[lastTriage.triage_level] || TRIAGE_CONFIG.home_care) : null
@@ -53,7 +50,6 @@ export default function HealthScreen() {
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* Triage result */}
         {lastTriage && cfg && (
           <View style={styles.section}>
             <View style={[styles.triageCard, { backgroundColor: cfg.bg, borderColor: cfg.color + '33' }]}>
@@ -72,14 +68,11 @@ export default function HealthScreen() {
                   ))}
                 </View>
               )}
-              {lastTriage.disclaimer && (
-                <Text style={styles.triageDisclaimer}>{lastTriage.disclaimer}</Text>
-              )}
+              {lastTriage.disclaimer && <Text style={styles.triageDisclaimer}>{lastTriage.disclaimer}</Text>}
             </View>
           </View>
         )}
 
-        {/* Symptom input */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Describe Symptoms</Text>
           <View style={styles.inputCard}>
@@ -96,14 +89,11 @@ export default function HealthScreen() {
               onPress={handleTriage}
               disabled={!symptoms.trim() || isLoading}
             >
-              <Text style={styles.triageBtnText}>
-                {isLoading ? 'Analyzing...' : 'Get Triage Recommendation'}
-              </Text>
+              <Text style={styles.triageBtnText}>{isLoading ? 'Analyzing...' : 'Get Triage Recommendation'}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* History */}
         {triageHistory.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Recent Checks</Text>
@@ -113,20 +103,15 @@ export default function HealthScreen() {
                 <View key={i} style={styles.historyCard}>
                   <View style={[styles.historyDot, { backgroundColor: itemCfg.color }]} />
                   <View style={styles.historyInfo}>
-                    <Text style={styles.historyDate}>
-                      {new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </Text>
+                    <Text style={styles.historyDate}>{new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
                     <Text style={styles.historySymptoms} numberOfLines={1}>{item.symptoms}</Text>
-                    <Text style={[styles.historyLevel, { color: itemCfg.color }]}>
-                      {item.result?.triage_level?.replace('_', ' ')}
-                    </Text>
+                    <Text style={[styles.historyLevel, { color: itemCfg.color }]}>{item.result?.triage_level?.replace('_', ' ')}</Text>
                   </View>
                 </View>
               )
             })}
           </View>
         )}
-
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
@@ -154,7 +139,7 @@ const styles = StyleSheet.create({
   triageDisclaimer: { fontSize: 11, color: MUTED, marginTop: 10, fontStyle: 'italic' },
   inputCard: { backgroundColor: SURFACE, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
   input: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 14, fontSize: 14, color: WHITE, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', minHeight: 70, textAlignVertical: 'top', marginBottom: 12 },
-  triageBtn: { backgroundColor: ACCENT, borderRadius: 12, padding: 14, alignItems: 'center' },
+  triageBtn: { backgroundColor: DANGER, borderRadius: 12, padding: 14, alignItems: 'center' },
   triageBtnDisabled: { opacity: 0.4 },
   triageBtnText: { color: WHITE, fontWeight: '700', fontSize: 14 },
   historyCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: SURFACE, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)', gap: 12 },

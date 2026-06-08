@@ -1,7 +1,6 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Alert, RefreshControl } from 'react-native'
 import { useEffect, useState } from 'react'
 import { useBillStore } from '../../src/stores/billStore'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -12,18 +11,13 @@ const ACCENT = '#C77DFF'
 const WHITE = '#F8FAFF'
 const MUTED = '#8899AA'
 const SUCCESS = '#06D6A0'
-const WARNING = '#FF9F1C'
-const DANGER = '#FF6B6B'
 
 export default function BillsScreen() {
   const { bills, monthlyReport, unusedSubscriptions, isLoading, fetchBills, fetchMonthlyReport, detectUnused, generateNegotiationScript } = useBillStore()
   const [showUnused, setShowUnused] = useState(false)
   const [detectLoading, setDetectLoading] = useState(false)
 
-  useEffect(() => {
-    fetchBills()
-    fetchMonthlyReport()
-  }, [])
+  useEffect(() => { fetchBills(); fetchMonthlyReport() }, [])
 
   const handleDetectUnused = async () => {
     setDetectLoading(true)
@@ -36,9 +30,7 @@ export default function BillsScreen() {
     try {
       const script = await generateNegotiationScript(provider, plan)
       Alert.alert('Negotiation Script', script.script)
-    } catch {
-      Alert.alert('Error', 'Could not generate script')
-    }
+    } catch { Alert.alert('Error', 'Could not generate script') }
   }
 
   const totalMonthly = bills.reduce((sum: number, b: any) => sum + (b.amount || 0), 0)
@@ -64,10 +56,9 @@ export default function BillsScreen() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => { fetchBills(); fetchMonthlyReport() }} tintColor={ACCENT} />}>
 
-        {/* Monthly report card */}
         {monthlyReport && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>April 2026 Summary</Text>
+            <Text style={styles.sectionTitle}>Monthly Summary</Text>
             <View style={styles.reportCard}>
               <Text style={styles.reportAmount}>${monthlyReport.total_spent?.toFixed(2) || '0.00'}</Text>
               <Text style={styles.reportSummary}>{monthlyReport.summary}</Text>
@@ -75,7 +66,6 @@ export default function BillsScreen() {
           </View>
         )}
 
-        {/* Detect unused */}
         <View style={styles.section}>
           <TouchableOpacity style={styles.detectBtn} onPress={handleDetectUnused} disabled={detectLoading}>
             <Ionicons name="search-outline" size={18} color={ACCENT} />
@@ -83,7 +73,6 @@ export default function BillsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Unused subscriptions */}
         {showUnused && unusedSubscriptions.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Potential Savings</Text>
@@ -94,7 +83,7 @@ export default function BillsScreen() {
                   <Text style={styles.unusedSaving}>-${sub.monthly_savings}/mo</Text>
                 </View>
                 <Text style={styles.unusedReason}>{sub.reason}</Text>
-                <TouchableOpacity style={styles.scriptBtn} onPress={() => handleNegotiation(sub.provider, 'current plan')}>
+                <TouchableOpacity onPress={() => handleNegotiation(sub.provider, 'current plan')}>
                   <Text style={styles.scriptBtnText}>Get negotiation script →</Text>
                 </TouchableOpacity>
               </View>
@@ -102,7 +91,6 @@ export default function BillsScreen() {
           </View>
         )}
 
-        {/* Bills list */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Bills</Text>
           {bills.length === 0 ? (
@@ -154,7 +142,6 @@ const styles = StyleSheet.create({
   unusedProvider: { fontSize: 15, fontWeight: '600', color: WHITE },
   unusedSaving: { fontSize: 15, fontWeight: '700', color: SUCCESS },
   unusedReason: { fontSize: 13, color: MUTED, marginBottom: 10 },
-  scriptBtn: { alignSelf: 'flex-start' },
   scriptBtnText: { fontSize: 13, color: ACCENT, fontWeight: '600' },
   emptyState: { alignItems: 'center', paddingVertical: 40, gap: 10 },
   emptyTitle: { fontSize: 17, fontWeight: '600', color: WHITE },

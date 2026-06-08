@@ -11,7 +11,6 @@ const ACCENT = '#FFD166'
 const WHITE = '#F8FAFF'
 const MUTED = '#8899AA'
 const SUCCESS = '#06D6A0'
-const DANGER = '#FF6B6B'
 
 const DEFAULT_PROFILE = { property_type: 'house', appliances: ['furnace', 'water heater'], climate: 'temperate' }
 
@@ -32,20 +31,15 @@ export default function MaintenanceScreen() {
     try {
       const result = await diagnoseProblem(problemDesc)
       setDiagnosis(result)
-    } catch {
-      Alert.alert('Error', 'Could not diagnose. Please try again.')
-    } finally {
-      setDiagnosing(false)
-    }
+    } catch { Alert.alert('Error', 'Could not diagnose. Please try again.') }
+    finally { setDiagnosing(false) }
   }
 
   const handleDIY = async (taskName: string) => {
     try {
       const instructions = await getDIYInstructions(taskName)
       Alert.alert(taskName, instructions.steps?.join('\n') || 'No instructions available')
-    } catch {
-      Alert.alert('Error', 'Could not fetch instructions')
-    }
+    } catch { Alert.alert('Error', 'Could not fetch instructions') }
   }
 
   const upcomingTasks = tasks.filter((t: any) => !t.completed).slice(0, 8)
@@ -71,7 +65,6 @@ export default function MaintenanceScreen() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchTasks} tintColor={ACCENT} />}>
 
-        {/* Upcoming tasks */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Upcoming Tasks</Text>
           {upcomingTasks.length === 0 ? (
@@ -82,7 +75,7 @@ export default function MaintenanceScreen() {
             </View>
           ) : (
             upcomingTasks.map((task: any, i: number) => (
-              <View key={task.id || task.name || i} style={styles.taskCard}>
+              <View key={task.id || i} style={styles.taskCard}>
                 <View style={styles.taskLeft}>
                   <Text style={styles.taskName}>{task.name || task.title}</Text>
                   <Text style={styles.taskDue}>Due: {task.due_date || task.next_due_date}</Text>
@@ -102,7 +95,6 @@ export default function MaintenanceScreen() {
           )}
         </View>
 
-        {/* Diagnose */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Diagnose an Issue</Text>
           <View style={styles.diagnoseCard}>
@@ -117,7 +109,6 @@ export default function MaintenanceScreen() {
             <TouchableOpacity style={styles.diagnoseBtn} onPress={handleDiagnose} disabled={diagnosing}>
               <Text style={styles.diagnoseBtnText}>{diagnosing ? 'Diagnosing...' : 'Diagnose'}</Text>
             </TouchableOpacity>
-
             {diagnosis && (
               <View style={styles.diagnosisResult}>
                 <Text style={styles.diagnosisSubtitle}>Likely causes:</Text>
@@ -126,14 +117,11 @@ export default function MaintenanceScreen() {
                 ))}
                 <Text style={styles.diagnosisSubtitle}>Recommendation:</Text>
                 <Text style={styles.diagnosisText}>{diagnosis.recommendation || 'Consult a professional'}</Text>
-                {diagnosis.estimated_cost_range && (
-                  <Text style={styles.diagnosisCost}>Est. cost: {diagnosis.estimated_cost_range}</Text>
-                )}
+                {diagnosis.estimated_cost_range && <Text style={styles.diagnosisCost}>Est. cost: {diagnosis.estimated_cost_range}</Text>}
               </View>
             )}
           </View>
         </View>
-
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>

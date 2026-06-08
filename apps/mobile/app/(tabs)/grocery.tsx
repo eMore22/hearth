@@ -12,12 +12,7 @@ const WHITE = '#F8FAFF'
 const MUTED = '#8899AA'
 const WARNING = '#FF9F1C'
 
-const DEFAULT_PREFS = {
-  household_size: 2,
-  dietary_restrictions: [],
-  weekly_budget: 150,
-  cuisine_preferences: ['Italian', 'Mexican'],
-}
+const DEFAULT_PREFS = { household_size: 2, dietary_restrictions: [], weekly_budget: 150, cuisine_preferences: ['Italian', 'Mexican'] }
 
 export default function GroceryScreen() {
   const { mealPlan, shoppingList, inventory, wasteAlerts, isLoading, generateMealPlan, createShoppingList, fetchWasteAlerts, fetchInventory } = useGroceryStore()
@@ -28,15 +23,11 @@ export default function GroceryScreen() {
     if (!mealPlan) generateMealPlan(DEFAULT_PREFS)
   }, [])
 
-  useEffect(() => {
-    if (inventory.length > 0) fetchWasteAlerts()
-  }, [inventory])
+  useEffect(() => { if (inventory.length > 0) fetchWasteAlerts() }, [inventory])
 
   const handleCreateList = () => {
     if (mealPlan) { createShoppingList(mealPlan); setShowList(true) }
   }
-
-  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
   return (
     <View style={styles.container}>
@@ -55,7 +46,6 @@ export default function GroceryScreen() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => generateMealPlan(DEFAULT_PREFS)} tintColor={ACCENT} />}>
 
-        {/* Waste alerts */}
         {wasteAlerts.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Use Soon</Text>
@@ -72,7 +62,6 @@ export default function GroceryScreen() {
           </View>
         )}
 
-        {/* Generate button */}
         <View style={styles.section}>
           <TouchableOpacity style={styles.generateBtn} onPress={() => generateMealPlan(DEFAULT_PREFS)} disabled={isLoading}>
             <Ionicons name="refresh-outline" size={18} color={ACCENT} />
@@ -80,21 +69,19 @@ export default function GroceryScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Meal plan */}
         {mealPlan && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>This Week</Text>
             {(mealPlan.days || []).map((day: any, i: number) => (
               <View key={i} style={styles.dayCard}>
-                <Text style={styles.dayName}>{day.day || DAYS[i] || `Day ${i + 1}`}</Text>
-                <View style={styles.mealsRow}>
-                  {day.breakfast && <MealChip icon="☀️" name={day.breakfast.name} />}
-                  {day.lunch && <MealChip icon="🥪" name={day.lunch.name} />}
-                  {day.dinner && <MealChip icon="🍽️" name={day.dinner.name} />}
+                <Text style={styles.dayName}>{day.day || `Day ${i + 1}`}</Text>
+                <View style={styles.mealsCol}>
+                  {day.breakfast && <Text style={styles.mealRow}>☀️ {day.breakfast.name}</Text>}
+                  {day.lunch && <Text style={styles.mealRow}>🥪 {day.lunch.name}</Text>}
+                  {day.dinner && <Text style={styles.mealRow}>🍽️ {day.dinner.name}</Text>}
                 </View>
               </View>
             ))}
-
             <TouchableOpacity style={styles.listBtn} onPress={handleCreateList}>
               <Ionicons name="list-outline" size={18} color={NAVY} />
               <Text style={styles.listBtnText}>Generate Shopping List</Text>
@@ -102,21 +89,20 @@ export default function GroceryScreen() {
           </View>
         )}
 
-        {/* Shopping list */}
         {shoppingList && showList && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Shopping List</Text>
             <View style={styles.listCard}>
               {Object.entries(shoppingList.categories || {}).map(([cat, items]: [string, any]) =>
-                items.length > 0 && (
+                Array.isArray(items) && items.length > 0 && (
                   <View key={cat} style={styles.listCategory}>
                     <Text style={styles.listCategoryName}>{cat}</Text>
-                    <Text style={styles.listItems}>{Array.isArray(items) ? items.join(', ') : items}</Text>
+                    <Text style={styles.listItems}>{items.join(', ')}</Text>
                   </View>
                 )
               )}
               <View style={styles.listFooter}>
-                <Text style={styles.listTotal}>Total items: {shoppingList.total_items}</Text>
+                <Text style={styles.listTotal}>Total: {shoppingList.total_items} items</Text>
                 <Text style={styles.listCost}>Est. ${shoppingList.estimated_cost}</Text>
               </View>
             </View>
@@ -128,21 +114,6 @@ export default function GroceryScreen() {
     </View>
   )
 }
-
-function MealChip({ icon, name }: { icon: string; name: string }) {
-  return (
-    <View style={chipStyles.chip}>
-      <Text style={chipStyles.icon}>{icon}</Text>
-      <Text style={chipStyles.name} numberOfLines={1}>{name}</Text>
-    </View>
-  )
-}
-
-const chipStyles = StyleSheet.create({
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(6,214,160,0.08)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginBottom: 4 },
-  icon: { fontSize: 12 },
-  name: { fontSize: 12, color: '#B8D4E8', flex: 1 },
-})
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: NAVY },
@@ -161,12 +132,13 @@ const styles = StyleSheet.create({
   wasteDays: { fontSize: 13, fontWeight: '700', color: WARNING },
   generateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(6,214,160,0.1)', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: 'rgba(6,214,160,0.25)' },
   generateBtnText: { color: ACCENT, fontWeight: '600', fontSize: 15 },
-  dayCard: { backgroundColor: '#162035', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  dayCard: { backgroundColor: SURFACE, borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
   dayName: { fontSize: 13, fontWeight: '700', color: WHITE, marginBottom: 8 },
-  mealsRow: { gap: 2 },
+  mealsCol: { gap: 4 },
+  mealRow: { fontSize: 13, color: '#B8D4E8' },
   listBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: ACCENT, borderRadius: 14, padding: 14, marginTop: 8 },
   listBtnText: { color: NAVY, fontWeight: '700', fontSize: 14 },
-  listCard: { backgroundColor: '#162035', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  listCard: { backgroundColor: SURFACE, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
   listCategory: { marginBottom: 12 },
   listCategoryName: { fontSize: 12, fontWeight: '600', color: ACCENT, textTransform: 'capitalize', marginBottom: 4 },
   listItems: { fontSize: 13, color: '#B8D4E8', lineHeight: 19 },
