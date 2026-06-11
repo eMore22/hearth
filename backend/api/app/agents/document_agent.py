@@ -10,7 +10,7 @@ class DocumentAgent(BaseHouseholdAgent):
     """
     Module 1: Document Vault & Expiry Agent
     Uses Claude (heavy) for extraction and Q&A.
-    Uses NVIDIA vision (light) for OCR where possible.
+    Improved OCR pipeline with better fallback.
     """
 
     SYSTEM_PROMPT = """You are Hearth's Document Agent.
@@ -33,41 +33,34 @@ Be precise, helpful, and concise."""
     def extract_document(self, image_bytes: bytes) -> Dict:
         """
         Extract structured info from a document image.
-        Pipeline: NVIDIA OCR → Claude extraction → fallback safe dict
+        Improved pipeline: NVIDIA OCR → AWS Textract → Safe fallback
         """
         raw_text = ""
 
-        # Step 1: Try NVIDIA OCR via ocr_service
+        # Step 1: Try NVIDIA OCR (if available)
         try:
             from app.services.ocr_service import perform_ocr
             raw_text = perform_ocr(image_bytes) or ""
+            if raw_text:
+                print("✅ NVIDIA OCR succeeded")
         except Exception as e:
             print(f"⚠️ NVIDIA OCR failed: {e}")
 
-        # Step 2: If OCR gave nothing, try vision model
-        if not raw_text or len(raw_text.strip()) < 10:
-            try:
-                vision_result = self._extract_with_vision(image_bytes)
-                if vision_result and vision_result.get("document_type"):
-                    self.log_action("extract_document_vision", vision_result.get("document_type", "unknown"))
-                    return vision_result
-            except Exception as e:
-                print(f"⚠️ Vision extraction failed: {e}")
-
-        # Step 3: If still nothing, try AWS Textract
-        if not raw_text or len(raw_text.strip()) < 10:
+        # Step 2: If NVIDIA OCR failed or gave nothing → Try AWS Textract
+        if not raw_text or len(raw_text.strip()) < 15:
+            print("🔄 Falling back to AWS Textract...")
             raw_text = self._run_textract(image_bytes)
 
-        # Step 4: If we still have nothing meaningful, return safe fallback
-        if not raw_text or raw_text.startswith("[OCR failed"):
-            print("⚠️ All OCR methods failed — returning safe fallback document")
-            return self._safe_fallback("Could not extract text from document")
+        # Step 3: If we still have nothing useful → Return safe fallback
+        if not raw_text or raw_text.startswith("[OCR failed") or len(raw_text.strip()) < 15:
+            print("⚠️ All OCR methods failed — returning safe fallback")
+            return self._safe_fallback("Could not extract readable text from document")
 
-        # Step 5: Claude structured extraction (HEAVY — needs quality JSON output)
+        # Step 4: Use Claude to extract structured data (Heavy task)
         prompt = f"""Extract structured information from this document text.
 
 Document text:
-{raw_text[:3000]}
+{raw_text[:3500]}
 
 Return ONLY valid JSON with this exact structure:
 {{
@@ -85,10 +78,9 @@ Return ONLY valid JSON with this exact structure:
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=1024)
 
         try:
-            # Strip markdown fences if present
             clean = response.replace("```json", "").replace("```", "").strip()
             extracted = json.loads(clean)
-        except (json.JSONDecodeError, Exception) as e:
+        except Exception as e:
             print(f"⚠️ JSON parse failed: {e} — using fallback")
             extracted = self._safe_fallback(raw_text[:200])
 
@@ -236,7 +228,6 @@ Return ONLY valid JSON:
     def _safe_fallback(self, raw_text: str = "") -> Dict:
         """
         Always returns a valid dict that can be inserted into the DB.
-        This is what prevents the 400 error when OCR fails completely.
         """
         return {
             "document_type": "other",
