@@ -9,6 +9,11 @@ from app.agents.health_agent import HealthAgent
 
 
 class ChiefOfStaffAgent(BaseHouseholdAgent):
+    """
+    The single brain of Hearth.
+    Uses Claude for conversation (heavy) and NVIDIA for classification/summaries (light).
+    """
+
     SYSTEM_PROMPT = """You are Hearth's Chief of Staff AI — a warm, intelligent assistant
 that helps households manage documents, bills, groceries, maintenance, and health.
 
@@ -45,6 +50,7 @@ Be warm, concise, and genuinely helpful. Reference household context when releva
         if conversation_history is None:
             conversation_history = []
 
+        # LIGHT: NVIDIA for intent classification (fast + free)
         category = await self._classify_intent(message)
 
         response = {
@@ -54,6 +60,7 @@ Be warm, concise, and genuinely helpful. Reference household context when releva
             "actions_taken": []
         }
 
+        # HEAVY: Claude for the actual conversation response (needs memory + quality)
         response["message"] = self._ai_response_with_memory(
             message=message,
             category=category,
@@ -69,7 +76,14 @@ Be warm, concise, and genuinely helpful. Reference household context when releva
         self.log_action("chat", f"{category}: {message[:80]}")
         return response
 
-    def _ai_response_with_memory(self, message: str, category: str, context: Dict, conversation_history: List) -> str:
+    def _ai_response_with_memory(
+        self,
+        message: str,
+        category: str,
+        context: Dict,
+        conversation_history: List
+    ) -> str:
+        """Build full prompt with conversation history. Always uses Claude."""
         history_text = ""
         if conversation_history:
             history_lines = []
@@ -122,16 +136,18 @@ Respond as Hearth Chief of Staff. Use the conversation history above to:
 4. Never repeat information unnecessarily
 5. Build naturally on the conversation"""
 
+        # HEAVY: Claude for conversation (always)
         return self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=400)
 
     async def _classify_intent(self, message: str) -> str:
+        """LIGHT: NVIDIA for fast intent classification."""
         try:
-            nvidia = self.nvidia_client
-            if nvidia:
-                return nvidia.classify_intent(message)
+            if self.nvidia_client:
+                return self.nvidia_client.classify_intent(message)
         except Exception:
             pass
 
+        # Keyword fallback
         msg = message.lower()
         if any(w in msg for w in ["document", "passport", "insurance", "expire", "warranty", "certificate", "id card"]):
             return "documents"
@@ -146,6 +162,7 @@ Respond as Hearth Chief of Staff. Use the conversation history above to:
         return "general"
 
     def get_dashboard_summary(self, household_data: Dict) -> Dict:
+        """Sync dashboard summary. Uses LIGHT model for greeting."""
         summary = {
             "documents": self._get_document_snapshot(household_data.get("documents", [])),
             "bills": self._get_bill_snapshot(household_data.get("bills", [])),
@@ -154,23 +171,38 @@ Respond as Hearth Chief of Staff. Use the conversation history above to:
             "health": self._get_health_snapshot(household_data.get("health_events", [])),
             "chief_message": ""
         }
+
         doc_count = len(household_data.get("documents", []))
         bill_count = len(household_data.get("bills", []))
         task_count = len(household_data.get("tasks", []))
-        prompt = (f"Write a one-sentence warm greeting for a household dashboard. "
-                  f"Context: {doc_count} documents, {bill_count} bills, {task_count} tasks. Under 20 words. Upbeat and helpful.")
-        summary["chief_message"] = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=60)
+
+        prompt = (
+            f"Write a one-sentence warm greeting for a household dashboard. "
+            f"Context: {doc_count} documents, {bill_count} bills, {task_count} tasks. "
+            f"Under 20 words. Upbeat and helpful."
+        )
+
+        # LIGHT: NVIDIA for dashboard greeting (simple task)
+        summary["chief_message"] = self.ask_light(prompt, max_tokens=60)
         self.log_action("dashboard_summary", "generated")
         return summary
 
     def _get_document_snapshot(self, documents: List) -> Dict:
         expiring_soon = [d for d in documents if d.get("days_until_expiry", 999) <= 30]
-        return {"total": len(documents), "expiring_soon": len(expiring_soon), "next_expiry": expiring_soon[0].get("title") if expiring_soon else None}
+        return {
+            "total": len(documents),
+            "expiring_soon": len(expiring_soon),
+            "next_expiry": expiring_soon[0].get("title") if expiring_soon else None
+        }
 
     def _get_bill_snapshot(self, bills: List) -> Dict:
         total = sum(b.get("amount", 0) for b in bills)
         largest = max(bills, key=lambda x: x.get("amount", 0)) if bills else None
-        return {"total": len(bills), "monthly_spend": round(total, 2), "largest_bill": largest.get("provider") if largest else None}
+        return {
+            "total": len(bills),
+            "monthly_spend": round(total, 2),
+            "largest_bill": largest.get("provider") if largest else None
+        }
 
     def _get_grocery_snapshot(self, inventory: List) -> Dict:
         expiring = [i for i in inventory if i.get("days_left", 999) <= 3]

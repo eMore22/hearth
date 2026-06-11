@@ -8,9 +8,8 @@ from app.config import settings
 
 class BaseHouseholdAgent(ABC):
     """
-    Base class for all Hearth module agents.
-    Every agent knows which household it belongs to,
-    loads relevant context, and logs every action it takes.
+    Base class for all Hearth agents.
+    Provides smart routing between Claude (heavy) and NVIDIA (light).
     """
 
     def __init__(self, household_id: str, user_id: str):
@@ -23,7 +22,7 @@ class BaseHouseholdAgent(ABC):
 
     @property
     def nvidia_client(self):
-        """Return a shared NVIDIA client, initialising on first use."""
+        """Return shared NVIDIA client, initialising on first use."""
         if self._nvidia_client is None:
             try:
                 from app.services.nvidia_client import get_nvidia_client
@@ -33,12 +32,14 @@ class BaseHouseholdAgent(ABC):
         return self._nvidia_client
 
     def load_household_context(self) -> Dict[str, Any]:
+        """Override in subclasses to load relevant household data."""
         return {}
 
     @abstractmethod
     def run(self, input_data: Any) -> Any:
         pass
 
+    # ── HEAVY: Claude for complex reasoning ──────────────────────────────────
     def ask_claude(
         self,
         prompt: str,
@@ -46,9 +47,13 @@ class BaseHouseholdAgent(ABC):
         max_tokens: int = 1024
     ) -> str:
         """
-        Try Anthropic first. If credits are low or unavailable,
-        fall back to NVIDIA free endpoint. If both fail, return
-        a safe JSON error string so callers never crash.
+        Use Claude for complex tasks:
+        - Chief of Staff conversation
+        - Document extraction and Q&A
+        - Health triage
+        - Maintenance diagnosis
+        - Negotiation scripts
+        Falls back to NVIDIA if credits run out.
         """
         messages = [{"role": "user", "content": prompt}]
         kwargs = {
@@ -59,33 +64,74 @@ class BaseHouseholdAgent(ABC):
         if system:
             kwargs["system"] = system
 
-        # --- Try Anthropic ---
         try:
             response = self.client.messages.create(**kwargs)
+            self.log_action("claude_call", "success", {"max_tokens": max_tokens})
             return response.content[0].text
-        except Exception as anthropic_error:
-            print(f"⚠️ Anthropic unavailable: {anthropic_error}. Trying NVIDIA fallback...")
+        except Exception as e:
+            print(f"⚠️ Claude failed: {str(e)[:120]}. Falling back to NVIDIA...")
+            return self.ask_light(prompt, max_tokens=max_tokens)
 
-        # --- Try NVIDIA fallback ---
+    # ── LIGHT: NVIDIA for fast cheap tasks ───────────────────────────────────
+    def ask_light(
+        self,
+        prompt: str,
+        max_tokens: int = 512,
+        temperature: float = 0.3
+    ) -> str:
+        """
+        Use NVIDIA for lightweight tasks:
+        - Dashboard greeting
+        - Intent classification
+        - Quick summaries
+        - Simple reports
+        """
+        if not self.nvidia_client:
+            # If NVIDIA not configured, fall through to Claude
+            return self.ask_claude(prompt, max_tokens=max_tokens)
+
         try:
-            if self.nvidia_client:
-                result = self.nvidia_client.complete(
-                    task="simple_chat",
-                    messages=messages,
+            result = self.nvidia_client.complete(
+                task="simple_chat",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                temperature=temperature
+            )
+            self.log_action("nvidia_call", "success")
+            return result or json.dumps({"error": "Empty response from NVIDIA"})
+        except Exception as e:
+            print(f"⚠️ NVIDIA failed: {e}. Falling back to Claude...")
+            # Last resort — try Claude
+            try:
+                messages = [{"role": "user", "content": prompt}]
+                response = self.client.messages.create(
+                    model="claude-sonnet-4-20250514",
                     max_tokens=max_tokens,
-                    temperature=0.3
+                    messages=messages,
                 )
-                if result:
-                    return result
-        except Exception as nvidia_error:
-            print(f"⚠️ NVIDIA fallback also failed: {nvidia_error}")
+                return response.content[0].text
+            except Exception:
+                return json.dumps({"error": "Both AI providers temporarily unavailable"})
 
-        # --- Both failed — return safe fallback ---
-        return json.dumps({
-            "error": "AI model temporarily unavailable",
-            "message": "Both Anthropic and NVIDIA endpoints are currently unreachable. Please try again shortly."
-        })
+    # ── SMART ROUTER ─────────────────────────────────────────────────────────
+    def ask(
+        self,
+        prompt: str,
+        heavy: bool = False,
+        system: Optional[str] = None,
+        max_tokens: int = 800
+    ) -> str:
+        """
+        Smart router — pick the right model automatically.
+        heavy=True  → Claude  (reasoning, memory, quality output)
+        heavy=False → NVIDIA  (speed, cost efficiency)
+        """
+        if heavy:
+            return self.ask_claude(prompt, system=system, max_tokens=max_tokens)
+        else:
+            return self.ask_light(prompt, max_tokens=max_tokens)
 
+    # ── LEGACY: direct NVIDIA call ────────────────────────────────────────────
     def ask_nvidia(
         self,
         task: str,
@@ -93,7 +139,7 @@ class BaseHouseholdAgent(ABC):
         max_tokens: int = 1024,
         temperature: float = 0.3
     ) -> str:
-        """Use the NVIDIA model directly — bypasses Anthropic entirely."""
+        """Direct NVIDIA call for specific tasks (vision, OCR, rerank)."""
         try:
             if self.nvidia_client:
                 result = self.nvidia_client.complete(
@@ -106,7 +152,6 @@ class BaseHouseholdAgent(ABC):
                     return result
         except Exception as e:
             print(f"⚠️ NVIDIA direct call failed: {e}")
-
         return json.dumps({"error": "NVIDIA client unavailable"})
 
     def log_action(

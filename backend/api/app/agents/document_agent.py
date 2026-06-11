@@ -4,19 +4,13 @@ from datetime import datetime, date
 from typing import Any, Dict, Optional
 from app.agents.base_agent import BaseHouseholdAgent
 from app.config import settings
-from app.services.ocr_service import perform_ocr
 
 
 class DocumentAgent(BaseHouseholdAgent):
     """
     Module 1: Document Vault & Expiry Agent
-
-    Handles:
-    - OCR extraction from document photos (now NVIDIA, fallback AWS Textract)
-    - Expiry date detection and monitoring
-    - Natural language Q&A over stored documents
-    - Proactive expiry alerts
-    - Vision-based document understanding for complex images
+    Uses Claude (heavy) for extraction and Q&A.
+    Uses NVIDIA vision (light) for OCR where possible.
     """
 
     SYSTEM_PROMPT = """You are Hearth's Document Agent.
@@ -26,7 +20,6 @@ Always respond in valid JSON when asked to extract data.
 Be precise, helpful, and concise."""
 
     def run(self, input_data: Any) -> Any:
-        """Entry point — routes to correct method based on input type."""
         action = input_data.get("action")
         if action == "extract":
             return self.extract_document(input_data["image_bytes"])
@@ -39,27 +32,42 @@ Be precise, helpful, and concise."""
 
     def extract_document(self, image_bytes: bytes) -> Dict:
         """
-        Step 1: Run NVIDIA OCR on document image (fallback AWS Textract).
-        Step 2: Send extracted text to Claude for structured extraction.
-        Step 3 (optional): If OCR fails, try Vision model.
-        Returns: dict with type, expiry_date, key_fields, summary
+        Extract structured info from a document image.
+        Pipeline: NVIDIA OCR → Claude extraction → fallback safe dict
         """
-        # OCR via NVIDIA (preferred) or fallback to Textract
-        raw_text = self._run_ocr(image_bytes)
+        raw_text = ""
+
+        # Step 1: Try NVIDIA OCR via ocr_service
+        try:
+            from app.services.ocr_service import perform_ocr
+            raw_text = perform_ocr(image_bytes) or ""
+        except Exception as e:
+            print(f"⚠️ NVIDIA OCR failed: {e}")
+
+        # Step 2: If OCR gave nothing, try vision model
         if not raw_text or len(raw_text.strip()) < 10:
-            # If OCR produced nothing useful, try vision-based extraction
-            vision_result = self.extract_with_vision(image_bytes)
-            if vision_result and vision_result.get("document_type"):
-                self.log_action("extract_document_vision", vision_result.get("document_type", "unknown"))
-                return vision_result
-            # Still nothing, fallback to old Textract
+            try:
+                vision_result = self._extract_with_vision(image_bytes)
+                if vision_result and vision_result.get("document_type"):
+                    self.log_action("extract_document_vision", vision_result.get("document_type", "unknown"))
+                    return vision_result
+            except Exception as e:
+                print(f"⚠️ Vision extraction failed: {e}")
+
+        # Step 3: If still nothing, try AWS Textract
+        if not raw_text or len(raw_text.strip()) < 10:
             raw_text = self._run_textract(image_bytes)
 
-        # Structured extraction via Claude
+        # Step 4: If we still have nothing meaningful, return safe fallback
+        if not raw_text or raw_text.startswith("[OCR failed"):
+            print("⚠️ All OCR methods failed — returning safe fallback document")
+            return self._safe_fallback("Could not extract text from document")
+
+        # Step 5: Claude structured extraction (HEAVY — needs quality JSON output)
         prompt = f"""Extract structured information from this document text.
 
 Document text:
-{raw_text}
+{raw_text[:3000]}
 
 Return ONLY valid JSON with this exact structure:
 {{
@@ -77,24 +85,18 @@ Return ONLY valid JSON with this exact structure:
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=1024)
 
         try:
-            extracted = json.loads(response)
-        except json.JSONDecodeError:
-            extracted = {
-                "document_type": "other",
-                "title": "Unknown Document",
-                "summary": raw_text[:200],
-                "expiry_date": None,
-                "key_fields": {}
-            }
+            # Strip markdown fences if present
+            clean = response.replace("```json", "").replace("```", "").strip()
+            extracted = json.loads(clean)
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"⚠️ JSON parse failed: {e} — using fallback")
+            extracted = self._safe_fallback(raw_text[:200])
 
         self.log_action("extract_document", extracted.get("document_type", "unknown"))
         return extracted
 
     def answer_question(self, question: str, documents: list) -> str:
-        """
-        Natural language Q&A over the user's stored documents.
-        e.g. "When does my car insurance expire?" / "What's my policy number?"
-        """
+        """Q&A over stored documents. HEAVY — needs Claude for accuracy."""
         if not documents:
             return "You haven't added any documents to your vault yet. Add a document first and I can answer questions about it."
 
@@ -121,11 +123,7 @@ If the answer isn't in their documents, say so clearly."""
         return response
 
     def check_expiries(self, documents: list) -> list:
-        """
-        Check all documents for upcoming expiries.
-        Returns list of alerts with urgency levels.
-        Called daily by the expiry_monitor worker.
-        """
+        """Check all documents for upcoming expiries. Pure Python — no AI needed."""
         today = date.today()
         alerts = []
 
@@ -165,7 +163,6 @@ If the answer isn't in their documents, say so clearly."""
         return alerts
 
     def _expiry_message(self, title: str, days: int, urgency: str) -> str:
-        """Generate a human-friendly alert message."""
         if urgency == "expired":
             return f"⚠️ Your {title} has expired. Renew it as soon as possible."
         elif urgency == "critical":
@@ -175,16 +172,8 @@ If the answer isn't in their documents, say so clearly."""
         else:
             return f"📅 Your {title} expires in {days} days. Plan ahead."
 
-    def _run_ocr(self, image_bytes: bytes) -> str:
-        """Use NVIDIA OCR (preferred)."""
-        try:
-            return perform_ocr(image_bytes)
-        except Exception as e:
-            print(f"NVIDIA OCR failed: {e}")
-            return ""
-
     def _run_textract(self, image_bytes: bytes) -> str:
-        """Fallback: Run AWS Textract OCR on image bytes. Returns raw extracted text."""
+        """AWS Textract fallback OCR."""
         try:
             textract = boto3.client(
                 "textract",
@@ -204,25 +193,28 @@ If the answer isn't in their documents, say so clearly."""
         except Exception as e:
             return f"[OCR failed: {str(e)}]"
 
-    def extract_with_vision(self, image_bytes: bytes) -> Dict:
-        """Use NVIDIA vision model to understand document directly."""
+    def _extract_with_vision(self, image_bytes: bytes) -> Dict:
+        """NVIDIA vision model — direct image understanding."""
         try:
-            from app.services.nvidia_client import get_nvidia_client
             import base64
+            from app.services.nvidia_client import get_nvidia_client
             client = get_nvidia_client()
+            if not client:
+                return {}
+
             img_b64 = base64.b64encode(image_bytes).decode()
             prompt = """Extract structured information from this document image.
-Return ONLY valid JSON with this exact structure:
+Return ONLY valid JSON:
 {
   "document_type": "passport|insurance|warranty|lease|medical|vehicle_registration|other",
-  "title": "short human-readable title",
-  "issuer": "who issued this document",
-  "holder_name": "name on the document if present",
+  "title": "short title",
+  "issuer": "issuer name or null",
+  "holder_name": "name on document or null",
   "issue_date": "YYYY-MM-DD or null",
   "expiry_date": "YYYY-MM-DD or null",
-  "document_number": "policy/passport/reference number if present",
-  "key_fields": {"field_name": "value"},
-  "summary": "one sentence plain English summary of what this document is"
+  "document_number": "reference number or null",
+  "key_fields": {},
+  "summary": "one sentence summary"
 }"""
             response = client.complete(
                 task="vision",
@@ -235,6 +227,25 @@ Return ONLY valid JSON with this exact structure:
                 }],
                 max_tokens=1024
             )
-            return json.loads(response)
-        except Exception:
+            clean = response.replace("```json", "").replace("```", "").strip()
+            return json.loads(clean)
+        except Exception as e:
+            print(f"⚠️ Vision extraction error: {e}")
             return {}
+
+    def _safe_fallback(self, raw_text: str = "") -> Dict:
+        """
+        Always returns a valid dict that can be inserted into the DB.
+        This is what prevents the 400 error when OCR fails completely.
+        """
+        return {
+            "document_type": "other",
+            "title": "Uploaded Document",
+            "issuer": None,
+            "holder_name": None,
+            "issue_date": None,
+            "expiry_date": None,
+            "document_number": None,
+            "key_fields": {},
+            "summary": raw_text[:200] if raw_text else "Document uploaded — text extraction failed. You can rename this document."
+        }
