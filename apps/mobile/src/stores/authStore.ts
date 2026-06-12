@@ -1,6 +1,13 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
 import { authService } from '../services/api';
+import {
+  getToken,
+  setToken,
+  removeToken,
+  getUser,
+  setUser,
+  removeUser,
+} from '../lib/authToken';
 
 interface AuthState {
   session: string | null;
@@ -23,15 +30,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   loadSession: async () => {
     try {
-      const token = await SecureStore.getItemAsync('access_token');
-      const userStr = await SecureStore.getItemAsync('user');
+      const token = await getToken();
+      const user = await getUser();
 
-      if (token && userStr) {
-        set({
-          session: token,
-          user: JSON.parse(userStr),
-          loading: false,
-        });
+      if (token && user) {
+        set({ session: token, user, loading: false });
       } else {
         set({ loading: false });
       }
@@ -46,8 +49,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       const res = await authService.signIn(email, password);
       const { access_token, user } = res.data;
 
-      await SecureStore.setItemAsync('access_token', access_token);
-      await SecureStore.setItemAsync('user', JSON.stringify(user));
+      await setToken(access_token);
+      await setUser(user);
 
       set({ session: access_token, user });
     } catch (err: any) {
@@ -75,8 +78,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     set({ loading: true });
     try {
-      await SecureStore.deleteItemAsync('access_token');
-      await SecureStore.deleteItemAsync('user');
+      await removeToken();
+      await removeUser();
       set({ session: null, user: null });
     } finally {
       set({ loading: false });

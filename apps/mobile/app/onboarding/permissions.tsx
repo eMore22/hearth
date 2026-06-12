@@ -1,19 +1,25 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
 import { router } from 'expo-router';
 
 export default function PermissionsScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleEnableNotifications = async () => {
+  const handleEnable = async () => {
     setIsLoading(true);
     try {
-      // TODO: Request notification permission using expo-notifications
+      // TODO: Request notification permissions using expo-notifications
       // For now we simulate success
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 600));
       router.replace('/(tabs)');
     } catch (error) {
-      Alert.alert('Error', 'Failed to enable notifications');
+      router.replace('/(tabs)');
     } finally {
       setIsLoading(false);
     }
@@ -36,7 +42,7 @@ export default function PermissionsScreen() {
       <View style={styles.footer}>
         <TouchableOpacity 
           style={styles.enableButton} 
-          onPress={handleEnableNotifications}
+          onPress={handleEnable}
           disabled={isLoading}
         >
           {isLoading ? (

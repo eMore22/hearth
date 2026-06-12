@@ -1,5 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { useAuthStore } from '../stores/authStore';
+import { getToken, removeToken, removeUser } from '../lib/authToken';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.175.202:8000';
 
@@ -11,12 +11,10 @@ const api = axios.create({
   },
 });
 
-// ---- Request Interceptor: Attach token ----
+// ---- Request Interceptor ----
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    // authStore stores session as a plain string (the access token)
-    const token = useAuthStore.getState().session;
-
+    const token = await getToken();
     if (token) {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
@@ -26,14 +24,13 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ---- Response Interceptor: Simple 401 handling ----
+// ---- Response Interceptor ----
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // Token is invalid/expired → sign out and let navigation handle redirect
-      const { signOut } = useAuthStore.getState();
-      await signOut();
+      await removeToken();
+      await removeUser();
     }
     return Promise.reject(error);
   }

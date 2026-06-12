@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { router } from 'expo-router';
-import api from '../../src/services/api';
+import { householdService } from '../../src/services/api';
 import { useHouseholdStore } from '../../src/stores/householdStore';
 
 export default function CreateHouseholdScreen() {
@@ -22,15 +22,16 @@ export default function CreateHouseholdScreen() {
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'Household name is required');
+      Alert.alert('Error', 'Please enter a household name');
       return;
     }
 
     setIsLoading(true);
+
     try {
-      await api.post('/api/household/', {
+      await householdService.create({
         name: name.trim(),
-        address: address.trim() || null,
+        address: address.trim() || undefined,
         country: country.trim(),
       });
 
@@ -45,62 +46,123 @@ export default function CreateHouseholdScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Create Your Household</Text>
+      <View style={styles.header}>
+        <Text style={styles.step}>Step 1 of 3</Text>
+        <Text style={styles.title}>Create Your Household</Text>
+        <Text style={styles.description}>
+          This is where all your family’s information will live.
+        </Text>
+      </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Household Name"
-        value={name}
-        onChangeText={setName}
-        placeholderTextColor="#8899AA"
-      />
+      <View style={styles.form}>
+        <Text style={styles.label}>Household Name *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. The Uguomore Family"
+          placeholderTextColor="#8899AA"
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+          autoFocus
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Address (Optional)"
-        value={address}
-        onChangeText={setAddress}
-        placeholderTextColor="#8899AA"
-      />
+        <Text style={styles.label}>Address (Optional)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. Plot 106, Ekenwan Layout"
+          placeholderTextColor="#8899AA"
+          value={address}
+          onChangeText={setAddress}
+          autoCapitalize="words"
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Country"
-        value={country}
-        onChangeText={setCountry}
-        placeholderTextColor="#8899AA"
-      />
+        <Text style={styles.label}>Country</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Nigeria"
+          placeholderTextColor="#8899AA"
+          value={country}
+          onChangeText={setCountry}
+          autoCapitalize="words"
+        />
+      </View>
 
-      <TouchableOpacity
-        style={[styles.button, isLoading && styles.buttonDisabled]}
-        onPress={handleCreate}
-        disabled={isLoading || !name.trim()}
-      >
-        {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Continue</Text>}
-      </TouchableOpacity>
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={[styles.button, (!name.trim() || isLoading) && styles.buttonDisabled]}
+          onPress={handleCreate}
+          disabled={!name.trim() || isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Continue</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A1628', padding: 24, justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: '700', color: '#F8FAFF', marginBottom: 24 },
+  container: {
+    flex: 1,
+    backgroundColor: '#0A1628',
+    padding: 24,
+  },
+  header: {
+    marginBottom: 32,
+  },
+  step: {
+    color: '#8899AA',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#F8FAFF',
+    marginBottom: 8,
+  },
+  description: {
+    fontSize: 15,
+    color: '#8899AA',
+    lineHeight: 22,
+  },
+  form: {
+    flex: 1,
+  },
+  label: {
+    color: '#F8FAFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginTop: 16,
+  },
   input: {
     backgroundColor: '#162035',
     borderRadius: 12,
     padding: 16,
     color: '#F8FAFF',
-    marginBottom: 16,
+    fontSize: 16,
     borderWidth: 1,
     borderColor: '#2A3F5F',
+  },
+  footer: {
+    paddingBottom: 40,
   },
   button: {
     backgroundColor: '#C77DFF',
     paddingVertical: 18,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 20,
   },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+  },
 });

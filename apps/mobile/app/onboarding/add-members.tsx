@@ -43,16 +43,16 @@ export default function AddMembersScreen() {
   };
 
   const removeMember = (index: number) => {
-    const updated = members.filter((_, i) => i !== index);
-    setMembers(updated);
+    const updatedMembers = members.filter((_, i) => i !== index);
+    setMembers(updatedMembers);
   };
 
   const handleContinue = async () => {
     setIsLoading(true);
 
     try {
-      // TODO: Call backend to save members if needed
-      // For now we just proceed
+      // TODO: Optionally send members to backend here
+      // For now we just proceed to permissions
       router.push('/onboarding/permissions');
     } catch (error) {
       Alert.alert('Error', 'Failed to save members');
