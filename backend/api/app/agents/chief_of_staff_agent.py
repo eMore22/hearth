@@ -10,21 +10,21 @@ from app.agents.health_agent import HealthAgent
 
 class ChiefOfStaffAgent(BaseHouseholdAgent):
     """
-    The single brain of Hearth.
-    Uses Claude for conversation (heavy) and NVIDIA for classification/summaries (light).
+    The central AI brain of Hearth.
+    Uses Claude for complex reasoning and conversation (heavy tasks).
+    Uses NVIDIA for fast/light tasks (intent classification, simple summaries).
     """
 
-    SYSTEM_PROMPT = """You are Hearth's Chief of Staff AI — a warm, intelligent assistant
-that helps households manage documents, bills, groceries, maintenance, and health.
+    SYSTEM_PROMPT = """You are Hearth's Chief of Staff AI — a warm, intelligent, and proactive assistant.
+You help households manage documents, bills, groceries, maintenance, and health.
 
-IMPORTANT MEMORY RULES:
-- You have access to the full conversation history below
-- Always remember and reference what the user told you earlier in the conversation
-- If the user told you their name, partner's name, or any personal detail — remember it
-- Never contradict something you were told earlier in the conversation
-- Build on previous messages naturally, like a real assistant would
-
-Be warm, concise, and genuinely helpful. Reference household context when relevant."""
+IMPORTANT RULES:
+- Always remember and reference what the user told you earlier in the conversation.
+- If the user shared their name, partner's name, or any personal detail — remember it.
+- Never contradict something you were told earlier.
+- Be warm, concise, and genuinely helpful.
+- Reference household context when relevant.
+- If you don't have enough information, ask clarifying questions politely."""
 
     def __init__(self, household_id: str, user_id: str):
         super().__init__(household_id, user_id)
@@ -50,7 +50,7 @@ Be warm, concise, and genuinely helpful. Reference household context when releva
         if conversation_history is None:
             conversation_history = []
 
-        # LIGHT: NVIDIA for intent classification (fast + free)
+        # LIGHT TASK: Use NVIDIA for fast intent classification
         category = await self._classify_intent(message)
 
         response = {
@@ -60,18 +60,25 @@ Be warm, concise, and genuinely helpful. Reference household context when releva
             "actions_taken": []
         }
 
-        # HEAVY: Claude for the actual conversation response (needs memory + quality)
-        response["message"] = self._ai_response_with_memory(
-            message=message,
-            category=category,
-            context=context,
-            conversation_history=conversation_history
-        )
+        # HEAVY TASK: Use Claude for the actual conversation response
+        try:
+            response["message"] = self._ai_response_with_memory(
+                message=message,
+                category=category,
+                context=context,
+                conversation_history=conversation_history
+            )
+        except Exception as e:
+            print(f"⚠️ Chief of Staff chat error: {e}")
+            response["message"] = "I'm having trouble processing that right now. Could you try rephrasing?"
 
+        # Add proactive suggestions based on category
         if category == "grocery":
             response["proactive_suggestions"].append("Generate weekly meal plan")
         elif category == "maintenance":
-            response["proactive_suggestions"].append("Show maintenance calendar")
+            response["proactive_suggestions"].append("Show upcoming maintenance tasks")
+        elif category == "bills":
+            response["proactive_suggestions"].append("Find unused subscriptions")
 
         self.log_action("chat", f"{category}: {message[:80]}")
         return response
@@ -83,21 +90,22 @@ Be warm, concise, and genuinely helpful. Reference household context when releva
         context: Dict,
         conversation_history: List
     ) -> str:
-        """Build full prompt with conversation history. Always uses Claude."""
+        """Builds rich prompt with memory and household context. Uses Claude."""
         history_text = ""
         if conversation_history:
             history_lines = []
-            for msg in conversation_history[-20:]:
+            for msg in conversation_history[-15:]:  # Keep last 15 messages for context
                 role = "User" if msg.get("role") == "user" else "Hearth"
                 history_lines.append(f"{role}: {msg.get('content', '')}")
             history_text = "\n".join(history_lines)
 
+        # Build household context
         context_parts = []
         if context.get("documents"):
-            context_parts.append(f"{len(context['documents'])} documents stored")
+            context_parts.append(f"{len(context['documents'])} documents in vault")
         if context.get("bills"):
             total = sum(b.get("amount", 0) for b in context["bills"])
-            context_parts.append(f"{len(context['bills'])} bills (${total:.2f}/month)")
+            context_parts.append(f"{len(context['bills'])} active bills (₦{total:,.0f}/month)")
         if context.get("tasks"):
             context_parts.append(f"{len(context['tasks'])} maintenance tasks")
         if context.get("inventory"):
@@ -105,64 +113,46 @@ Be warm, concise, and genuinely helpful. Reference household context when releva
 
         household_summary = ", ".join(context_parts) if context_parts else "No household data loaded yet"
 
-        category_context = ""
-        if category == "documents":
-            docs = context.get("documents", [])
-            if docs:
-                doc_list = ", ".join([d.get("title", "Unknown") for d in docs[:5]])
-                category_context = f"\nDocuments in vault: {doc_list}"
-        elif category == "bills":
-            bills = context.get("bills", [])
-            if bills:
-                bill_list = ", ".join([f"{b.get('provider','?')} ${b.get('amount',0)}" for b in bills[:5]])
-                category_context = f"\nActive bills: {bill_list}"
-        elif category == "maintenance":
-            tasks = context.get("tasks", [])
-            if tasks:
-                task_list = ", ".join([t.get("name", t.get("title", "?")) for t in tasks[:5]])
-                category_context = f"\nMaintenance tasks: {task_list}"
-
         prompt = f"""CONVERSATION HISTORY:
 {history_text if history_text else "This is the start of the conversation."}
 
-HOUSEHOLD OVERVIEW: {household_summary}{category_context}
+HOUSEHOLD OVERVIEW: {household_summary}
 
 CURRENT MESSAGE FROM USER: {message}
 
-Respond as Hearth Chief of Staff. Use the conversation history above to:
-1. Remember anything the user told you (names, preferences, situations)
-2. Reference relevant household data when helpful
-3. Give a warm, concise, genuinely useful response
-4. Never repeat information unnecessarily
-5. Build naturally on the conversation"""
+Respond as Hearth Chief of Staff. Follow these rules:
+1. Remember anything the user told you earlier (names, preferences, situations).
+2. Reference relevant household data when helpful.
+3. Give a warm, concise, and genuinely useful response.
+4. Never repeat information unnecessarily.
+5. Build naturally on the conversation."""
 
-        # HEAVY: Claude for conversation (always)
-        return self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=400)
+        return self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=500)
 
     async def _classify_intent(self, message: str) -> str:
-        """LIGHT: NVIDIA for fast intent classification."""
+        """LIGHT TASK: Use NVIDIA for fast classification"""
         try:
             if self.nvidia_client:
                 return self.nvidia_client.classify_intent(message)
         except Exception:
             pass
 
-        # Keyword fallback
+        # Fallback keyword classification
         msg = message.lower()
-        if any(w in msg for w in ["document", "passport", "insurance", "expire", "warranty", "certificate", "id card"]):
+        if any(w in msg for w in ["document", "passport", "insurance", "expire", "warranty"]):
             return "documents"
-        if any(w in msg for w in ["bill", "subscription", "payment", "netflix", "spotify", "electricity", "save money", "spending"]):
+        if any(w in msg for w in ["bill", "subscription", "payment", "rent"]):
             return "bills"
-        if any(w in msg for w in ["meal", "food", "grocery", "cook", "recipe", "shopping", "eat", "dinner", "lunch", "breakfast"]):
+        if any(w in msg for w in ["meal", "food", "grocery", "cook", "shopping"]):
             return "grocery"
-        if any(w in msg for w in ["fix", "repair", "broken", "maintenance", "service", "plumber", "ac", "generator", "leak", "noise"]):
+        if any(w in msg for w in ["fix", "repair", "maintenance", "broken"]):
             return "maintenance"
-        if any(w in msg for w in ["sick", "fever", "pain", "symptom", "medication", "health", "doctor", "hospital", "hurt", "ill"]):
+        if any(w in msg for w in ["sick", "health", "doctor", "medication"]):
             return "health"
         return "general"
 
     def get_dashboard_summary(self, household_data: Dict) -> Dict:
-        """Sync dashboard summary. Uses LIGHT model for greeting."""
+        """Generate dashboard summary. Uses LIGHT model for the greeting."""
         summary = {
             "documents": self._get_document_snapshot(household_data.get("documents", [])),
             "bills": self._get_bill_snapshot(household_data.get("bills", [])),
@@ -177,14 +167,15 @@ Respond as Hearth Chief of Staff. Use the conversation history above to:
         task_count = len(household_data.get("tasks", []))
 
         prompt = (
-            f"Write a one-sentence warm greeting for a household dashboard. "
+            f"Write a short, warm one-sentence greeting for a household dashboard. "
             f"Context: {doc_count} documents, {bill_count} bills, {task_count} tasks. "
-            f"Under 20 words. Upbeat and helpful."
+            f"Keep it under 20 words and upbeat."
         )
 
-        # LIGHT: NVIDIA for dashboard greeting (simple task)
+        # LIGHT TASK: Use NVIDIA for simple greeting
         summary["chief_message"] = self.ask_light(prompt, max_tokens=60)
         self.log_action("dashboard_summary", "generated")
+
         return summary
 
     def _get_document_snapshot(self, documents: List) -> Dict:

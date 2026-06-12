@@ -1,54 +1,54 @@
-import { create } from 'zustand'
-import { documentService } from '../services/api'
+import { create } from 'zustand';
+import api from '../services/api';
+
+interface Document {
+  id: string;
+  title: string;
+  document_type: string;
+  expiry_date?: string;
+  file_url?: string;
+  summary?: string;
+  key_fields?: Record<string, any>;
+}
 
 interface DocumentState {
-  documents: any[]
-  alerts: any[]
-  loading: boolean
-  fetchDocuments: () => Promise<void>
-  fetchAlerts: () => Promise<void>
-  uploadDocument: (asset: any, memberName?: string) => Promise<void>
-  askQuestion: (question: string) => Promise<string>
-  deleteDocument: (id: string) => Promise<void>
+  documents: Document[];
+  isLoading: boolean;
+  fetchDocuments: () => Promise<void>;
+  uploadDocument: (file: any, memberName?: string) => Promise<void>;
+  deleteDocument: (id: string) => Promise<void>;
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
   documents: [],
-  alerts: [],
-  loading: false,
+  isLoading: false,
 
   fetchDocuments: async () => {
-    set({ loading: true })
+    set({ isLoading: true });
     try {
-      const res = await documentService.list()
-      set({ documents: res.data })
-    } catch (err) {
-      console.error('fetchDocuments error:', err)
+      const res = await api.get('/api/documents/');
+      set({ documents: res.data });
+    } catch (error) {
+      console.error('Failed to fetch documents:', error);
     } finally {
-      set({ loading: false })
+      set({ isLoading: false });
     }
   },
 
-  fetchAlerts: async () => {
-    try {
-      const res = await documentService.getExpiring()
-      set({ alerts: res.data })
-    } catch (err) {
-      console.error('fetchAlerts error:', err)
-    }
-  },
+  uploadDocument: async (file, memberName) => {
+    const formData = new FormData();
+    formData.append('file', file as any);
+    if (memberName) formData.append('member_name', memberName);
 
-  uploadDocument: async (asset, memberName) => {
-    await documentService.upload(asset, memberName)
-  },
+    await api.post('/api/documents/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
 
-  askQuestion: async (question) => {
-    const res = await documentService.ask(question)
-    return res.data.answer
+    await get().fetchDocuments();
   },
 
   deleteDocument: async (id) => {
-    await documentService.delete(id)
-    set({ documents: get().documents.filter(d => d.id !== id) })
-  }
-}))
+    await api.delete(`/api/documents/${id}`);
+    await get().fetchDocuments();
+  },
+}));
