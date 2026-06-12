@@ -5,13 +5,14 @@ from app.agents.base_agent import BaseHouseholdAgent
 
 class MaintenanceAgent(BaseHouseholdAgent):
     """
-    Home Maintenance Agent
-    Uses Claude for diagnosis and planning, NVIDIA for light tasks.
+    Home Maintenance & Repair Agent
+    Handles maintenance scheduling, issue diagnosis, and DIY guidance.
     """
 
-    SYSTEM_PROMPT = """You are Hearth's Maintenance Agent.
-You help households with home repairs, maintenance scheduling, and DIY guidance.
-Be practical and safety-conscious."""
+    SYSTEM_PROMPT = """You are Hearth's Home Maintenance Agent.
+You help households stay on top of repairs, prevent problems, and provide safe DIY guidance.
+Always prioritize safety and recommend professional help when appropriate.
+Return valid JSON when generating plans or diagnoses."""
 
     def run(self, input_data: Any) -> Any:
         action = input_data.get("action")
@@ -25,21 +26,22 @@ Be practical and safety-conscious."""
             raise ValueError(f"Unknown action: {action}")
 
     def generate_maintenance_calendar(self, profile: Dict) -> List[Dict]:
-        """Generate maintenance schedule - uses Claude (heavy)"""
-        prompt = f"""Create a home maintenance calendar based on this property profile:
+        """Generate a yearly maintenance schedule."""
+        prompt = f"""Create a practical home maintenance calendar based on this property profile:
 
 {json.dumps(profile)}
 
 Return ONLY a JSON array of tasks:
 [{{
-  "name": "Task name",
-  "frequency": "monthly|quarterly|yearly",
-  "next_due_date": "YYYY-MM-DD",
+  "task": "Task name",
+  "frequency": "monthly|quarterly|bi-annually|annually",
+  "best_months": ["Month1", "Month2"],
   "diy_friendly": true/false,
-  "estimated_cost": number
+  "estimated_cost": number,
+  "priority": "high|medium|low"
 }}]"""
 
-        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
+        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=1200)
         try:
             clean = response.replace("```json", "").replace("```", "").strip()
             return json.loads(clean)
@@ -47,15 +49,19 @@ Return ONLY a JSON array of tasks:
             return []
 
     def diagnose_issue(self, problem: str) -> Dict:
-        """Diagnose a home problem - uses Claude (heavy)"""
-        prompt = f"""Diagnose this home maintenance issue: "{problem}"
+        """Diagnose a home maintenance problem."""
+        prompt = f"""Diagnose this home issue and provide guidance:
+
+Problem: "{problem}"
 
 Return ONLY valid JSON:
 {{
   "likely_causes": ["cause 1", "cause 2"],
-  "recommendation": "what to do",
-  "estimated_cost_range": "low to high",
-  "diy_possible": true/false
+  "urgency": "low|medium|high|emergency",
+  "recommended_action": "what to do first",
+  "diy_possible": true/false,
+  "estimated_repair_cost": "low|medium|high",
+  "safety_warning": "any safety note or null"
 }}"""
 
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
@@ -63,23 +69,41 @@ Return ONLY valid JSON:
             clean = response.replace("```json", "").replace("```", "").strip()
             return json.loads(clean)
         except:
-            return {"likely_causes": [], "recommendation": "Consult a professional", "estimated_cost_range": "", "diy_possible": False}
+            return {
+                "likely_causes": ["Unknown"],
+                "urgency": "medium",
+                "recommended_action": "Consult a professional",
+                "diy_possible": False,
+                "estimated_repair_cost": "medium",
+                "safety_warning": "Do not attempt if unsure"
+            }
 
     def get_diy_instructions(self, task: str) -> Dict:
-        """Get DIY instructions - uses Claude (heavy)"""
-        prompt = f"""Provide safe DIY instructions for: "{task}"
+        """Provide step-by-step DIY instructions."""
+        prompt = f"""Provide safe, clear DIY instructions for: "{task}"
 
 Return ONLY valid JSON:
 {{
-  "steps": ["step 1", "step 2"],
-  "tools_needed": ["tool 1"],
+  "difficulty": "easy|medium|hard",
+  "tools_needed": ["tool 1", "tool 2"],
+  "materials_needed": ["material 1"],
+  "steps": ["step 1", "step 2", "step 3"],
+  "time_estimate": "e.g. 30-60 minutes",
   "safety_tips": ["tip 1"],
-  "when_to_call_professional": "condition"
+  "when_to_call_professional": "condition when to stop and call help"
 }}"""
 
-        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
+        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=1000)
         try:
             clean = response.replace("```json", "").replace("```", "").strip()
             return json.loads(clean)
         except:
-            return {"steps": [], "tools_needed": [], "safety_tips": [], "when_to_call_professional": "If unsure, call a professional"}
+            return {
+                "difficulty": "medium",
+                "tools_needed": [],
+                "materials_needed": [],
+                "steps": ["Consult a professional for safety"],
+                "time_estimate": "Unknown",
+                "safety_tips": ["Always prioritize safety"],
+                "when_to_call_professional": "If you're unsure at any point"
+            }

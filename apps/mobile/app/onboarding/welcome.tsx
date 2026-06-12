@@ -1,121 +1,42 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native'
-import { router } from 'expo-router'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { COLORS, TYPOGRAPHY, SPACING } from '../../src/utils/theme'
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import { router } from 'expo-router';
 
 export default function WelcomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.logo}>🏠</Text>
-          <Text style={styles.title}>Hearth</Text>
-          <Text style={styles.subtitle}>Your household's AI chief of staff</Text>
-        </View>
+        <Text style={styles.title}>Welcome to Hearth</Text>
+        <Text style={styles.subtitle}>
+          Your intelligent household assistant.{"\n"}
+          We’ll help you stay organized, save money, and never miss important things again.
+        </Text>
 
         <View style={styles.features}>
-          <FeatureItem icon="📄" text="Document Vault with expiry alerts" />
-          <FeatureItem icon="💰" text="Bill & subscription intelligence" />
-          <FeatureItem icon="🥑" text="Meal planning & grocery lists" />
-          <FeatureItem icon="🔧" text="Home maintenance reminders" />
-          <FeatureItem icon="🏥" text="Family health triage" />
+          <Text style={styles.feature}>• Track important documents & expiries</Text>
+          <Text style={styles.feature}>• Manage bills and subscriptions</Text>
+          <Text style={styles.feature}>• Get smart meal plans & grocery lists</Text>
+          <Text style={styles.feature}>• Never forget home maintenance</Text>
         </View>
       </View>
 
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => router.push('/onboarding/create-household')}
-        >
-          <Text style={styles.buttonText}>Get Started</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.skipButton}
-          onPress={() => router.replace('/(tabs)/dashboard')}
-        >
-          <Text style={styles.skipButtonText}>Skip for now</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity 
+        style={styles.button} 
+        onPress={() => router.push('/onboarding/create-household')}
+      >
+        <Text style={styles.buttonText}>Get Started</Text>
+      </TouchableOpacity>
     </SafeAreaView>
-  )
-}
-
-function FeatureItem({ icon, text }: { icon: string; text: string }) {
-  return (
-    <View style={styles.featureItem}>
-      <Text style={styles.featureIcon}>{icon}</Text>
-      <Text style={styles.featureText}>{text}</Text>
-    </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: SPACING.lg,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: SPACING.xl,
-  },
-  logo: {
-    fontSize: 64,
-    marginBottom: SPACING.sm,
-  },
-  title: {
-    ...TYPOGRAPHY.heading1,
-    color: COLORS.primary,
-    marginBottom: SPACING.xs,
-  },
-  subtitle: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.muted,
-    textAlign: 'center',
-  },
-  features: {
-    marginTop: SPACING.lg,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  featureIcon: {
-    fontSize: 24,
-    marginRight: SPACING.md,
-    width: 32,
-  },
-  featureText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.text,
-  },
-  footer: {
-    padding: SPACING.lg,
-    paddingBottom: SPACING.xl,
-  },
-  button: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: SPACING.md,
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  buttonText: {
-    ...TYPOGRAPHY.body,
-    color: '#fff',
-    fontWeight: '600',
-  },
-  skipButton: {
-    paddingVertical: SPACING.sm,
-    alignItems: 'center',
-  },
-  skipButtonText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: COLORS.muted,
-  },
-})
+  container: { flex: 1, backgroundColor: '#0A1628', padding: 24 },
+  content: { flex: 1, justifyContent: 'center' },
+  title: { fontSize: 32, fontWeight: '700', color: '#F8FAFF', textAlign: 'center', marginBottom: 16 },
+  subtitle: { fontSize: 16, color: '#8899AA', textAlign: 'center', lineHeight: 24, marginBottom: 40 },
+  features: { marginBottom: 40 },
+  feature: { fontSize: 15, color: '#B8D4E8', marginBottom: 8 },
+  button: { backgroundColor: '#C77DFF', paddingVertical: 18, borderRadius: 12, alignItems: 'center' },
+  buttonText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+});

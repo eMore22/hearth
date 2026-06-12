@@ -5,13 +5,12 @@ from app.agents.base_agent import BaseHouseholdAgent
 
 class GroceryAgent(BaseHouseholdAgent):
     """
-    Grocery & Meal Planning Agent
-    Uses Claude for heavy tasks (meal planning, shopping lists) and NVIDIA for light tasks.
+    Grocery, Meal Planning & Food Waste Agent
     """
 
-    SYSTEM_PROMPT = """You are Hearth's Grocery Agent.
-You help households with meal planning, grocery lists, and reducing food waste.
-Be practical, helpful, and concise."""
+    SYSTEM_PROMPT = """You are Hearth's Grocery & Meal Planning Agent.
+You help households reduce food waste, plan meals efficiently, and save money on groceries.
+Be practical and realistic with your suggestions."""
 
     def run(self, input_data: Any) -> Any:
         action = input_data.get("action")
@@ -25,22 +24,23 @@ Be practical, helpful, and concise."""
             raise ValueError(f"Unknown action: {action}")
 
     def generate_meal_plan(self, preferences: Dict) -> Dict:
-        """Generate weekly meal plan - uses Claude (heavy)"""
-        prompt = f"""Create a 7-day meal plan based on these preferences:
+        """Generate a 7-day meal plan."""
+        prompt = f"""Create a realistic 7-day meal plan based on these preferences:
 
 {json.dumps(preferences)}
 
-Return ONLY valid JSON:
+Return ONLY valid JSON with this structure:
 {{
   "week_of": "YYYY-MM-DD",
   "days": [
     {{
       "day": "Monday",
-      "breakfast": {{"name": "Meal name", "ingredients": ["item1", "item2"]}},
-      "lunch": {{"name": "Meal name", "ingredients": ["item1", "item2"]}},
-      "dinner": {{"name": "Meal name", "ingredients": ["item1", "item2"]}}
+      "breakfast": {{"name": "", "ingredients": []}},
+      "lunch": {{"name": "", "ingredients": []}},
+      "dinner": {{"name": "", "ingredients": []}}
     }}
-  ]
+  ],
+  "estimated_weekly_cost": number
 }}"""
 
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=1500)
@@ -48,23 +48,24 @@ Return ONLY valid JSON:
             clean = response.replace("```json", "").replace("```", "").strip()
             return json.loads(clean)
         except:
-            return {"week_of": "", "days": []}
+            return {"week_of": "", "days": [], "estimated_weekly_cost": 0}
 
     def create_shopping_list(self, meal_plan: Dict) -> Dict:
-        """Create shopping list from meal plan - uses Claude (heavy)"""
-        prompt = f"""Create a consolidated shopping list from this meal plan:
+        """Create a consolidated shopping list from a meal plan."""
+        prompt = f"""Create a smart shopping list from this meal plan:
 
 {json.dumps(meal_plan)}
 
 Return ONLY valid JSON:
 {{
   "categories": {{
-    "Produce": ["item1", "item2"],
-    "Dairy": ["item1"],
-    "Meat": ["item1"],
-    "Pantry": ["item1"]
+    "Produce": [],
+    "Dairy & Eggs": [],
+    "Meat & Fish": [],
+    "Pantry": [],
+    "Other": []
   }},
-  "total_items": number,
+  "total_estimated_items": number,
   "estimated_cost": number
 }}"""
 
@@ -73,22 +74,23 @@ Return ONLY valid JSON:
             clean = response.replace("```json", "").replace("```", "").strip()
             return json.loads(clean)
         except:
-            return {"categories": {}, "total_items": 0, "estimated_cost": 0}
+            return {"categories": {}, "total_estimated_items": 0, "estimated_cost": 0}
 
     def check_waste_alerts(self, inventory: List[Dict]) -> List[Dict]:
-        """Check for items about to expire - uses Claude (heavy)"""
+        """Check inventory for items about to expire."""
         if not inventory:
             return []
 
-        prompt = f"""Analyze this grocery inventory and flag items that are about to expire or should be used soon:
+        prompt = f"""Analyze this grocery inventory and flag items at risk of going to waste:
 
 Inventory: {json.dumps(inventory)}
 
 Return ONLY a JSON array:
 [{{
-  "item": "item name",
+  "item": "",
   "days_left": number,
-  "suggested_recipe": {{"recipe_name": "name", "reason": "why"}}
+  "priority": "high|medium|low",
+  "suggested_action": "cook today|freeze|use in recipe"
 }}]"""
 
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)

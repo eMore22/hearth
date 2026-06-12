@@ -1,86 +1,95 @@
-import { useState } from 'react'
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TextInput,
-  StyleSheet,
   TouchableOpacity,
+  StyleSheet,
   ActivityIndicator,
   Alert,
-} from 'react-native'
-import { router } from 'expo-router'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { householdService } from '../../src/services/api'
-import { useAuthStore } from '../../src/stores/authStore'
-import { COLORS, TYPOGRAPHY, SPACING } from '../../src/utils/theme'
+  SafeAreaView,
+} from 'react-native';
+import { router } from 'expo-router';
+import api from '../../src/services/api';
+import { useHouseholdStore } from '../../src/stores/householdStore';
 
 export default function CreateHouseholdScreen() {
-  const [householdName, setHouseholdName] = useState('')
-  const [country, setCountry] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const { user } = useAuthStore()
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const [country, setCountry] = useState('Nigeria');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const { fetchHousehold } = useHouseholdStore();
 
   const handleCreate = async () => {
-    if (!householdName.trim()) {
-      Alert.alert('Missing Info', 'Please enter a household name')
-      return
+    if (!name.trim()) {
+      Alert.alert('Error', 'Household name is required');
+      return;
     }
 
-    setIsLoading(true)
+    setIsLoading(true);
+
     try {
-      await householdService.create(householdName.trim(), country.trim() || undefined)
-      router.push('/onboarding/add-members')
+      await api.post('/api/household/', {
+        name: name.trim(),
+        address: address.trim() || null,
+        country: country.trim(),
+      });
+
+      await fetchHousehold();
+      router.push('/onboarding/add-members');
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to create household')
+      const message = error.response?.data?.detail || 'Failed to create household';
+      Alert.alert('Error', message);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.stepIndicator}>Step 1 of 3</Text>
-        <Text style={styles.title}>Create your household</Text>
+        <Text style={styles.step}>Step 1 of 3</Text>
+        <Text style={styles.title}>Create Your Household</Text>
         <Text style={styles.description}>
-          Give your household a name. This is where all your family's information will live.
+          This is the central place for all your family’s information.
         </Text>
       </View>
 
       <View style={styles.form}>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Household name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g., The Smith Family"
-            value={householdName}
-            onChangeText={setHouseholdName}
-            autoCapitalize="words"
-            autoFocus
-          />
-        </View>
+        <Text style={styles.label}>Household Name *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. The Uguomore Family"
+          value={name}
+          onChangeText={setName}
+          placeholderTextColor="#8899AA"
+        />
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Country (optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g., United States"
-            value={country}
-            onChangeText={setCountry}
-            autoCapitalize="words"
-          />
-        </View>
+        <Text style={styles.label}>Address (Optional)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Street address"
+          value={address}
+          onChangeText={setAddress}
+          placeholderTextColor="#8899AA"
+        />
 
-        <Text style={styles.hint}>
-          {user?.email ? `You'll be the owner: ${user.email}` : ''}
-        </Text>
+        <Text style={styles.label}>Country</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Nigeria"
+          value={country}
+          onChangeText={setCountry}
+          placeholderTextColor="#8899AA"
+        />
       </View>
 
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.button, (!householdName.trim() || isLoading) && styles.buttonDisabled]}
+          style={[styles.button, (!name.trim() || isLoading) && styles.buttonDisabled]}
           onPress={handleCreate}
-          disabled={!householdName.trim() || isLoading}
+          disabled={!name.trim() || isLoading}
         >
           {isLoading ? (
             <ActivityIndicator color="#fff" />
@@ -90,77 +99,33 @@ export default function CreateHouseholdScreen() {
         </TouchableOpacity>
       </View>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl,
-  },
-  stepIndicator: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.muted,
-    marginBottom: SPACING.sm,
-  },
-  title: {
-    ...TYPOGRAPHY.heading2,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  description: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.muted,
-    marginBottom: SPACING.lg,
-  },
-  form: {
-    flex: 1,
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.lg,
-  },
-  inputGroup: {
-    marginBottom: SPACING.lg,
-  },
-  label: {
-    ...TYPOGRAPHY.bodySmall,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
+  container: { flex: 1, backgroundColor: '#0A1628', padding: 24 },
+  header: { marginBottom: 32 },
+  step: { color: '#8899AA', fontSize: 14, marginBottom: 8 },
+  title: { fontSize: 26, fontWeight: '700', color: '#F8FAFF', marginBottom: 8 },
+  description: { fontSize: 15, color: '#8899AA', lineHeight: 22 },
+  form: { flex: 1 },
+  label: { color: '#F8FAFF', fontSize: 14, fontWeight: '600', marginBottom: 8, marginTop: 16 },
   input: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    ...TYPOGRAPHY.body,
-  },
-  hint: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.muted,
-    marginTop: SPACING.sm,
-  },
-  footer: {
-    padding: SPACING.lg,
-    paddingBottom: SPACING.xl,
-  },
-  button: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#162035',
     borderRadius: 12,
-    paddingVertical: SPACING.md,
+    padding: 16,
+    color: '#F8FAFF',
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#2A3F5F',
+  },
+  footer: { paddingBottom: 40 },
+  button: {
+    backgroundColor: '#C77DFF',
+    paddingVertical: 18,
+    borderRadius: 12,
     alignItems: 'center',
   },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    ...TYPOGRAPHY.body,
-    color: '#fff',
-    fontWeight: '600',
-  },
-})
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+});
