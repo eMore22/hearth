@@ -2,30 +2,28 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '../src/stores/authStore';
-import { useHouseholdStore } from '../src/stores/householdStore';
 
 export default function RootLayout() {
-  const { session, isLoading: authLoading } = useAuthStore();
-  const { household, isLoading: householdLoading } = useHouseholdStore();
+  const { session, isLoading } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
 
-  const isAuthGroup = segments[0] === '(auth)';
+  const inAuthGroup = segments[0] === '(auth)';
 
   useEffect(() => {
-    if (authLoading || householdLoading) return;
+    if (isLoading) return;
 
-    if (!session && !isAuthGroup) {
+    if (!session && !inAuthGroup) {
       router.replace('/(auth)/login');
-    } else if (session && isAuthGroup) {
+    } else if (session && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [session, authLoading, householdLoading, isAuthGroup]);
+  }, [session, isLoading, inAuthGroup]);
 
-  if (authLoading || householdLoading) {
+  if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0A1628' }}>
+        <ActivityIndicator size="large" color="#C77DFF" />
       </View>
     );
   }
