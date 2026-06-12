@@ -1,6 +1,15 @@
 import { create } from 'zustand';
-import { supabase } from '../../lib/supabase';
-import { Session, User } from '@supabase/supabase-js';
+import api from '../services/api';
+
+interface User {
+  id: string;
+  email: string;
+}
+
+interface Session {
+  access_token: string;
+  user: User;
+}
 
 interface AuthState {
   session: Session | null;
@@ -8,7 +17,7 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
 
-  initialize: () => void;
+  initialize: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -22,31 +31,40 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   error: null,
 
-  initialize: () => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      set({
-        session,
-        user: session?.user ?? null,
-        isLoading: false,
-      });
-    });
-
-    supabase.auth.onAuthStateChange((_event, session) => {
-      set({
-        session,
-        user: session?.user ?? null,
-      });
-    });
+  initialize: async () => {
+    set({ isLoading: true });
+    try {
+      // Try to refresh session on app start
+      const response = await api.post('/api/auth/refresh');
+      if (response.data?.session) {
+        set({
+          session: response.data.session,
+          user: response.data.user || response.data.session.user,
+        });
+      }
+    } catch (error) {
+      // No valid session, user needs to login
+      set({ session: null, user: null });
+    } finally {
+      set({ isLoading: false });
+    }
   },
 
   signIn: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    } catch (err: any) {
-      set({ error: err.message });
-      throw err;
+      const response = await api.post('/api/auth/signin', { email, password });
+      
+      if (response.data?.session) {
+        set({
+          session: response.data.session,
+          user: response.data.user || response.data.session.user,
+        });
+      }
+    } catch (error: any) {
+      const message = error.response?.data?.detail || 'Login failed';
+      set({ error: message });
+      throw error;
     } finally {
       set({ isLoading: false });
     }
@@ -55,11 +73,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signUp: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const { error } = await supabase.auth.signUp({ email, password });
-      if (error) throw error;
-    } catch (err: any) {
-      set({ error: err.message });
-      throw err;
+      const response = await api.post('/api/auth/signup', { email, password });
+      
+      if (response.data?.session) {
+        set({
+          session: response.data.session,
+          user: response.data.user || response.data.session.user,
+        });
+      }
+    } catch (error: any) {
+      const message = error.response?.data?.detail || 'Signup failed';
+      set({ error: message });
+      throw error;
     } finally {
       set({ isLoading: false });
     }
@@ -68,21 +93,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     set({ isLoading: true });
     try {
-      await supabase.auth.signOut();
-      set({ session: null, user: null });
+      await api.post('/api/auth/signout');
+    } catch (error) {
+      console.warn('Signout request failed, clearing local session anyway');
     } finally {
-      set({ isLoading: false });
+      set({ session: null, user: null, isLoading: false });
     }
   },
 
   refreshSession: async () => {
     try {
-      const { data, error } = await supabase.auth.refreshSession();
-      if (error) throw error;
-      set({ session: data.session });
-    } catch (err) {
-      console.error('Session refresh failed:', err);
-      throw err;
+      const response = await api.post('/api/auth/refresh');
+      if (response.data?.session) {
+        set({
+          session: response.data.session,
+          user: response.data.user || response.data.session.user,
+        });
+      }
+    } catch (error) {
+      set({ session: null, user: null });
+      throw error;
     }
   },
 
