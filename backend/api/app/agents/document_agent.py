@@ -1,16 +1,13 @@
-import boto3
 import json
 from datetime import datetime, date
 from typing import Any, Dict, Optional
 from app.agents.base_agent import BaseHouseholdAgent
-from app.config import settings
 
 
 class DocumentAgent(BaseHouseholdAgent):
     """
     Module 1: Document Vault & Expiry Agent
-    Uses Claude (heavy) for extraction and Q&A.
-    Improved OCR pipeline with better fallback.
+    Uses Claude Vision directly for document extraction — no OCR pipeline needed.
     """
 
     SYSTEM_PROMPT = """You are Hearth's Document Agent.
@@ -32,63 +29,69 @@ Be precise, helpful, and concise."""
 
     def extract_document(self, image_bytes: bytes) -> Dict:
         """
-        Extract structured info from a document image.
-        Improved pipeline: NVIDIA OCR → AWS Textract → Safe fallback
+        Extract structured info from a document using Claude Vision directly.
+        No OCR needed — Claude reads the image and returns structured JSON.
         """
-        raw_text = ""
+        import base64
 
-        # Step 1: Try NVIDIA OCR (if available)
-        try:
-            from app.services.ocr_service import perform_ocr
-            raw_text = perform_ocr(image_bytes) or ""
-            if raw_text:
-                print("✅ NVIDIA OCR succeeded")
-        except Exception as e:
-            print(f"⚠️ NVIDIA OCR failed: {e}")
+        img_b64 = base64.b64encode(image_bytes).decode()
 
-        # Step 2: If NVIDIA OCR failed or gave nothing → Try AWS Textract
-        if not raw_text or len(raw_text.strip()) < 15:
-            print("🔄 Falling back to AWS Textract...")
-            raw_text = self._run_textract(image_bytes)
-
-        # Step 3: If we still have nothing useful → Return safe fallback
-        if not raw_text or raw_text.startswith("[OCR failed") or len(raw_text.strip()) < 15:
-            print("⚠️ All OCR methods failed — returning safe fallback")
-            return self._safe_fallback("Could not extract readable text from document")
-
-        # Step 4: Use Claude to extract structured data (Heavy task)
-        prompt = f"""Extract structured information from this document text.
-
-Document text:
-{raw_text[:3500]}
-
+        prompt = """Extract structured information from this document image.
 Return ONLY valid JSON with this exact structure:
-{{
+{
   "document_type": "passport|insurance|warranty|lease|medical|vehicle_registration|other",
   "title": "short human-readable title",
-  "issuer": "who issued this document",
-  "holder_name": "name on the document if present",
+  "issuer": "who issued this document or null",
+  "holder_name": "name on the document or null",
   "issue_date": "YYYY-MM-DD or null",
   "expiry_date": "YYYY-MM-DD or null",
-  "document_number": "policy/passport/reference number if present",
-  "key_fields": {{"field_name": "value"}},
+  "document_number": "policy/passport/reference number or null",
+  "key_fields": {"field_name": "value"},
   "summary": "one sentence plain English summary of what this document is"
-}}"""
-
-        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=1024)
+}"""
 
         try:
-            clean = response.replace("```json", "").replace("```", "").strip()
-            extracted = json.loads(clean)
-        except Exception as e:
-            print(f"⚠️ JSON parse failed: {e} — using fallback")
-            extracted = self._safe_fallback(raw_text[:200])
+            # Claude Vision — direct image understanding (Heavy task)
+            response = self.client.messages.create(
+                model="claude-opus-4-5",
+                max_tokens=1024,
+                system=self.SYSTEM_PROMPT,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": img_b64,
+                                },
+                            },
+                            {"type": "text", "text": prompt},
+                        ],
+                    }
+                ],
+            )
 
-        self.log_action("extract_document", extracted.get("document_type", "unknown"))
-        return extracted
+            raw_response = response.content[0].text
+            print(f"✅ Claude Vision response: {raw_response[:200]}")
+
+            clean = raw_response.replace("```json", "").replace("```", "").strip()
+            extracted = json.loads(clean)
+            self.log_action("extract_document_vision", extracted.get("document_type", "unknown"))
+            return extracted
+
+        except json.JSONDecodeError as e:
+            print(f"⚠️ JSON parse failed: {e} — using safe fallback")
+            return self._safe_fallback("Claude Vision returned unstructured response")
+
+        except Exception as e:
+            print(f"⚠️ Claude Vision extraction failed: {e}")
+            return self._safe_fallback("Claude Vision failed to extract document")
 
     def answer_question(self, question: str, documents: list) -> str:
-        """Q&A over stored documents. HEAVY — needs Claude for accuracy."""
+        """Q&A over stored documents. Uses Claude for accuracy."""
         if not documents:
             return "You haven't added any documents to your vault yet. Add a document first and I can answer questions about it."
 
@@ -164,70 +167,10 @@ If the answer isn't in their documents, say so clearly."""
         else:
             return f"📅 Your {title} expires in {days} days. Plan ahead."
 
-    def _run_textract(self, image_bytes: bytes) -> str:
-        """AWS Textract fallback OCR."""
-        try:
-            textract = boto3.client(
-                "textract",
-                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-                region_name=settings.AWS_REGION
-            )
-            response = textract.detect_document_text(
-                Document={"Bytes": image_bytes}
-            )
-            lines = [
-                block["Text"]
-                for block in response.get("Blocks", [])
-                if block["BlockType"] == "LINE"
-            ]
-            return "\n".join(lines)
-        except Exception as e:
-            return f"[OCR failed: {str(e)}]"
-
-    def _extract_with_vision(self, image_bytes: bytes) -> Dict:
-        """NVIDIA vision model — direct image understanding."""
-        try:
-            import base64
-            from app.services.nvidia_client import get_nvidia_client
-            client = get_nvidia_client()
-            if not client:
-                return {}
-
-            img_b64 = base64.b64encode(image_bytes).decode()
-            prompt = """Extract structured information from this document image.
-Return ONLY valid JSON:
-{
-  "document_type": "passport|insurance|warranty|lease|medical|vehicle_registration|other",
-  "title": "short title",
-  "issuer": "issuer name or null",
-  "holder_name": "name on document or null",
-  "issue_date": "YYYY-MM-DD or null",
-  "expiry_date": "YYYY-MM-DD or null",
-  "document_number": "reference number or null",
-  "key_fields": {},
-  "summary": "one sentence summary"
-}"""
-            response = client.complete(
-                task="vision",
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
-                    ]
-                }],
-                max_tokens=1024
-            )
-            clean = response.replace("```json", "").replace("```", "").strip()
-            return json.loads(clean)
-        except Exception as e:
-            print(f"⚠️ Vision extraction error: {e}")
-            return {}
-
-    def _safe_fallback(self, raw_text: str = "") -> Dict:
+    def _safe_fallback(self, reason: str = "") -> Dict:
         """
         Always returns a valid dict that can be inserted into the DB.
+        Prevents 400 errors when extraction fails.
         """
         return {
             "document_type": "other",
@@ -238,5 +181,5 @@ Return ONLY valid JSON:
             "expiry_date": None,
             "document_number": None,
             "key_fields": {},
-            "summary": raw_text[:200] if raw_text else "Document uploaded — text extraction failed. You can rename this document."
+            "summary": f"Document uploaded. {reason}. You can rename this document in the vault."
         }
