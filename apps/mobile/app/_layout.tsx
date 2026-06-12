@@ -5,42 +5,34 @@ import { useAuthStore } from '../src/stores/authStore';
 import { useHouseholdStore } from '../src/stores/householdStore';
 
 export default function RootLayout() {
-  const { session, isLoading: authLoading } = useAuthStore();
-  const { household, isLoading: householdLoading, fetchHousehold } = useHouseholdStore();
+  const { session, loading: authLoading } = useAuthStore();
+  const { household, loading: householdLoading, fetchHousehold } = useHouseholdStore();
   const segments = useSegments();
   const router = useRouter();
 
   const inAuthGroup = segments[0] === '(auth)';
   const inOnboardingGroup = segments[0] === 'onboarding';
 
-  // Fetch household when user logs in
   useEffect(() => {
     if (session && !household && !householdLoading) {
       fetchHousehold();
     }
   }, [session]);
 
-  // Handle navigation logic
   useEffect(() => {
     if (authLoading || householdLoading) return;
 
-    // Not logged in → go to login
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/login');
-    }
-
-    // Logged in but no household → go to onboarding
+    } 
     else if (session && !household && !inOnboardingGroup && !inAuthGroup) {
       router.replace('/onboarding/welcome');
-    }
-
-    // Logged in with household but in auth/onboarding → go to tabs
+    } 
     else if (session && household && (inAuthGroup || inOnboardingGroup)) {
       router.replace('/(tabs)');
     }
-  }, [session, household, authLoading, householdLoading, inAuthGroup, inOnboardingGroup]);
+  }, [session, household, authLoading, householdLoading]);
 
-  // Show loading screen
   if (authLoading || householdLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0A1628' }}>

@@ -1,118 +1,85 @@
 import { create } from 'zustand';
-import api from '../services/api';
-
-interface User {
-  id: string;
-  email: string;
-}
-
-interface Session {
-  access_token: string;
-  user: User;
-}
+import * as SecureStore from 'expo-secure-store';
+import { authService } from '../services/api';
 
 interface AuthState {
-  session: Session | null;
-  user: User | null;
-  isLoading: boolean;
+  session: string | null;
+  user: any | null;
+  loading: boolean;
   error: string | null;
 
-  initialize: () => Promise<void>;
+  loadSession: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName?: string) => Promise<void>;
   signOut: () => Promise<void>;
-  refreshSession: () => Promise<void>;
   clearError: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   session: null,
   user: null,
-  isLoading: true,
+  loading: true,
   error: null,
 
-  initialize: async () => {
-    set({ isLoading: true });
+  loadSession: async () => {
     try {
-      // Try to refresh session on app start
-      const response = await api.post('/api/auth/refresh');
-      if (response.data?.session) {
+      const token = await SecureStore.getItemAsync('access_token');
+      const userStr = await SecureStore.getItemAsync('user');
+
+      if (token && userStr) {
         set({
-          session: response.data.session,
-          user: response.data.user || response.data.session.user,
+          session: token,
+          user: JSON.parse(userStr),
+          loading: false,
         });
+      } else {
+        set({ loading: false });
       }
-    } catch (error) {
-      // No valid session, user needs to login
-      set({ session: null, user: null });
-    } finally {
-      set({ isLoading: false });
+    } catch (err) {
+      set({ loading: false });
     }
   },
 
   signIn: async (email, password) => {
-    set({ isLoading: true, error: null });
+    set({ loading: true, error: null });
     try {
-      const response = await api.post('/api/auth/signin', { email, password });
-      
-      if (response.data?.session) {
-        set({
-          session: response.data.session,
-          user: response.data.user || response.data.session.user,
-        });
-      }
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Login failed';
+      const res = await authService.signIn(email, password);
+      const { access_token, user } = res.data;
+
+      await SecureStore.setItemAsync('access_token', access_token);
+      await SecureStore.setItemAsync('user', JSON.stringify(user));
+
+      set({ session: access_token, user });
+    } catch (err: any) {
+      const message = err.response?.data?.detail || 'Login failed';
       set({ error: message });
-      throw error;
+      throw err;
     } finally {
-      set({ isLoading: false });
+      set({ loading: false });
     }
   },
 
-  signUp: async (email, password) => {
-    set({ isLoading: true, error: null });
+  signUp: async (email, password, fullName) => {
+    set({ loading: true, error: null });
     try {
-      const response = await api.post('/api/auth/signup', { email, password });
-      
-      if (response.data?.session) {
-        set({
-          session: response.data.session,
-          user: response.data.user || response.data.session.user,
-        });
-      }
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Signup failed';
+      await authService.signUp(email, password, fullName);
+    } catch (err: any) {
+      const message = err.response?.data?.detail || 'Signup failed';
       set({ error: message });
-      throw error;
+      throw err;
     } finally {
-      set({ isLoading: false });
+      set({ loading: false });
     }
   },
 
   signOut: async () => {
-    set({ isLoading: true });
+    set({ loading: true });
     try {
-      await api.post('/api/auth/signout');
-    } catch (error) {
-      console.warn('Signout request failed, clearing local session anyway');
-    } finally {
-      set({ session: null, user: null, isLoading: false });
-    }
-  },
-
-  refreshSession: async () => {
-    try {
-      const response = await api.post('/api/auth/refresh');
-      if (response.data?.session) {
-        set({
-          session: response.data.session,
-          user: response.data.user || response.data.session.user,
-        });
-      }
-    } catch (error) {
+      await SecureStore.deleteItemAsync('access_token');
+      await SecureStore.deleteItemAsync('user');
       set({ session: null, user: null });
-      throw error;
+    } finally {
+      set({ loading: false });
     }
   },
 
