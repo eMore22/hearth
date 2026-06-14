@@ -40,16 +40,27 @@ export const useChiefOfStaffStore = create<ChiefOfStaffState>((set, get) => ({
   error: null,
 
   sendMessage: async (message, context = {}) => {
+    const currentMessages = get().messages;
+
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
     };
-    set({ messages: [...get().messages, userMessage], isTyping: true, error: null });
+
+    set({ messages: [...currentMessages, userMessage], isTyping: true, error: null });
 
     try {
-      const response = await chiefService.chat(message, context);
+      // Build conversation history from all previous messages
+      // This is what gives the Chief of Staff real memory
+      const conversationHistory = currentMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+
+      const response = await chiefService.chat(message, conversationHistory, context);
+
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -58,10 +69,12 @@ export const useChiefOfStaffStore = create<ChiefOfStaffState>((set, get) => ({
         category: response.data.category,
         proactive_suggestions: response.data.proactive_suggestions,
       };
+
       set({
         messages: [...get().messages, assistantMessage],
         isTyping: false,
       });
+
       return assistantMessage;
     } catch (error: any) {
       set({ error: error.message, isTyping: false });

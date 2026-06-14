@@ -55,7 +55,7 @@
     ],
     "scheme": "hearth",
     "extra": {
-      "router": { "origin": false },
+      "router": { "origin": "" },
       "eas": { "projectId": "your-eas-project-id" }
     }
   }

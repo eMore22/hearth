@@ -13,7 +13,7 @@ const MUTED = '#8899AA'
 const SUCCESS = '#06D6A0'
 
 export default function BillsScreen() {
-  const { bills, monthlyReport, unusedSubscriptions, isLoading, fetchBills, fetchMonthlyReport, detectUnused, generateNegotiationScript } = useBillStore()
+  const { bills = [], monthlyReport, unusedSubscriptions = [], isLoading, fetchBills, fetchMonthlyReport, detectUnused, generateNegotiationScript } = useBillStore()
   const [showUnused, setShowUnused] = useState(false)
   const [detectLoading, setDetectLoading] = useState(false)
 

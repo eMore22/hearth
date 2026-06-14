@@ -43,7 +43,7 @@ export default function DashboardScreen() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
-  const loading = false; // individual stores manage loading
+  const loading = false;
 
   useEffect(() => {
     loadAll();
@@ -85,9 +85,14 @@ export default function DashboardScreen() {
                 <Text style={styles.greeting}>{greeting()},</Text>
                 <Text style={styles.userName}>{firstName} 👋</Text>
               </View>
-              <TouchableOpacity onPress={signOut} style={styles.signOutBtn}>
-                <Ionicons name="log-out-outline" size={20} color={COLORS.muted} />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity onPress={() => router.push('/profile')} style={styles.profileBtn}>
+                  <Ionicons name="person-circle-outline" size={28} color={COLORS.muted} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={signOut} style={styles.signOutBtn}>
+                  <Ionicons name="log-out-outline" size={20} color={COLORS.muted} />
+                </TouchableOpacity>
+              </View>
             </View>
             {!!dashboardSummary?.chief_message && (
               <View style={styles.chiefMsg}>
@@ -215,6 +220,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   greeting: { fontSize: 14, color: COLORS.muted, letterSpacing: 0.5 },
   userName: { fontSize: 28, fontWeight: '700', color: COLORS.white, marginTop: 2 },
+  profileBtn: { padding: 4 },
   signOutBtn: { padding: 8, backgroundColor: COLORS.surface, borderRadius: 10 },
   chiefMsg: {
     flexDirection: 'row', alignItems: 'flex-start', backgroundColor: 'rgba(79,195,247,0.08)',

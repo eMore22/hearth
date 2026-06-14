@@ -3,7 +3,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useKeepAwake } from 'expo-keep-awake';
 
 export default function TabLayout() {
-  // Keep the screen awake (prevents the "Unable to activate keep awake" error)
   useKeepAwake();
 
   return (
@@ -15,11 +14,12 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: '#0A1628',
           borderTopColor: '#162035',
+          borderTopWidth: 1,
         },
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="dashboard"
         options={{
           title: 'Home',
           tabBarIcon: ({ color, size }) => (
@@ -50,7 +50,7 @@ export default function TabLayout() {
         options={{
           title: 'Grocery',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cart-outline" size={size} color={color} />
+            <Ionicons name="basket-outline" size={size} color={color} />
           ),
         }}
       />

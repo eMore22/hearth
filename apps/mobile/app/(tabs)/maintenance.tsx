@@ -15,7 +15,7 @@ const SUCCESS = '#06D6A0'
 const DEFAULT_PROFILE = { property_type: 'house', appliances: ['furnace', 'water heater'], climate: 'temperate' }
 
 export default function MaintenanceScreen() {
-  const { tasks, isLoading, generateCalendar, diagnoseProblem, getDIYInstructions, fetchTasks, completeTask } = useMaintenanceStore()
+  const { tasks = [], isLoading, generateCalendar, diagnoseProblem, getDIYInstructions, fetchTasks, completeTask } = useMaintenanceStore()
   const [problemDesc, setProblemDesc] = useState('')
   const [diagnosis, setDiagnosis] = useState<any>(null)
   const [diagnosing, setDiagnosing] = useState(false)

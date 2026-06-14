@@ -1,4 +1,3 @@
-import boto3
 import json
 from datetime import datetime, date
 from typing import Any, Dict, Optional
@@ -82,23 +81,58 @@ Question: {question}"""
         return self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
 
     def check_expiries(self, documents: list) -> list:
+        """
+        Check all documents for upcoming expiries.
+        Returns list of alerts with urgency levels.
+        Called by the documents router.
+        """
         today = date.today()
         alerts = []
+
         for doc in documents:
-            if not doc.get("expiry_date"):
+            expiry_str = doc.get("expiry_date")
+            if not expiry_str:
                 continue
+
             try:
-                expiry = datetime.strptime(doc["expiry_date"], "%Y-%m-%d").date()
-                days = (expiry - today).days
-                if 0 <= days <= 90:
-                    alerts.append({
-                        "title": doc.get("title"),
-                        "days_until_expiry": days,
-                        "message": f"Expires in {days} days"
-                    })
-            except:
+                expiry = datetime.strptime(expiry_str, "%Y-%m-%d").date()
+                days_until = (expiry - today).days
+
+                if days_until < 0:
+                    urgency = "expired"
+                elif days_until <= 7:
+                    urgency = "critical"
+                elif days_until <= 30:
+                    urgency = "urgent"
+                elif days_until <= 90:
+                    urgency = "upcoming"
+                else:
+                    continue  # Not due for alert yet
+
+                alerts.append({
+                    "document_id": doc.get("id"),
+                    "title": doc.get("title"),
+                    "expiry_date": expiry_str,
+                    "days_until_expiry": days_until,
+                    "urgency": urgency,
+                    "message": self._expiry_message(doc.get("title"), days_until, urgency)
+                })
+
+            except (ValueError, TypeError):
                 continue
+
         return alerts
+
+    def _expiry_message(self, title: str, days: int, urgency: str) -> str:
+        """Generate a human-friendly alert message."""
+        if urgency == "expired":
+            return f"⚠️ Your {title} has expired. Renew it as soon as possible."
+        elif urgency == "critical":
+            return f"🚨 Your {title} expires in {days} day{'s' if days != 1 else ''}. Act now."
+        elif urgency == "urgent":
+            return f"⏰ Your {title} expires in {days} days. Time to renew."
+        else:
+            return f"📅 Your {title} expires in {days} days. Plan ahead."
 
     def _safe_fallback(self) -> Dict:
         return {

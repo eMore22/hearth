@@ -6,6 +6,7 @@ from app.agents.bill_agent import BillAgent
 from app.agents.grocery_agent import GroceryAgent
 from app.agents.maintenance_agent import MaintenanceAgent
 from app.agents.health_agent import HealthAgent
+from app.dependencies import get_supabase
 
 
 class ChiefOfStaffAgent(BaseHouseholdAgent):
@@ -13,6 +14,7 @@ class ChiefOfStaffAgent(BaseHouseholdAgent):
     The central AI brain of Hearth.
     Uses Claude for complex reasoning and conversation (heavy tasks).
     Uses NVIDIA for fast/light tasks (intent classification, simple summaries).
+    Now fetches real household data from Supabase for rich context.
     """
 
     SYSTEM_PROMPT = """You are Hearth's Chief of Staff AI — a warm, intelligent, and proactive assistant.
@@ -33,6 +35,61 @@ IMPORTANT RULES:
         self.grocery_agent = GroceryAgent(household_id, user_id)
         self.maintenance_agent = MaintenanceAgent(household_id, user_id)
         self.health_agent = HealthAgent(household_id, user_id)
+        self.supabase = get_supabase()
+
+    def _fetch_household_data(self) -> Dict[str, Any]:
+        """Query Supabase for real household data to enrich context."""
+        data = {
+            "documents": [],
+            "bills": [],
+            "tasks": [],
+            "inventory": [],
+            "health_events": [],
+        }
+        try:
+            # Documents
+            docs_res = self.supabase.table("documents")\
+                .select("*")\
+                .eq("household_id", self.household_id)\
+                .order("expiry_date", desc=False)\
+                .execute()
+            data["documents"] = docs_res.data if docs_res.data else []
+
+            # Bills
+            bills_res = self.supabase.table("bills")\
+                .select("*")\
+                .eq("household_id", self.household_id)\
+                .execute()
+            data["bills"] = bills_res.data if bills_res.data else []
+
+            # Maintenance tasks (only uncompleted)
+            tasks_res = self.supabase.table("maintenance_tasks")\
+                .select("*")\
+                .eq("household_id", self.household_id)\
+                .is_("completed", "false")\
+                .execute()
+            data["tasks"] = tasks_res.data if tasks_res.data else []
+
+            # Food inventory
+            inventory_res = self.supabase.table("food_inventory")\
+                .select("*")\
+                .eq("household_id", self.household_id)\
+                .execute()
+            data["inventory"] = inventory_res.data if inventory_res.data else []
+
+            # Health events (recent)
+            health_res = self.supabase.table("health_events")\
+                .select("*")\
+                .eq("household_id", self.household_id)\
+                .order("created_at", desc=True)\
+                .limit(5)\
+                .execute()
+            data["health_events"] = health_res.data if health_res.data else []
+
+        except Exception as e:
+            print(f"⚠️ Chief of Staff data fetch warning: {e}")
+
+        return data
 
     def run(self, input_data: Any) -> Any:
         action = input_data.get("action")
@@ -50,6 +107,11 @@ IMPORTANT RULES:
         if conversation_history is None:
             conversation_history = []
 
+        # Fetch real household data to supplement context
+        household_data = self._fetch_household_data()
+        # Merge with any context sent from frontend (frontend data takes precedence if present)
+        enriched_context = {**household_data, **context}
+
         # LIGHT TASK: Use NVIDIA for fast intent classification
         category = await self._classify_intent(message)
 
@@ -65,7 +127,7 @@ IMPORTANT RULES:
             response["message"] = self._ai_response_with_memory(
                 message=message,
                 category=category,
-                context=context,
+                context=enriched_context,
                 conversation_history=conversation_history
             )
         except Exception as e:
@@ -94,24 +156,30 @@ IMPORTANT RULES:
         history_text = ""
         if conversation_history:
             history_lines = []
-            for msg in conversation_history[-15:]:  # Keep last 15 messages for context
+            for msg in conversation_history[-15:]:
                 role = "User" if msg.get("role") == "user" else "Hearth"
                 history_lines.append(f"{role}: {msg.get('content', '')}")
             history_text = "\n".join(history_lines)
 
-        # Build household context
+        # Build household context summary from real data
         context_parts = []
-        if context.get("documents"):
-            context_parts.append(f"{len(context['documents'])} documents in vault")
-        if context.get("bills"):
-            total = sum(b.get("amount", 0) for b in context["bills"])
-            context_parts.append(f"{len(context['bills'])} active bills (₦{total:,.0f}/month)")
-        if context.get("tasks"):
-            context_parts.append(f"{len(context['tasks'])} maintenance tasks")
-        if context.get("inventory"):
-            context_parts.append(f"{len(context['inventory'])} grocery items")
+        documents = context.get("documents", [])
+        if documents:
+            expiring = [d for d in documents if d.get("expiry_date") and d.get("expiry_date") <= "2026-12-31"]  # simplified
+            context_parts.append(f"{len(documents)} documents ({len(expiring)} expiring soon)")
+        bills = context.get("bills", [])
+        if bills:
+            total = sum(b.get("amount", 0) for b in bills)
+            context_parts.append(f"{len(bills)} active bills (₦{total:,.0f}/month)")
+        tasks = context.get("tasks", [])
+        if tasks:
+            pending = len([t for t in tasks if not t.get("completed")])
+            context_parts.append(f"{pending} pending maintenance tasks")
+        inventory = context.get("inventory", [])
+        if inventory:
+            context_parts.append(f"{len(inventory)} grocery items in stock")
 
-        household_summary = ", ".join(context_parts) if context_parts else "No household data loaded yet"
+        household_summary = ", ".join(context_parts) if context_parts else "No household data available yet"
 
         prompt = f"""CONVERSATION HISTORY:
 {history_text if history_text else "This is the start of the conversation."}
@@ -153,6 +221,10 @@ Respond as Hearth Chief of Staff. Follow these rules:
 
     def get_dashboard_summary(self, household_data: Dict) -> Dict:
         """Generate dashboard summary. Uses LIGHT model for the greeting."""
+        # Enrich with fetched data if necessary
+        if not household_data:
+            household_data = self._fetch_household_data()
+
         summary = {
             "documents": self._get_document_snapshot(household_data.get("documents", [])),
             "bills": self._get_bill_snapshot(household_data.get("bills", [])),

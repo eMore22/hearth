@@ -13,33 +13,26 @@ export default function RootLayout() {
   const inAuthGroup = segments[0] === '(auth)';
   const inOnboardingGroup = segments[0] === 'onboarding';
 
-  // Load session once when app starts
   useEffect(() => {
     loadSession();
   }, []);
 
-  // Fetch household when user is logged in
   useEffect(() => {
     if (session && !household && !householdLoading) {
       fetchHousehold();
     }
   }, [session]);
 
-  // Handle navigation redirects
   useEffect(() => {
     if (authLoading || householdLoading) return;
 
-    // Not logged in → Login screen
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/login');
     }
-
-    // Logged in but no household → Onboarding
     else if (session && !household && !inOnboardingGroup && !inAuthGroup) {
-      router.replace('/onboarding/welcome');
+      // Use push instead of replace to avoid race conditions with onboarding layout mount
+      router.push('/onboarding/welcome');
     }
-
-    // Logged in with household but in auth/onboarding → Main app
     else if (session && household && (inAuthGroup || inOnboardingGroup)) {
       router.replace('/(tabs)');
     }

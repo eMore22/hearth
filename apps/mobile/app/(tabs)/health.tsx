@@ -21,7 +21,7 @@ const TRIAGE_CONFIG: Record<string, { color: string; bg: string; label: string; 
 }
 
 export default function HealthScreen() {
-  const { triageHistory, isLoading, triageSymptoms } = useHealthStore()
+  const { triageHistory = [], isLoading, triageSymptoms } = useHealthStore()
   const [symptoms, setSymptoms] = useState('')
   const [lastTriage, setLastTriage] = useState<any>(null)
 
