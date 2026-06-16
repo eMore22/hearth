@@ -16,6 +16,10 @@ class SignInRequest(BaseModel):
     password: str
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
 @router.post("/signup")
 async def signup(payload: SignUpRequest, supabase=Depends(get_supabase)):
     try:
@@ -39,7 +43,11 @@ async def signin(payload: SignInRequest, supabase=Depends(get_supabase)):
         return {
             "access_token": res.session.access_token,
             "refresh_token": res.session.refresh_token,
-            "user": {"id": res.user.id, "email": res.user.email}
+            "user": {
+                "id": res.user.id,
+                "email": res.user.email,
+                "user_metadata": res.user.user_metadata,
+            }
         }
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -52,9 +60,12 @@ async def signout(supabase=Depends(get_supabase)):
 
 
 @router.post("/refresh")
-async def refresh_token(refresh_token: str, supabase=Depends(get_supabase)):
+async def refresh_token(payload: RefreshRequest, supabase=Depends(get_supabase)):
     try:
-        res = supabase.auth.refresh_session(refresh_token)
-        return {"access_token": res.session.access_token}
+        res = supabase.auth.refresh_session(payload.refresh_token)
+        return {
+            "access_token": res.session.access_token,
+            "refresh_token": res.session.refresh_token,
+        }
     except Exception as e:
         raise HTTPException(status_code=401, detail="Could not refresh token")

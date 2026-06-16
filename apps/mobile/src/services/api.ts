@@ -9,6 +9,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// ---- Request Interceptor ----
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     const token = await getToken();
@@ -21,45 +22,63 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// ---- Unauthorized Handler ----
+// Registered by authStore/_layout so the interceptor can trigger a clean
+// logout (session = null → redirect to login) instead of leaving the app
+// "logged in" with a wiped token and every request 401ing forever.
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export const setUnauthorizedHandler = (handler: UnauthorizedHandler) => {
+  unauthorizedHandler = handler;
+};
+
+// ---- Response Interceptor ----
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     if (error.response?.status === 401) {
       await removeToken();
       await removeUser();
+      if (unauthorizedHandler) unauthorizedHandler();
     }
     return Promise.reject(error);
   }
 );
 
+// ==================== AUTH ====================
 export const authService = {
   signIn: (email: string, password: string) =>
     api.post('/api/auth/signin', { email, password }),
+
   signUp: (email: string, password: string, fullName?: string) =>
     api.post('/api/auth/signup', { email, password, full_name: fullName }),
+
   signOut: () => api.post('/api/auth/signout'),
 };
 
+// ==================== HOUSEHOLD ====================
 export const householdService = {
   get: () => api.get('/api/household/'),
   create: (data: { name: string; address?: string; country?: string }) =>
     api.post('/api/household/', data),
   getMembers: () => api.get('/api/household/members'),
-  update: (data: { name?: string; address?: string; country?: string }) =>
-    api.put('/api/household/', data),  // <-- new
 };
 
+// ==================== DOCUMENTS ====================
 export const documentService = {
   list: () => api.get('/api/documents/'),
   upload: (formData: FormData) =>
     api.post('/api/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000, // Vision extraction takes time
     }),
   delete: (id: string) => api.delete(`/api/documents/${id}`),
   getExpiring: () => api.get('/api/documents/expiring'),
   ask: (question: string) => api.post('/api/documents/ask', { question }),
 };
 
+// ==================== BILLS ====================
 export const billService = {
   list: () => api.get('/api/bills/'),
   create: (data: any) => api.post('/api/bills/', data),
@@ -70,6 +89,7 @@ export const billService = {
   monthlyReport: () => api.get('/api/bills/monthly-report'),
 };
 
+// ==================== GROCERY ====================
 export const groceryService = {
   getInventory: () => api.get('/api/grocery/inventory'),
   addInventory: (item: any) => api.post('/api/grocery/inventory', item),
@@ -77,11 +97,13 @@ export const groceryService = {
     api.post('/api/grocery/meal-plan/generate', { preferences, inventory }),
   createShoppingList: (mealPlan: any, inventory?: any[]) =>
     api.post('/api/grocery/shopping-list', { meal_plan: mealPlan, inventory }),
-  wasteAlert: (inventory: any[]) => api.post('/api/grocery/waste-alert', { inventory }),
+  wasteAlert: (inventory: any[]) =>
+    api.post('/api/grocery/waste-alert', { inventory }),
   modifyMeal: (currentPlan: any, day: string, newPreference: string) =>
     api.post('/api/grocery/meal-plan/modify', { current_plan: currentPlan, day, new_preference: newPreference }),
 };
 
+// ==================== MAINTENANCE ====================
 export const maintenanceService = {
   getTasks: () => api.get('/api/maintenance/tasks'),
   generateCalendar: (profile: any) =>
@@ -96,6 +118,7 @@ export const maintenanceService = {
     api.post(`/api/maintenance/tasks/${taskId}/complete`),
 };
 
+// ==================== HEALTH ====================
 export const healthService = {
   getMedications: () => api.get('/api/health/medications'),
   addMedication: (med: any) => api.post('/api/health/medications', med),
@@ -107,13 +130,19 @@ export const healthService = {
     api.post('/api/health/medication-schedule', { medications }),
 };
 
+// ==================== CHIEF OF STAFF ====================
 export const chiefService = {
   chat: (message: string, conversationHistory: any[] = [], context?: any) =>
-    api.post('/api/chief/chat', { message, conversation_history: conversationHistory, context: context || {} }),
+    api.post('/api/chief/chat', {
+      message,
+      conversation_history: conversationHistory,
+      context: context || {},
+    }),
   dashboardSummary: (householdData?: any) =>
     api.post('/api/chief/dashboard-summary', { household_data: householdData || {} }),
 };
 
+// ==================== NOTIFICATIONS ====================
 export const notificationService = {
   registerToken: (token: string, deviceType: string) =>
     api.post('/api/notifications/register-token', { token, device_type: deviceType }),

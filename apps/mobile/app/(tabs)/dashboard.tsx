@@ -69,7 +69,11 @@ export default function DashboardScreen() {
     return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   };
 
-  const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'there';
+  // Fallback chain: user_metadata.full_name → email prefix → 'there'
+  const firstName =
+    user?.user_metadata?.full_name?.split(' ')[0] ||
+    user?.email?.split('@')[0] ||
+    'there';
 
   return (
     <View style={styles.container}>
@@ -86,7 +90,12 @@ export default function DashboardScreen() {
                 <Text style={styles.userName}>{firstName} 👋</Text>
               </View>
               <View style={{ flexDirection: 'row', gap: 10 }}>
-                <TouchableOpacity onPress={() => router.push('/profile')} style={styles.profileBtn}>
+                {/* Profile icon — navigates to /(tabs)/profile which is hidden
+                    from the tab bar via href:null in _layout.tsx */}
+                <TouchableOpacity
+                  onPress={() => router.push('/(tabs)/profile')}
+                  style={styles.profileBtn}
+                >
                   <Ionicons name="person-circle-outline" size={28} color={COLORS.muted} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={signOut} style={styles.signOutBtn}>
@@ -107,7 +116,11 @@ export default function DashboardScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>⚠️ Needs Attention</Text>
             {urgentAlerts.map((alert: any, i: number) => (
-              <TouchableOpacity key={i} style={styles.alertCard} onPress={() => router.push('/(tabs)/documents')}>
+              <TouchableOpacity
+                key={i}
+                style={styles.alertCard}
+                onPress={() => router.push('/(tabs)/documents')}
+              >
                 <Ionicons name="warning-outline" size={16} color={COLORS.danger} />
                 <Text style={styles.alertText} numberOfLines={2}>{alert.message}</Text>
                 <Ionicons name="chevron-forward" size={14} color={COLORS.muted} />
@@ -153,14 +166,21 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.healthText}>
               <Text style={styles.moduleTitle}>Health</Text>
-              <Text style={styles.moduleSubtitle}>{triageHistory.length ? `${triageHistory.length} recent checks` : 'Family health triage'}</Text>
+              <Text style={styles.moduleSubtitle}>
+                {triageHistory.length ? `${triageHistory.length} recent checks` : 'Family health triage'}
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.chiefCTA} onPress={() => router.push('/(tabs)/chief-of-staff')}>
-          <LinearGradient colors={['#1A3A5C', '#2D1B4E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.chiefGradient}>
+          <LinearGradient
+            colors={['#1A3A5C', '#2D1B4E']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.chiefGradient}
+          >
             <View style={styles.chiefLeft}>
               <Text style={styles.chiefLeftIcon}>✦</Text>
               <View>
@@ -177,9 +197,19 @@ export default function DashboardScreen() {
             <Text style={styles.sectionTitle}>Upcoming Expiries</Text>
             {alerts.slice(0, 3).map((alert: any, i: number) => (
               <View key={i} style={styles.expiryRow}>
-                <View style={[styles.expiryDot, { backgroundColor: alert.urgency === 'expired' ? COLORS.danger : alert.urgency === 'critical' ? '#FF9F1C' : COLORS.accent }]} />
+                <View style={[styles.expiryDot, {
+                  backgroundColor:
+                    alert.urgency === 'expired' ? COLORS.danger :
+                    alert.urgency === 'critical' ? '#FF9F1C' :
+                    COLORS.accent
+                }]} />
                 <Text style={styles.expiryTitle} numberOfLines={1}>{alert.title}</Text>
-                <Text style={[styles.expiryDays, { color: alert.urgency === 'expired' ? COLORS.danger : alert.urgency === 'critical' ? '#FF9F1C' : COLORS.muted }]}>
+                <Text style={[styles.expiryDays, {
+                  color:
+                    alert.urgency === 'expired' ? COLORS.danger :
+                    alert.urgency === 'critical' ? '#FF9F1C' :
+                    COLORS.muted
+                }]}>
                   {alert.days_until_expiry < 0 ? 'Expired' : `${alert.days_until_expiry}d`}
                 </Text>
               </View>
@@ -206,7 +236,11 @@ const ModuleCard = ({ module, title, subtitle, badge, onPress }: any) => {
     <TouchableOpacity style={styles.moduleCard} onPress={onPress}>
       <View style={[styles.moduleIcon, { backgroundColor: info.bg }]}>
         <Ionicons name={info.icon} size={22} color={info.accent} />
-        {!!badge && <View style={styles.moduleBadge}><Text style={styles.moduleBadgeText}>{badge}</Text></View>}
+        {!!badge && (
+          <View style={styles.moduleBadge}>
+            <Text style={styles.moduleBadgeText}>{badge}</Text>
+          </View>
+        )}
       </View>
       <Text style={styles.moduleTitle}>{title}</Text>
       <Text style={styles.moduleSubtitle} numberOfLines={1}>{subtitle}</Text>

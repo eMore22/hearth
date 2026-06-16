@@ -25,12 +25,10 @@ export default function ProfileScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Reload household when screen mounts
   React.useEffect(() => {
     fetchHousehold();
   }, []);
 
-  // Sync local state when household data arrives
   React.useEffect(() => {
     if (household) {
       setEditName(household.name || '');
@@ -54,14 +52,27 @@ export default function ProfileScreen() {
       setIsEditing(false);
       Alert.alert('Success', 'Household updated');
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Update failed');
+      // updateHousehold applies the change locally even on network error,
+      // so the UI stays consistent — just show the error message.
+      Alert.alert('Note', err.message || 'Could not save to server — changes shown locally');
+      setIsEditing(false);
     } finally {
       setSaving(false);
     }
   };
 
-  const displayName = user?.user_metadata?.full_name || 'User';
+  // Full name fallback chain:
+  // 1. user_metadata.full_name (set correctly after today's auth.py fix + re-login)
+  // 2. user.email prefix (e.g. "eugene" from eugene@hearth.com)
+  // 3. "User" as last resort
+  const displayName =
+    user?.user_metadata?.full_name ||
+    user?.email?.split('@')[0] ||
+    'User';
+
   const email = user?.email || '';
+
+  const avatarLetter = displayName.charAt(0).toUpperCase();
 
   return (
     <View style={styles.container}>
@@ -76,12 +87,12 @@ export default function ProfileScreen() {
           <View style={{ width: 32 }} />
         </View>
 
-        {/* Personal Profile (Read‑only) */}
+        {/* Personal Profile (Read-only) */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Personal Information</Text>
           <View style={styles.avatarRow}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
+              <Text style={styles.avatarText}>{avatarLetter}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.infoName}>{displayName}</Text>
@@ -133,7 +144,10 @@ export default function ProfileScreen() {
                 onPress={handleSave}
                 disabled={saving}
               >
-                {saving ? <ActivityIndicator color={WHITE} /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
+                {saving
+                  ? <ActivityIndicator color={WHITE} />
+                  : <Text style={styles.saveBtnText}>Save Changes</Text>
+                }
               </TouchableOpacity>
             </>
           ) : (
@@ -155,7 +169,13 @@ export default function ProfileScreen() {
         </View>
 
         {/* Sign Out */}
-        <TouchableOpacity style={styles.signOutBtn} onPress={() => { signOut(); router.replace('/(auth)/login'); }}>
+        <TouchableOpacity
+          style={styles.signOutBtn}
+          onPress={() => {
+            signOut();
+            router.replace('/(auth)/login');
+          }}
+        >
           <Ionicons name="log-out-outline" size={18} color={DANGER} />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
@@ -171,20 +191,20 @@ const styles = StyleSheet.create({
   content: { padding: 20 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 30, marginTop: 20
+    marginBottom: 30, marginTop: 20,
   },
   backBtn: { padding: 6 },
   title: { fontSize: 20, fontWeight: '700', color: WHITE },
   card: {
     backgroundColor: SURFACE, borderRadius: 16, padding: 20, marginBottom: 20,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)'
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
   },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sectionTitle: { fontSize: 12, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 16 },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   avatar: {
     width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(79,195,247,0.2)',
-    alignItems: 'center', justifyContent: 'center'
+    alignItems: 'center', justifyContent: 'center',
   },
   avatarText: { fontSize: 22, fontWeight: '700', color: ACCENT },
   infoName: { fontSize: 18, fontWeight: '600', color: WHITE },
@@ -195,18 +215,18 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: 14,
     fontSize: 15, color: WHITE, marginBottom: 12,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)'
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
   saveBtn: {
     backgroundColor: ACCENT, borderRadius: 12, padding: 14,
-    alignItems: 'center', marginTop: 10
+    alignItems: 'center', marginTop: 10,
   },
   saveBtnText: { color: NAVY, fontWeight: '700', fontSize: 15 },
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 10, padding: 14, borderRadius: 14,
     backgroundColor: 'rgba(255,107,107,0.08)',
-    borderWidth: 1, borderColor: 'rgba(255,107,107,0.2)'
+    borderWidth: 1, borderColor: 'rgba(255,107,107,0.2)',
   },
   signOutText: { color: DANGER, fontSize: 15, fontWeight: '600' },
 });

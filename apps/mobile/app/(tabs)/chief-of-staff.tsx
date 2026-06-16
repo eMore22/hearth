@@ -1,6 +1,11 @@
 import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, StyleSheet, StatusBar, Animated } from 'react-native'
 import { useState, useRef, useEffect } from 'react'
 import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore'
+import { useDocumentStore } from '../../src/stores/documentStore'
+import { useBillStore } from '../../src/stores/billStore'
+import { useGroceryStore } from '../../src/stores/groceryStore'
+import { useMaintenanceStore } from '../../src/stores/maintenanceStore'
+import { useHealthStore } from '../../src/stores/healthStore'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -25,9 +30,27 @@ const QUICK_PROMPTS = [
 export default function ChiefOfStaffScreen() {
   const router = useRouter()
   const { messages, isTyping, sendMessage, clearMessages } = useChiefOfStaffStore()
+
+  // Household context — same stores the dashboard uses, so the Chief always
+  // knows what's actually going on (documents, alerts, bills, tasks, etc.)
+  const { documents, alerts, fetchDocuments, fetchAlerts } = useDocumentStore()
+  const { bills, monthlyReport, fetchBills, fetchMonthlyReport } = useBillStore()
+  const { inventory, fetchInventory } = useGroceryStore()
+  const { tasks, fetchTasks } = useMaintenanceStore()
+  const { medications, fetchMedications } = useHealthStore()
+
   const [inputText, setInputText] = useState('')
   const flatListRef = useRef<FlatList>(null)
   const typingDot = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    // Load household snapshot when the Chief screen opens, so even a fresh
+    // navigation here (without visiting the dashboard first) has context.
+    fetchDocuments(); fetchAlerts()
+    fetchBills(); fetchMonthlyReport()
+    fetchInventory(); fetchTasks()
+    fetchMedications()
+  }, [])
 
   useEffect(() => {
     if (isTyping) {
@@ -40,11 +63,21 @@ export default function ChiefOfStaffScreen() {
     }
   }, [isTyping])
 
+  const buildContext = () => ({
+    documents,
+    alerts,
+    bills,
+    monthlyReport,
+    tasks,
+    inventory,
+    medications,
+  })
+
   const handleSend = async (text?: string) => {
     const msg = text || inputText
     if (!msg.trim() || isTyping) return
     setInputText('')
-    await sendMessage(msg)
+    await sendMessage(msg, buildContext())
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 150)
   }
 

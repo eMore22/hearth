@@ -12,6 +12,7 @@ export interface Household {
 
 interface HouseholdState {
   household: Household | null;
+  loading: boolean;
   isLoading: boolean;
   error: string | null;
 
@@ -24,15 +25,19 @@ interface HouseholdState {
 
 export const useHouseholdStore = create<HouseholdState>((set, get) => ({
   household: null,
+  loading: false,
   isLoading: false,
   error: null,
 
   fetchHousehold: async () => {
-    set({ isLoading: true, error: null });
+    set({ loading: true, isLoading: true, error: null });
     try {
       const res = await api.get('/api/household/');
       if (res.data?.households) {
         set({ household: res.data.households });
+      } else if (res.data?.id) {
+        // Some responses return the household object directly
+        set({ household: res.data });
       } else {
         set({ household: null });
       }
@@ -40,12 +45,12 @@ export const useHouseholdStore = create<HouseholdState>((set, get) => ({
       const message = error.response?.data?.detail || 'Failed to fetch household';
       set({ error: message, household: null });
     } finally {
-      set({ isLoading: false });
+      set({ loading: false, isLoading: false });
     }
   },
 
   createHousehold: async (data) => {
-    set({ isLoading: true, error: null });
+    set({ loading: true, isLoading: true, error: null });
     try {
       await api.post('/api/household/', data);
       await get().fetchHousehold();
@@ -54,24 +59,30 @@ export const useHouseholdStore = create<HouseholdState>((set, get) => ({
       set({ error: message });
       throw error;
     } finally {
-      set({ isLoading: false });
+      set({ loading: false, isLoading: false });
     }
   },
 
   updateHousehold: async (data) => {
-    set({ isLoading: true, error: null });
+    const current = get().household;
+    if (!current?.id) throw new Error('No household to update');
+    set({ loading: true, isLoading: true, error: null });
     try {
-      const res = await api.put('/api/household/', data);
-      // Backend returns the updated household object
-      set({ household: res.data, isLoading: false });
+      await api.patch(`/api/household/${current.id}`, data);
+      // Refresh from server so UI reflects persisted state
+      await get().fetchHousehold();
     } catch (error: any) {
+      // If the patch endpoint doesn't exist yet, apply the update locally
+      // so the UI isn't broken while the backend endpoint is wired up
+      set({ household: { ...current, ...data }, loading: false, isLoading: false });
       const message = error.response?.data?.detail || 'Failed to update household';
-      set({ error: message, isLoading: false });
+      set({ error: message });
       throw error;
+    } finally {
+      set({ loading: false, isLoading: false });
     }
   },
 
   clearHousehold: () => set({ household: null, error: null }),
-
   clearError: () => set({ error: null }),
 }));

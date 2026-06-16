@@ -36,7 +36,8 @@ export default function CreateHouseholdScreen() {
       });
 
       await fetchHousehold();
-      router.push('/onboarding/add-members');
+      // Go back to the previous screen – this works both for onboarding and profile edit flows
+      router.back();
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to create household');
     } finally {

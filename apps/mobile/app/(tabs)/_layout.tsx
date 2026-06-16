@@ -81,6 +81,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          // Hides this from the tab bar entirely while keeping the route
+          // navigable via router.push('/(tabs)/profile') — e.g. from the
+          // profile icon in the dashboard header.
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

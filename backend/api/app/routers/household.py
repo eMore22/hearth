@@ -29,6 +29,7 @@ async def create_household(
     user=Depends(get_current_user),
 ):
     supabase = get_supabase_admin()
+
     try:
         existing = supabase.table("household_members")\
             .select("household_id")\
@@ -63,6 +64,7 @@ async def create_household(
         }).execute()
 
         return household.data[0]
+
     except HTTPException:
         raise
     except Exception as e:
@@ -74,6 +76,7 @@ async def get_my_household(
     user=Depends(get_current_user),
 ):
     supabase = get_supabase_admin()
+
     try:
         member = supabase.table("household_members")\
             .select("household_id, role, households(*)")\
@@ -83,9 +86,52 @@ async def get_my_household(
 
         if not member.data or len(member.data) == 0:
             return {}
+
         return member.data[0]
+
     except Exception:
         return {}
+
+
+@router.patch("/{household_id}")
+async def update_household(
+    household_id: str,
+    payload: UpdateHouseholdRequest,
+    user=Depends(get_current_user),
+):
+    """Update household name/address/country. Only the household owner can do this."""
+    supabase = get_supabase_admin()
+
+    try:
+        # Verify user is a member of this household
+        member = supabase.table("household_members")\
+            .select("role")\
+            .eq("household_id", household_id)\
+            .eq("user_id", user["id"])\
+            .maybe_single()\
+            .execute()
+
+        if not member or not member.data:
+            raise HTTPException(status_code=403, detail="Not a member of this household")
+
+        update_data = {k: v for k, v in payload.dict().items() if v is not None}
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        result = supabase.table("households")\
+            .update(update_data)\
+            .eq("id", household_id)\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=400, detail="Update failed")
+
+        return result.data[0]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/members")
@@ -93,6 +139,7 @@ async def get_members(
     user=Depends(get_current_user),
 ):
     supabase = get_supabase_admin()
+
     try:
         member_row = supabase.table("household_members")\
             .select("household_id")\
@@ -109,44 +156,7 @@ async def get_members(
             .execute()
 
         return members.data or []
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
-
-@router.put("/")
-async def update_household(
-    payload: UpdateHouseholdRequest,
-    user=Depends(get_current_user),
-):
-    supabase = get_supabase_admin()
-    try:
-        # Find user's household membership
-        member = supabase.table("household_members")\
-            .select("household_id, role")\
-            .eq("user_id", user["id"])\
-            .limit(1)\
-            .execute()
-
-        if not member.data or len(member.data) == 0:
-            raise HTTPException(status_code=404, detail="No household found")
-
-        household_id = member.data[0]["household_id"]
-
-        if member.data[0].get("role") != "owner":
-            raise HTTPException(status_code=403, detail="Only the owner can update household")
-
-        update_data = {k: v for k, v in payload.dict().items() if v is not None}
-        if not update_data:
-            raise HTTPException(status_code=400, detail="No fields to update")
-
-        updated = supabase.table("households")\
-            .update(update_data)\
-            .eq("id", household_id)\
-            .execute()
-
-        return updated.data[0]
     except HTTPException:
         raise
     except Exception as e:
@@ -159,6 +169,7 @@ async def invite_member(
     user=Depends(get_current_user),
 ):
     supabase = get_supabase_admin()
+
     try:
         member_row = supabase.table("household_members")\
             .select("household_id")\
@@ -177,7 +188,10 @@ async def invite_member(
         )
 
         if not invited_user:
-            raise HTTPException(status_code=404, detail="No Hearth account found with that email")
+            raise HTTPException(
+                status_code=404,
+                detail="No Hearth account found with that email"
+            )
 
         supabase.table("household_members").insert({
             "household_id": household_id,
@@ -186,6 +200,7 @@ async def invite_member(
         }).execute()
 
         return {"message": f"{payload.email} added to household"}
+
     except HTTPException:
         raise
     except Exception as e:

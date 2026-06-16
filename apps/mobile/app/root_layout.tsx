@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '../src/stores/authStore';
 import { useHouseholdStore } from '../src/stores/householdStore';
+import { setUnauthorizedHandler } from '../src/services/api';
 
 export default function RootLayout() {
   const { session, loading: authLoading, loadSession } = useAuthStore();
@@ -13,26 +14,44 @@ export default function RootLayout() {
   const inAuthGroup = segments[0] === '(auth)';
   const inOnboardingGroup = segments[0] === 'onboarding';
 
+  // Load session once when app starts
   useEffect(() => {
     loadSession();
   }, []);
 
+  // If any request comes back 401 (token actually expired/invalid), clear
+  // session + household state so the redirect effect below sends the user
+  // back to login — instead of leaving the app "logged in" while every
+  // request silently 401s with a wiped token.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      useAuthStore.setState({ session: null, user: null });
+      useHouseholdStore.getState().clearHousehold();
+    });
+  }, []);
+
+  // Fetch household when user is logged in
   useEffect(() => {
     if (session && !household && !householdLoading) {
       fetchHousehold();
     }
   }, [session]);
 
+  // Handle navigation redirects
   useEffect(() => {
     if (authLoading || householdLoading) return;
 
+    // Not logged in → Login screen
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/login');
     }
+
+    // Logged in but no household → Onboarding
     else if (session && !household && !inOnboardingGroup && !inAuthGroup) {
-      // Use push instead of replace to avoid race conditions with onboarding layout mount
-      router.push('/onboarding/welcome');
+      router.replace('/onboarding/welcome');
     }
+
+    // Logged in with household but in auth/onboarding → Main app
     else if (session && household && (inAuthGroup || inOnboardingGroup)) {
       router.replace('/(tabs)');
     }
