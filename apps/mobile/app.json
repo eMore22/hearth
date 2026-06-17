@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#1E3A5F"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.hearth.app",
@@ -30,7 +32,9 @@
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
+        "VIBRATE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "experiments": {
@@ -55,8 +59,12 @@
     ],
     "scheme": "hearth",
     "extra": {
-      "router": { "origin": "" },
-      "eas": { "projectId": "your-eas-project-id" }
+      "router": {
+        "origin": ""
+      },
+      "eas": {
+        "projectId": "cbdcf3cb-ccb0-41db-8abd-4a63fc0364d4"
+      }
     }
   }
 }
