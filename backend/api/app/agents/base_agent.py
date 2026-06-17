@@ -47,17 +47,12 @@ class BaseHouseholdAgent(ABC):
         max_tokens: int = 1024
     ) -> str:
         """
-        Use Claude for complex tasks:
-        - Chief of Staff conversation
-        - Document extraction and Q&A
-        - Health triage
-        - Maintenance diagnosis
-        - Negotiation scripts
+        Use Claude for complex tasks.
         Falls back to NVIDIA if credits run out.
         """
         messages = [{"role": "user", "content": prompt}]
         kwargs = {
-            "model": "claude-sonnet-4-20250514",
+            "model": "claude-sonnet-4-6",
             "max_tokens": max_tokens,
             "messages": messages,
         }
@@ -80,14 +75,10 @@ class BaseHouseholdAgent(ABC):
         temperature: float = 0.3
     ) -> str:
         """
-        Use NVIDIA for lightweight tasks:
-        - Dashboard greeting
-        - Intent classification
-        - Quick summaries
-        - Simple reports
+        Use NVIDIA for lightweight tasks.
+        Falls back to Claude if NVIDIA fails.
         """
         if not self.nvidia_client:
-            # If NVIDIA not configured, fall through to Claude
             return self.ask_claude(prompt, max_tokens=max_tokens)
 
         try:
@@ -101,11 +92,10 @@ class BaseHouseholdAgent(ABC):
             return result or json.dumps({"error": "Empty response from NVIDIA"})
         except Exception as e:
             print(f"⚠️ NVIDIA failed: {e}. Falling back to Claude...")
-            # Last resort — try Claude
             try:
                 messages = [{"role": "user", "content": prompt}]
                 response = self.client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model="claude-sonnet-4-6",
                     max_tokens=max_tokens,
                     messages=messages,
                 )

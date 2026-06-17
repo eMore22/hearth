@@ -14,7 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from pydantic import BaseModel
 from app.dependencies import get_current_user, get_supabase_admin
-from app.services.ha_bridge import build_ha_bridge
+from app.services.ha_bridge import build_ha_bridge, HABridgeService
 
 router = APIRouter(tags=["automation"])
 
