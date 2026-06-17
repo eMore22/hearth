@@ -37,11 +37,13 @@
         "android.permission.RECORD_AUDIO"
       ]
     },
-    "experiments": {
-      "sitemap": false
-    },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "sitemap": false
+        }
+      ],
       "expo-secure-store",
       [
         "expo-notifications",
