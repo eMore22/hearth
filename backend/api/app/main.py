@@ -10,7 +10,8 @@ from app.routers import (
     maintenance,
     health,
     notifications,
-    chief_of_staff  # new import
+    chief_of_staff,
+    automation,
 )
 
 app = FastAPI(
@@ -22,22 +23,23 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=["*"],   # Tighten to your Render URL in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Routers
-app.include_router(auth.router,          prefix="/api/auth",         tags=["Auth"])
-app.include_router(household.router,     prefix="/api/household",    tags=["Household"])
-app.include_router(documents.router,     prefix="/api/documents",    tags=["Documents"])
-app.include_router(bills.router,         prefix="/api/bills",        tags=["Bills"])
-app.include_router(grocery.router,       prefix="/api/grocery",      tags=["Grocery"])
-app.include_router(maintenance.router,   prefix="/api/maintenance",  tags=["Maintenance"])
-app.include_router(health.router,        prefix="/api/health",       tags=["Health"])
-app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
-app.include_router(chief_of_staff.router, prefix="/api/chief",       tags=["ChiefOfStaff"])  # new
+app.include_router(auth.router,           prefix="/api/auth",          tags=["Auth"])
+app.include_router(household.router,      prefix="/api/household",     tags=["Household"])
+app.include_router(documents.router,      prefix="/api/documents",     tags=["Documents"])
+app.include_router(bills.router,          prefix="/api/bills",         tags=["Bills"])
+app.include_router(grocery.router,        prefix="/api/grocery",       tags=["Grocery"])
+app.include_router(maintenance.router,    prefix="/api/maintenance",   tags=["Maintenance"])
+app.include_router(health.router,         prefix="/api/health",        tags=["Health"])
+app.include_router(notifications.router,  prefix="/api/notifications", tags=["Notifications"])
+app.include_router(chief_of_staff.router, prefix="/api/chief",         tags=["ChiefOfStaff"])
+app.include_router(automation.router,     prefix="/api/automation",    tags=["Automation"])
 
 
 @app.get("/")

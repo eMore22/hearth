@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  RefreshControl, Animated, StatusBar,
+  RefreshControl, Animated, StatusBar, Alert, ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,23 +13,25 @@ import { useGroceryStore } from '../../src/stores/groceryStore';
 import { useMaintenanceStore } from '../../src/stores/maintenanceStore';
 import { useHealthStore } from '../../src/stores/healthStore';
 import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore';
+import { useAutomationStore, HAEvent, SuggestedAction } from '../../src/stores/automationStore';
 
 const COLORS = {
-  bg: '#0A1628',
+  bg:      '#0A1628',
   surface: '#162035',
-  accent: '#4FC3F7',
-  white: '#F8FAFF',
-  muted: '#8899AA',
-  danger: '#FF6B6B',
+  accent:  '#4FC3F7',
+  white:   '#F8FAFF',
+  muted:   '#8899AA',
+  danger:  '#FF6B6B',
   success: '#06D6A0',
+  warning: '#FFD166',
 };
 
 const MODULE_INFO: Record<string, { bg: string; accent: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  documents: { bg: '#1A3A5C', accent: '#4FC3F7', icon: 'document-text' },
-  bills: { bg: '#2D1B4E', accent: '#C77DFF', icon: 'card' },
-  grocery: { bg: '#1A3A2A', accent: '#06D6A0', icon: 'basket' },
+  documents:   { bg: '#1A3A5C', accent: '#4FC3F7', icon: 'document-text' },
+  bills:       { bg: '#2D1B4E', accent: '#C77DFF', icon: 'card' },
+  grocery:     { bg: '#1A3A2A', accent: '#06D6A0', icon: 'basket' },
   maintenance: { bg: '#3A2A0A', accent: '#FFD166', icon: 'construct' },
-  health: { bg: '#3A0A1A', accent: '#FF6B6B', icon: 'heart' },
+  health:      { bg: '#3A0A1A', accent: '#FF6B6B', icon: 'heart' },
 };
 
 export default function DashboardScreen() {
@@ -40,15 +42,16 @@ export default function DashboardScreen() {
   const { tasks = [], fetchTasks } = useMaintenanceStore();
   const { triageHistory = [], fetchMedications } = useHealthStore();
   const { dashboardSummary, fetchDashboardSummary } = useChiefOfStaffStore();
+  const { status: haStatus, events: haEvents, fetchStatus: fetchHAStatus, fetchEvents: fetchHAEvents, executeAction } = useAutomationStore();
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
-  const loading = false;
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     loadAll();
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start();
   }, []);
@@ -58,30 +61,67 @@ export default function DashboardScreen() {
     fetchBills(); fetchMonthlyReport();
     fetchInventory(); fetchTasks();
     fetchMedications(); fetchDashboardSummary();
+    // HA data — only if connected
+    fetchHAStatus();
+    fetchHAEvents();
   };
 
-  const urgentAlerts = alerts.filter((a: any) => a.urgency === 'critical' || a.urgency === 'expired');
+  // Document alerts (expired/critical)
+  const urgentDocAlerts = alerts.filter(
+    (a: any) => a.urgency === 'critical' || a.urgency === 'expired'
+  );
+
+  // HA events that have an actionable Chief of Staff message
+  const urgentHAEvents = haEvents.filter(
+    (e: HAEvent) => e.alert_sent && e.attributes?.chief_message
+  ).slice(0, 3);
+
   const pendingTasks = tasks.filter((t: any) => !t.completed).length;
   const monthlySpend = monthlyReport?.total_spent || 0;
+  const hasUrgent    = urgentDocAlerts.length > 0 || urgentHAEvents.length > 0;
 
   const greeting = () => {
     const h = new Date().getHours();
     return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   };
 
-  // Fallback chain: user_metadata.full_name → email prefix → 'there'
   const firstName =
     user?.user_metadata?.full_name?.split(' ')[0] ||
     user?.email?.split('@')[0] ||
     'there';
+
+  const handleHAAction = async (action: SuggestedAction) => {
+    if (action.action === 'draft_claim') {
+      router.push('/(tabs)/documents');
+      return;
+    }
+    if (action.action === 'call_emergency') {
+      Alert.alert('Emergency', 'Please call your local emergency services immediately.');
+      return;
+    }
+    if (!action.entity_id) return;
+
+    setActionLoading(`${action.entity_id}_${action.action}`);
+    try {
+      await executeAction(action.entity_id, action.action);
+      Alert.alert('✅ Done', `${action.label} executed successfully.`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Action failed');
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={loadAll} tintColor={COLORS.accent} />}
+        refreshControl={
+          <RefreshControl refreshing={false} onRefresh={loadAll} tintColor={COLORS.accent} />
+        }
       >
+        {/* ── Header ── */}
         <LinearGradient colors={[COLORS.bg, '#112240']} style={styles.header}>
           <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
             <View style={styles.headerRow}>
@@ -90,8 +130,6 @@ export default function DashboardScreen() {
                 <Text style={styles.userName}>{firstName} 👋</Text>
               </View>
               <View style={{ flexDirection: 'row', gap: 10 }}>
-                {/* Profile icon — navigates to /(tabs)/profile which is hidden
-                    from the tab bar via href:null in _layout.tsx */}
                 <TouchableOpacity
                   onPress={() => router.push('/(tabs)/profile')}
                   style={styles.profileBtn}
@@ -103,6 +141,7 @@ export default function DashboardScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
             {!!dashboardSummary?.chief_message && (
               <View style={styles.chiefMsg}>
                 <Text style={styles.chiefMsgIcon}>✦</Text>
@@ -112,12 +151,15 @@ export default function DashboardScreen() {
           </Animated.View>
         </LinearGradient>
 
-        {urgentAlerts.length > 0 && (
+        {/* ── Needs Attention ── */}
+        {hasUrgent && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>⚠️ Needs Attention</Text>
-            {urgentAlerts.map((alert: any, i: number) => (
+
+            {/* Document alerts */}
+            {urgentDocAlerts.map((alert: any, i: number) => (
               <TouchableOpacity
-                key={i}
+                key={`doc-${i}`}
                 style={styles.alertCard}
                 onPress={() => router.push('/(tabs)/documents')}
               >
@@ -126,22 +168,76 @@ export default function DashboardScreen() {
                 <Ionicons name="chevron-forward" size={14} color={COLORS.muted} />
               </TouchableOpacity>
             ))}
+
+            {/* ── HA Smart Home Alerts (the moat) ── */}
+            {urgentHAEvents.map((event: HAEvent, i: number) => (
+              <View key={`ha-${i}`} style={styles.haAlertCard}>
+                {/* Chief of Staff message */}
+                <View style={styles.haAlertHeader}>
+                  <View style={styles.haAlertIconBox}>
+                    <Ionicons name="home" size={16} color={COLORS.warning} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.haAlertLabel}>SMART HOME</Text>
+                    <Text style={styles.haAlertMessage}>
+                      {event.attributes.chief_message}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Action buttons — rendered inline in the alert card */}
+                {event.attributes.suggested_actions &&
+                  event.attributes.suggested_actions.length > 0 && (
+                  <View style={styles.haActionRow}>
+                    {event.attributes.suggested_actions.map((action, j) => {
+                      const loadingKey = `${action.entity_id}_${action.action}`;
+                      const isLoading  = actionLoading === loadingKey;
+                      return (
+                        <TouchableOpacity
+                          key={j}
+                          style={[styles.haActionBtn, { borderColor: action.color }]}
+                          onPress={() => handleHAAction(action)}
+                          disabled={!!actionLoading}
+                        >
+                          {isLoading ? (
+                            <ActivityIndicator size="small" color={action.color} />
+                          ) : (
+                            <>
+                              <Ionicons
+                                name={action.icon as any}
+                                size={14}
+                                color={action.color}
+                              />
+                              <Text style={[styles.haActionBtnText, { color: action.color }]}>
+                                {action.label}
+                              </Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            ))}
           </View>
         )}
 
+        {/* ── Stats row ── */}
         <View style={styles.statsRow}>
           <StatItem value={documents.length} label="Documents" />
           <StatItem value={`$${monthlySpend.toFixed(0)}`} label="Monthly bills" />
           <StatItem value={pendingTasks} label="Tasks due" />
         </View>
 
+        {/* ── Module grid ── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Household</Text>
           <View style={styles.moduleGrid}>
             <ModuleCard
               module="documents" title="Documents"
               subtitle={`${documents.length} stored`}
-              badge={urgentAlerts.length || undefined}
+              badge={urgentDocAlerts.length || undefined}
               onPress={() => router.push('/(tabs)/documents')}
             />
             <ModuleCard
@@ -160,7 +256,11 @@ export default function DashboardScreen() {
               onPress={() => router.push('/(tabs)/maintenance')}
             />
           </View>
-          <TouchableOpacity style={styles.healthRow} onPress={() => router.push('/(tabs)/health')}>
+
+          <TouchableOpacity
+            style={styles.healthRow}
+            onPress={() => router.push('/(tabs)/health')}
+          >
             <View style={[styles.healthIcon, { backgroundColor: MODULE_INFO.health.bg }]}>
               <Ionicons name="heart" size={22} color={MODULE_INFO.health.accent} />
             </View>
@@ -172,9 +272,32 @@ export default function DashboardScreen() {
             </View>
             <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
           </TouchableOpacity>
+
+          {/* ── Smart Home status row (shows when connected) ── */}
+          {haStatus.connected && (
+            <TouchableOpacity
+              style={styles.smartHomeRow}
+              onPress={() => router.push('/(tabs)/profile')}
+            >
+              <View style={styles.smartHomeIconBox}>
+                <Ionicons name="home" size={22} color={COLORS.warning} />
+              </View>
+              <View style={styles.healthText}>
+                <Text style={styles.moduleTitle}>Smart Home</Text>
+                <Text style={styles.moduleSubtitle}>
+                  {haStatus.device_count} devices connected · Autopilot active
+                </Text>
+              </View>
+              <View style={styles.connectedDot} />
+            </TouchableOpacity>
+          )}
         </View>
 
-        <TouchableOpacity style={styles.chiefCTA} onPress={() => router.push('/(tabs)/chief-of-staff')}>
+        {/* ── Chief of Staff CTA ── */}
+        <TouchableOpacity
+          style={styles.chiefCTA}
+          onPress={() => router.push('/(tabs)/chief-of-staff')}
+        >
           <LinearGradient
             colors={['#1A3A5C', '#2D1B4E']}
             start={{ x: 0, y: 0 }}
@@ -192,6 +315,7 @@ export default function DashboardScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
+        {/* ── Upcoming expiries ── */}
         {alerts.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Upcoming Expiries</Text>
@@ -199,16 +323,16 @@ export default function DashboardScreen() {
               <View key={i} style={styles.expiryRow}>
                 <View style={[styles.expiryDot, {
                   backgroundColor:
-                    alert.urgency === 'expired' ? COLORS.danger :
+                    alert.urgency === 'expired'  ? COLORS.danger :
                     alert.urgency === 'critical' ? '#FF9F1C' :
-                    COLORS.accent
+                    COLORS.accent,
                 }]} />
                 <Text style={styles.expiryTitle} numberOfLines={1}>{alert.title}</Text>
                 <Text style={[styles.expiryDays, {
                   color:
-                    alert.urgency === 'expired' ? COLORS.danger :
+                    alert.urgency === 'expired'  ? COLORS.danger :
                     alert.urgency === 'critical' ? '#FF9F1C' :
-                    COLORS.muted
+                    COLORS.muted,
                 }]}>
                   {alert.days_until_expiry < 0 ? 'Expired' : `${alert.days_until_expiry}d`}
                 </Text>
@@ -249,66 +373,124 @@ const ModuleCard = ({ module, title, subtitle, badge, onPress }: any) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
-  header: { paddingTop: 60, paddingBottom: 28, paddingHorizontal: 24 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  greeting: { fontSize: 14, color: COLORS.muted, letterSpacing: 0.5 },
-  userName: { fontSize: 28, fontWeight: '700', color: COLORS.white, marginTop: 2 },
+  container:  { flex: 1, backgroundColor: COLORS.bg },
+  header:     { paddingTop: 60, paddingBottom: 28, paddingHorizontal: 24 },
+  headerRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  greeting:   { fontSize: 14, color: COLORS.muted, letterSpacing: 0.5 },
+  userName:   { fontSize: 28, fontWeight: '700', color: COLORS.white, marginTop: 2 },
   profileBtn: { padding: 4 },
   signOutBtn: { padding: 8, backgroundColor: COLORS.surface, borderRadius: 10 },
   chiefMsg: {
-    flexDirection: 'row', alignItems: 'flex-start', backgroundColor: 'rgba(79,195,247,0.08)',
-    borderRadius: 12, padding: 14, borderWidth: 1, borderColor: 'rgba(79,195,247,0.15)', gap: 10,
+    flexDirection: 'row', alignItems: 'flex-start',
+    backgroundColor: 'rgba(79,195,247,0.08)', borderRadius: 12,
+    padding: 14, borderWidth: 1, borderColor: 'rgba(79,195,247,0.15)', gap: 10,
   },
   chiefMsgIcon: { fontSize: 14, color: COLORS.accent, marginTop: 1 },
   chiefMsgText: { flex: 1, fontSize: 13, color: '#B8D4E8', lineHeight: 19, fontStyle: 'italic' },
-  section: { paddingHorizontal: 20, marginBottom: 8 },
+  section:      { paddingHorizontal: 20, marginBottom: 8 },
   sectionTitle: { fontSize: 13, fontWeight: '600', color: COLORS.muted, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 12, marginTop: 8 },
+
+  // Document alert card
   alertCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,107,107,0.08)',
-    borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,107,107,0.2)', gap: 10,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,107,107,0.08)', borderRadius: 10,
+    padding: 12, marginBottom: 8,
+    borderWidth: 1, borderColor: 'rgba(255,107,107,0.2)', gap: 10,
   },
   alertText: { flex: 1, fontSize: 13, color: '#FFB3B3' },
-  statsRow: {
-    flexDirection: 'row', marginHorizontal: 20, marginBottom: 28, backgroundColor: COLORS.surface,
-    borderRadius: 16, padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+
+  // ── HA smart home alert card ──
+  haAlertCard: {
+    backgroundColor: 'rgba(255,209,102,0.06)', borderRadius: 14,
+    padding: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: 'rgba(255,209,102,0.25)',
   },
-  statCard: { flex: 1, alignItems: 'center' },
+  haAlertHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
+  haAlertIconBox: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: 'rgba(255,209,102,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  haAlertLabel:   { fontSize: 10, fontWeight: '700', color: COLORS.warning, letterSpacing: 1, marginBottom: 3 },
+  haAlertMessage: { fontSize: 13, color: '#E8D8A0', lineHeight: 19 },
+  haActionRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  haActionBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 20, borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  haActionBtnText: { fontSize: 12, fontWeight: '600' },
+
+  statsRow: {
+    flexDirection: 'row', marginHorizontal: 20, marginBottom: 28,
+    backgroundColor: COLORS.surface, borderRadius: 16, padding: 20,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+  },
+  statCard:  { flex: 1, alignItems: 'center' },
   statValue: { fontSize: 22, fontWeight: '700', color: COLORS.white, marginBottom: 4 },
   statLabel: { fontSize: 11, color: COLORS.muted, letterSpacing: 0.3 },
+
   moduleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 12 },
   moduleCard: {
     width: '47%', backgroundColor: COLORS.surface, borderRadius: 16, padding: 16,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
   },
   moduleIcon: {
-    width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    width: 44, height: 44, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
     marginBottom: 12, position: 'relative',
   },
   moduleBadge: {
-    position: 'absolute', top: -4, right: -4, backgroundColor: COLORS.danger, borderRadius: 8,
-    minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
+    position: 'absolute', top: -4, right: -4,
+    backgroundColor: COLORS.danger, borderRadius: 8,
+    minWidth: 16, height: 16,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
   },
   moduleBadgeText: { fontSize: 10, color: COLORS.white, fontWeight: '700' },
-  moduleTitle: { fontSize: 14, fontWeight: '600', color: COLORS.white, marginBottom: 3 },
-  moduleSubtitle: { fontSize: 12, color: COLORS.muted },
+  moduleTitle:     { fontSize: 14, fontWeight: '600', color: COLORS.white, marginBottom: 3 },
+  moduleSubtitle:  { fontSize: 12, color: COLORS.muted },
+
   healthRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 16,
-    padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', gap: 14,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.surface, borderRadius: 16,
+    padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+    gap: 14, marginBottom: 10,
   },
   healthIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   healthText: { flex: 1 },
-  chiefCTA: { marginHorizontal: 20, marginBottom: 28, borderRadius: 16, overflow: 'hidden' },
-  chiefGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18 },
-  chiefLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  chiefLeftIcon: { fontSize: 20, color: COLORS.accent },
-  chiefTitle: { fontSize: 15, fontWeight: '700', color: COLORS.white, marginBottom: 2 },
-  chiefSub: { fontSize: 12, color: COLORS.muted },
-  expiryRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 10,
-    padding: 14, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)',
+
+  // Smart home status row
+  smartHomeRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,209,102,0.05)', borderRadius: 16,
+    padding: 16, borderWidth: 1, borderColor: 'rgba(255,209,102,0.2)',
+    gap: 14,
   },
-  expiryDot: { width: 8, height: 8, borderRadius: 4 },
+  smartHomeIconBox: {
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: 'rgba(255,209,102,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  connectedDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: COLORS.success,
+  },
+
+  chiefCTA:      { marginHorizontal: 20, marginBottom: 28, borderRadius: 16, overflow: 'hidden' },
+  chiefGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18 },
+  chiefLeft:     { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  chiefLeftIcon: { fontSize: 20, color: COLORS.accent },
+  chiefTitle:    { fontSize: 15, fontWeight: '700', color: COLORS.white, marginBottom: 2 },
+  chiefSub:      { fontSize: 12, color: COLORS.muted },
+
+  expiryRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.surface, borderRadius: 10,
+    padding: 14, marginBottom: 8, gap: 12,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)',
+  },
+  expiryDot:   { width: 8, height: 8, borderRadius: 4 },
   expiryTitle: { flex: 1, fontSize: 14, color: COLORS.white },
-  expiryDays: { fontSize: 13, fontWeight: '600' },
+  expiryDays:  { fontSize: 13, fontWeight: '600' },
 });

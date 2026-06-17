@@ -1,4 +1,7 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Alert, RefreshControl } from 'react-native'
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar,
+  Alert, RefreshControl, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform
+} from 'react-native'
 import { useEffect, useState } from 'react'
 import { useBillStore } from '../../src/stores/billStore'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -12,12 +15,54 @@ const WHITE = '#F8FAFF'
 const MUTED = '#8899AA'
 const SUCCESS = '#06D6A0'
 
+const CATEGORIES = ['utilities', 'subscription', 'insurance', 'rent', 'loan', 'internet', 'phone', 'streaming', 'other']
+const BILLING_CYCLES = ['monthly', 'weekly', 'quarterly', 'annually']
+
 export default function BillsScreen() {
-  const { bills = [], monthlyReport, unusedSubscriptions = [], isLoading, fetchBills, fetchMonthlyReport, detectUnused, generateNegotiationScript } = useBillStore()
+  const { bills, monthlyReport, unusedSubscriptions, isLoading, fetchBills, fetchMonthlyReport, detectUnused, generateNegotiationScript, createBill } = useBillStore()
+
+  const [showAddModal, setShowAddModal] = useState(false)
   const [showUnused, setShowUnused] = useState(false)
   const [detectLoading, setDetectLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // Add bill form state
+  const [billName, setBillName] = useState('')
+  const [billAmount, setBillAmount] = useState('')
+  const [billCategory, setBillCategory] = useState('other')
+  const [billingCycle, setBillingCycle] = useState('monthly')
+  const [billNotes, setBillNotes] = useState('')
 
   useEffect(() => { fetchBills(); fetchMonthlyReport() }, [])
+
+  const resetForm = () => {
+    setBillName(''); setBillAmount(''); setBillCategory('other')
+    setBillingCycle('monthly'); setBillNotes('')
+  }
+
+  const handleAddBill = async () => {
+    if (!billName.trim()) { Alert.alert('Error', 'Please enter a bill name'); return }
+    const amount = parseFloat(billAmount)
+    if (!billAmount || isNaN(amount) || amount <= 0) { Alert.alert('Error', 'Please enter a valid amount'); return }
+
+    setSaving(true)
+    try {
+      await createBill({
+        provider: billName.trim(),
+        amount,
+        category: billCategory,
+        billing_cycle: billingCycle,
+        notes: billNotes.trim() || undefined,
+      })
+      setShowAddModal(false)
+      resetForm()
+      Alert.alert('✅ Bill added', `${billName} tracked successfully.`)
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.detail || 'Could not save bill. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const handleDetectUnused = async () => {
     setDetectLoading(true)
@@ -29,7 +74,7 @@ export default function BillsScreen() {
   const handleNegotiation = async (provider: string, plan: string) => {
     try {
       const script = await generateNegotiationScript(provider, plan)
-      Alert.alert('Negotiation Script', script.script)
+      Alert.alert('Negotiation Script', script.script || script.opening_line || JSON.stringify(script))
     } catch { Alert.alert('Error', 'Could not generate script') }
   }
 
@@ -38,6 +83,7 @@ export default function BillsScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+
       <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
         <Text style={styles.headerLabel}>FINANCE</Text>
         <Text style={styles.headerTitle}>Bills & Subscriptions</Text>
@@ -53,9 +99,17 @@ export default function BillsScreen() {
         </View>
       </LinearGradient>
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => { fetchBills(); fetchMonthlyReport() }} tintColor={ACCENT} />}>
-
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={() => { fetchBills(); fetchMonthlyReport() }}
+            tintColor={ACCENT}
+          />
+        }
+      >
         {monthlyReport && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Monthly Summary</Text>
@@ -93,29 +147,138 @@ export default function BillsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Bills</Text>
+
           {bills.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="card-outline" size={40} color={MUTED} />
               <Text style={styles.emptyTitle}>No bills added yet</Text>
               <Text style={styles.emptySubtitle}>Add your recurring bills to track spending</Text>
+              {/* ── ADD BILL BUTTON (empty state) ── */}
+              <TouchableOpacity style={styles.addBillBtnPrimary} onPress={() => setShowAddModal(true)}>
+                <Ionicons name="add-circle-outline" size={20} color={WHITE} />
+                <Text style={styles.addBillBtnPrimaryText}>➕ Add Manual Bill</Text>
+              </TouchableOpacity>
             </View>
           ) : (
-            bills.map((bill: any, i: number) => (
-              <View key={bill.id || i} style={styles.billCard}>
-                <View style={styles.billIconBox}>
-                  <Ionicons name="card" size={20} color={ACCENT} />
+            <>
+              {bills.map((bill: any, i: number) => (
+                <View key={bill.id || i} style={styles.billCard}>
+                  <View style={styles.billIconBox}>
+                    <Ionicons name="card" size={20} color={ACCENT} />
+                  </View>
+                  <View style={styles.billInfo}>
+                    <Text style={styles.billProvider}>{bill.provider || bill.name}</Text>
+                    <Text style={styles.billMeta}>{bill.category} · {bill.billing_cycle}</Text>
+                  </View>
+                  <Text style={styles.billAmount}>${bill.amount}</Text>
                 </View>
-                <View style={styles.billInfo}>
-                  <Text style={styles.billProvider}>{bill.provider || bill.name}</Text>
-                  <Text style={styles.billMeta}>{bill.category} · {bill.billing_cycle}</Text>
-                </View>
-                <Text style={styles.billAmount}>${bill.amount}</Text>
-              </View>
-            ))
+              ))}
+              {/* ── ADD BILL BUTTON (has bills) ── */}
+              <TouchableOpacity style={styles.addBillBtnSecondary} onPress={() => setShowAddModal(true)}>
+                <Ionicons name="add-outline" size={18} color={ACCENT} />
+                <Text style={styles.addBillBtnSecondaryText}>Add Another Bill</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
+
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* ── ADD BILL MODAL ── */}
+      <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView
+          style={styles.modal}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalHeader}>
+            <View>
+              <Text style={styles.modalTitle}>Add Bill</Text>
+              <Text style={styles.modalHint}>Track a recurring payment</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => { setShowAddModal(false); resetForm() }}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={20} color={WHITE} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={styles.fieldLabel}>Bill / Provider Name *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. Netflix, Rent, Electricity"
+              placeholderTextColor={MUTED}
+              value={billName}
+              onChangeText={setBillName}
+            />
+
+            <Text style={styles.fieldLabel}>Amount ($) *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="0.00"
+              placeholderTextColor={MUTED}
+              value={billAmount}
+              onChangeText={setBillAmount}
+              keyboardType="decimal-pad"
+            />
+
+            <Text style={styles.fieldLabel}>Category</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+              {CATEGORIES.map(cat => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.chip, billCategory === cat && styles.chipActive]}
+                  onPress={() => setBillCategory(cat)}
+                >
+                  <Text style={[styles.chipText, billCategory === cat && styles.chipTextActive]}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Text style={styles.fieldLabel}>Billing Cycle</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+              {BILLING_CYCLES.map(cycle => (
+                <TouchableOpacity
+                  key={cycle}
+                  style={[styles.chip, billingCycle === cycle && styles.chipActive]}
+                  onPress={() => setBillingCycle(cycle)}
+                >
+                  <Text style={[styles.chipText, billingCycle === cycle && styles.chipTextActive]}>
+                    {cycle}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Text style={styles.fieldLabel}>Notes (optional)</Text>
+            <TextInput
+              style={[styles.input, { minHeight: 60 }]}
+              placeholder="e.g. shared with partner, auto-renews Jan"
+              placeholderTextColor={MUTED}
+              value={billNotes}
+              onChangeText={setBillNotes}
+              multiline
+            />
+
+            <TouchableOpacity
+              style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+              onPress={handleAddBill}
+              disabled={saving}
+            >
+              {saving
+                ? <ActivityIndicator color={WHITE} />
+                : <Text style={styles.saveBtnText}>Save Bill</Text>
+              }
+            </TouchableOpacity>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   )
 }
@@ -146,10 +309,43 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 40, gap: 10 },
   emptyTitle: { fontSize: 17, fontWeight: '600', color: WHITE },
   emptySubtitle: { fontSize: 13, color: MUTED, textAlign: 'center' },
+  addBillBtnPrimary: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    backgroundColor: ACCENT, borderRadius: 14, paddingVertical: 16, paddingHorizontal: 32,
+    marginTop: 8, width: '100%',
+    shadowColor: ACCENT, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 6,
+  },
+  addBillBtnPrimaryText: { color: NAVY, fontWeight: '700', fontSize: 16 },
+  addBillBtnSecondary: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderRadius: 14, paddingVertical: 14, marginTop: 8,
+    borderWidth: 1.5, borderColor: 'rgba(199,125,255,0.35)',
+    backgroundColor: 'rgba(199,125,255,0.06)',
+  },
+  addBillBtnSecondaryText: { color: ACCENT, fontWeight: '600', fontSize: 14 },
   billCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: SURFACE, borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', gap: 12 },
   billIconBox: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(199,125,255,0.1)', alignItems: 'center', justifyContent: 'center' },
   billInfo: { flex: 1 },
   billProvider: { fontSize: 15, fontWeight: '600', color: WHITE, marginBottom: 2 },
   billMeta: { fontSize: 12, color: MUTED },
   billAmount: { fontSize: 16, fontWeight: '700', color: WHITE },
+  // Modal
+  modal: { flex: 1, backgroundColor: NAVY, padding: 24 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 24 },
+  modalTitle: { fontSize: 24, fontWeight: '700', color: WHITE, marginBottom: 4 },
+  modalHint: { fontSize: 13, color: MUTED },
+  modalClose: { padding: 6, backgroundColor: SURFACE, borderRadius: 10 },
+  fieldLabel: { fontSize: 12, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
+  input: {
+    backgroundColor: SURFACE, borderRadius: 12, padding: 16,
+    fontSize: 15, color: WHITE, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)', textAlignVertical: 'top',
+  },
+  chipRow: { flexDirection: 'row', marginBottom: 4 },
+  chip: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, backgroundColor: SURFACE, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  chipActive: { backgroundColor: 'rgba(199,125,255,0.2)', borderColor: ACCENT },
+  chipText: { fontSize: 13, color: MUTED, textTransform: 'capitalize' },
+  chipTextActive: { color: ACCENT, fontWeight: '600' },
+  saveBtn: { backgroundColor: ACCENT, borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 24 },
+  saveBtnText: { color: NAVY, fontWeight: '700', fontSize: 16 },
 })

@@ -1,23 +1,28 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  Alert, ActivityIndicator, StatusBar
+  Alert, ActivityIndicator, StatusBar, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useHouseholdStore } from '../../src/stores/householdStore';
+import { useAutomationStore } from '../../src/stores/automationStore';
 
-const NAVY = '#0A1628';
+const NAVY    = '#0A1628';
 const SURFACE = '#162035';
-const ACCENT = '#4FC3F7';
-const WHITE = '#F8FAFF';
-const MUTED = '#8899AA';
-const DANGER = '#FF6B6B';
+const ACCENT  = '#4FC3F7';
+const PURPLE  = '#C77DFF';
+const WHITE   = '#F8FAFF';
+const MUTED   = '#8899AA';
+const DANGER  = '#FF6B6B';
+const WARNING = '#FFD166';
+const SUCCESS = '#06D6A0';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuthStore();
   const { household, isLoading, fetchHousehold, updateHousehold } = useHouseholdStore();
+  const { status: haStatus, connectHA, fetchStatus: fetchHAStatus } = useAutomationStore();
 
   const [editName, setEditName] = useState(household?.name || '');
   const [editAddress, setEditAddress] = useState(household?.address || '');
@@ -25,8 +30,15 @@ export default function ProfileScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // HA connection modal state
+  const [showHAModal, setShowHAModal] = useState(false);
+  const [haUrl, setHaUrl] = useState('http://192.168.1.10:8123');
+  const [haToken, setHaToken] = useState('');
+  const [haConnecting, setHaConnecting] = useState(false);
+
   React.useEffect(() => {
     fetchHousehold();
+    fetchHAStatus();
   }, []);
 
   React.useEffect(() => {
@@ -38,39 +50,48 @@ export default function ProfileScreen() {
   }, [household]);
 
   const handleSave = async () => {
-    if (!editName.trim()) {
-      Alert.alert('Error', 'Household name cannot be empty');
-      return;
-    }
+    if (!editName.trim()) { Alert.alert('Error', 'Household name cannot be empty'); return; }
     setSaving(true);
     try {
       await updateHousehold({
-        name: editName.trim(),
+        name:    editName.trim(),
         address: editAddress.trim() || undefined,
         country: editCountry.trim() || undefined,
       });
       setIsEditing(false);
       Alert.alert('Success', 'Household updated');
     } catch (err: any) {
-      // updateHousehold applies the change locally even on network error,
-      // so the UI stays consistent — just show the error message.
-      Alert.alert('Note', err.message || 'Could not save to server — changes shown locally');
+      Alert.alert('Note', err.message || 'Changes shown locally');
       setIsEditing(false);
     } finally {
       setSaving(false);
     }
   };
 
-  // Full name fallback chain:
-  // 1. user_metadata.full_name (set correctly after today's auth.py fix + re-login)
-  // 2. user.email prefix (e.g. "eugene" from eugene@hearth.com)
-  // 3. "User" as last resort
+  const handleConnectHA = async () => {
+    if (!haUrl.trim()) { Alert.alert('Error', 'Please enter your HA URL'); return; }
+    if (!haToken.trim()) { Alert.alert('Error', 'Please enter your HA access token'); return; }
+
+    setHaConnecting(true);
+    try {
+      const result = await connectHA(haUrl.trim(), haToken.trim());
+      setShowHAModal(false);
+      setHaToken('');
+      Alert.alert(
+        '🏠 Connected!',
+        result.message || `Hearth is now connected to ${result.device_count} household devices.`
+      );
+    } catch (err: any) {
+      Alert.alert('Connection Failed', err.message || 'Could not reach Home Assistant. Check your URL and token.');
+    } finally {
+      setHaConnecting(false);
+    }
+  };
+
   const displayName =
     user?.user_metadata?.full_name ||
     user?.email?.split('@')[0] ||
     'User';
-
-  const email = user?.email || '';
 
   const avatarLetter = displayName.charAt(0).toUpperCase();
 
@@ -78,6 +99,7 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
       <ScrollView contentContainerStyle={styles.content}>
+
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -87,24 +109,24 @@ export default function ProfileScreen() {
           <View style={{ width: 32 }} />
         </View>
 
-        {/* Personal Profile (Read-only) */}
+        {/* Personal info */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Personal Information</Text>
+          <Text style={styles.sectionLabel}>Personal Information</Text>
           <View style={styles.avatarRow}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{avatarLetter}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.infoName}>{displayName}</Text>
-              <Text style={styles.infoEmail}>{email}</Text>
+              <Text style={styles.infoEmail}>{user?.email || ''}</Text>
             </View>
           </View>
         </View>
 
-        {/* Household Info (Editable) */}
+        {/* Household info */}
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Household</Text>
+            <Text style={styles.sectionLabel}>Household</Text>
             {!isEditing ? (
               <TouchableOpacity onPress={() => setIsEditing(true)}>
                 <Ionicons name="pencil" size={18} color={ACCENT} />
@@ -118,36 +140,16 @@ export default function ProfileScreen() {
 
           {isEditing ? (
             <>
-              <TextInput
-                style={styles.input}
-                value={editName}
-                onChangeText={setEditName}
-                placeholder="Household name"
-                placeholderTextColor={MUTED}
-              />
-              <TextInput
-                style={styles.input}
-                value={editAddress}
-                onChangeText={setEditAddress}
-                placeholder="Address (optional)"
-                placeholderTextColor={MUTED}
-              />
-              <TextInput
-                style={styles.input}
-                value={editCountry}
-                onChangeText={setEditCountry}
-                placeholder="Country"
-                placeholderTextColor={MUTED}
-              />
-              <TouchableOpacity
-                style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-                onPress={handleSave}
-                disabled={saving}
-              >
-                {saving
-                  ? <ActivityIndicator color={WHITE} />
-                  : <Text style={styles.saveBtnText}>Save Changes</Text>
-                }
+              <TextInput style={styles.input} value={editName} onChangeText={setEditName}
+                placeholder="Household name" placeholderTextColor={MUTED} />
+              <TextInput style={styles.input} value={editAddress} onChangeText={setEditAddress}
+                placeholder="Address (optional)" placeholderTextColor={MUTED} />
+              <TextInput style={styles.input} value={editCountry} onChangeText={setEditCountry}
+                placeholder="Country" placeholderTextColor={MUTED} />
+              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+                onPress={handleSave} disabled={saving}>
+                {saving ? <ActivityIndicator color={WHITE} /> :
+                  <Text style={styles.saveBtnText}>Save Changes</Text>}
               </TouchableOpacity>
             </>
           ) : (
@@ -168,13 +170,63 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Sign Out */}
+        {/* ── Smart Home / Home Assistant ── */}
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>Smart Home</Text>
+
+          {haStatus.connected ? (
+            <>
+              <View style={styles.haConnectedRow}>
+                <View style={styles.haConnectedDot} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.haConnectedText}>Home Assistant Connected</Text>
+                  <Text style={styles.haConnectedSub}>
+                    {haStatus.device_count} devices · Autopilot active
+                  </Text>
+                </View>
+                <Ionicons name="checkmark-circle" size={22} color={SUCCESS} />
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Instance URL</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>
+                  {haStatus.ha_instance_url}
+                </Text>
+              </View>
+              {haStatus.last_sync_at && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Last synced</Text>
+                  <Text style={styles.infoValue}>
+                    {new Date(haStatus.last_sync_at).toLocaleTimeString('en-GB', {
+                      hour: '2-digit', minute: '2-digit',
+                    })}
+                  </Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.reconnectBtn}
+                onPress={() => setShowHAModal(true)}
+              >
+                <Text style={styles.reconnectBtnText}>Reconnect / Change Instance</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.haDescription}>
+                Connect Home Assistant to give your Chief of Staff eyes and ears in
+                the physical home — detect leaks, lock doors, and get cross-domain alerts.
+              </Text>
+              <TouchableOpacity style={styles.connectHABtn} onPress={() => setShowHAModal(true)}>
+                <Ionicons name="home-outline" size={18} color={NAVY} />
+                <Text style={styles.connectHABtnText}>🔌 Connect Smart Home</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* Sign out */}
         <TouchableOpacity
           style={styles.signOutBtn}
-          onPress={() => {
-            signOut();
-            router.replace('/(auth)/login');
-          }}
+          onPress={() => { signOut(); router.replace('/(auth)/login'); }}
         >
           <Ionicons name="log-out-outline" size={18} color={DANGER} />
           <Text style={styles.signOutText}>Sign Out</Text>
@@ -182,46 +234,128 @@ export default function ProfileScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* ── Connect HA Modal ── */}
+      <Modal visible={showHAModal} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView
+          style={styles.modal}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalHeader}>
+            <View>
+              <Text style={styles.modalTitle}>Connect Smart Home</Text>
+              <Text style={styles.modalHint}>Home Assistant instance</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => { setShowHAModal(false); setHaToken(''); }}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={20} color={WHITE} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.fieldLabel}>Home Assistant URL</Text>
+          <TextInput
+            style={styles.input}
+            value={haUrl}
+            onChangeText={setHaUrl}
+            placeholder="http://192.168.1.10:8123"
+            placeholderTextColor={MUTED}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+
+          <Text style={styles.fieldLabel}>Long-lived Access Token</Text>
+          <TextInput
+            style={[styles.input, { minHeight: 80 }]}
+            value={haToken}
+            onChangeText={setHaToken}
+            placeholder="Paste your HA long-lived access token here"
+            placeholderTextColor={MUTED}
+            secureTextEntry
+            multiline
+          />
+
+          <View style={styles.haHelpBox}>
+            <Ionicons name="information-circle-outline" size={16} color={MUTED} />
+            <Text style={styles.haHelpText}>
+              In Home Assistant: Profile → Security → Long-lived access tokens → Create Token
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.connectHABtn, { marginTop: 24 }, haConnecting && { opacity: 0.6 }]}
+            onPress={handleConnectHA}
+            disabled={haConnecting}
+          >
+            {haConnecting ? (
+              <ActivityIndicator color={NAVY} />
+            ) : (
+              <>
+                <Ionicons name="wifi-outline" size={18} color={NAVY} />
+                <Text style={styles.connectHABtnText}>Test & Connect</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <View style={{ height: 40 }} />
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: NAVY },
-  content: { padding: 20 },
+  content:   { padding: 20 },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 30, marginTop: 20,
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 30, marginTop: 20,
   },
   backBtn: { padding: 6 },
-  title: { fontSize: 20, fontWeight: '700', color: WHITE },
+  title:   { fontSize: 20, fontWeight: '700', color: WHITE },
   card: {
     backgroundColor: SURFACE, borderRadius: 16, padding: 20, marginBottom: 20,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
   },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { fontSize: 12, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 16 },
-  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  sectionLabel:  { fontSize: 12, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 16 },
+  avatarRow:     { flexDirection: 'row', alignItems: 'center', gap: 14 },
   avatar: {
-    width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(79,195,247,0.2)',
-    alignItems: 'center', justifyContent: 'center',
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: 'rgba(79,195,247,0.2)', alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { fontSize: 22, fontWeight: '700', color: ACCENT },
-  infoName: { fontSize: 18, fontWeight: '600', color: WHITE },
-  infoEmail: { fontSize: 13, color: MUTED, marginTop: 2 },
-  infoRow: { marginBottom: 12 },
-  infoLabel: { fontSize: 11, color: MUTED, marginBottom: 2 },
-  infoValue: { fontSize: 16, color: WHITE },
+  avatarText:  { fontSize: 22, fontWeight: '700', color: ACCENT },
+  infoName:    { fontSize: 18, fontWeight: '600', color: WHITE },
+  infoEmail:   { fontSize: 13, color: MUTED, marginTop: 2 },
+  infoRow:     { marginBottom: 12 },
+  infoLabel:   { fontSize: 11, color: MUTED, marginBottom: 2 },
+  infoValue:   { fontSize: 16, color: WHITE },
   input: {
     backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: 14,
     fontSize: 15, color: WHITE, marginBottom: 12,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  saveBtn: {
-    backgroundColor: ACCENT, borderRadius: 12, padding: 14,
-    alignItems: 'center', marginTop: 10,
-  },
+  saveBtn:     { backgroundColor: ACCENT, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 10 },
   saveBtnText: { color: NAVY, fontWeight: '700', fontSize: 15 },
+
+  // Smart home section
+  haConnectedRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  haConnectedDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: SUCCESS },
+  haConnectedText: { fontSize: 15, fontWeight: '600', color: WHITE },
+  haConnectedSub:  { fontSize: 12, color: MUTED, marginTop: 2 },
+  reconnectBtn: {
+    marginTop: 12, paddingVertical: 10, alignItems: 'center',
+    borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  reconnectBtnText: { color: MUTED, fontSize: 13 },
+  haDescription: { fontSize: 13, color: MUTED, lineHeight: 20, marginBottom: 16 },
+  connectHABtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10, backgroundColor: WARNING, borderRadius: 14, padding: 16,
+  },
+  connectHABtnText: { color: NAVY, fontWeight: '700', fontSize: 15 },
+
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 10, padding: 14, borderRadius: 14,
@@ -229,4 +363,17 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,107,107,0.2)',
   },
   signOutText: { color: DANGER, fontSize: 15, fontWeight: '600' },
+
+  // Modal
+  modal:       { flex: 1, backgroundColor: NAVY, padding: 24 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 24 },
+  modalTitle:  { fontSize: 24, fontWeight: '700', color: WHITE, marginBottom: 4 },
+  modalHint:   { fontSize: 13, color: MUTED },
+  modalClose:  { padding: 6, backgroundColor: SURFACE, borderRadius: 10 },
+  fieldLabel:  { fontSize: 12, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
+  haHelpBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 12, marginTop: 4,
+  },
+  haHelpText: { flex: 1, fontSize: 12, color: MUTED, lineHeight: 18 },
 });

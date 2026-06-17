@@ -9,6 +9,14 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// ---- Unauthorized Handler ----
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export const setUnauthorizedHandler = (handler: UnauthorizedHandler) => {
+  unauthorizedHandler = handler;
+};
+
 // ---- Request Interceptor ----
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
@@ -21,17 +29,6 @@ api.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 );
-
-// ---- Unauthorized Handler ----
-// Registered by authStore/_layout so the interceptor can trigger a clean
-// logout (session = null → redirect to login) instead of leaving the app
-// "logged in" with a wiped token and every request 401ing forever.
-type UnauthorizedHandler = () => void;
-let unauthorizedHandler: UnauthorizedHandler | null = null;
-
-export const setUnauthorizedHandler = (handler: UnauthorizedHandler) => {
-  unauthorizedHandler = handler;
-};
 
 // ---- Response Interceptor ----
 api.interceptors.response.use(
@@ -50,10 +47,8 @@ api.interceptors.response.use(
 export const authService = {
   signIn: (email: string, password: string) =>
     api.post('/api/auth/signin', { email, password }),
-
   signUp: (email: string, password: string, fullName?: string) =>
     api.post('/api/auth/signup', { email, password, full_name: fullName }),
-
   signOut: () => api.post('/api/auth/signout'),
 };
 
@@ -62,6 +57,8 @@ export const householdService = {
   get: () => api.get('/api/household/'),
   create: (data: { name: string; address?: string; country?: string }) =>
     api.post('/api/household/', data),
+  update: (householdId: string, data: { name?: string; address?: string; country?: string }) =>
+    api.patch(`/api/household/${householdId}`, data),
   getMembers: () => api.get('/api/household/members'),
 };
 
@@ -71,7 +68,7 @@ export const documentService = {
   upload: (formData: FormData) =>
     api.post('/api/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 60000, // Vision extraction takes time
+      timeout: 60000,
     }),
   delete: (id: string) => api.delete(`/api/documents/${id}`),
   getExpiring: () => api.get('/api/documents/expiring'),
@@ -85,7 +82,11 @@ export const billService = {
   analyze: (billData: any) => api.post('/api/bills/analyze', billData),
   detectUnused: (bills: any[]) => api.post('/api/bills/detect-unused', { bills }),
   negotiationScript: (provider: string, currentPlan: string, accountAgeMonths = 12) =>
-    api.post('/api/bills/negotiation-script', { provider, current_plan: currentPlan, account_age_months: accountAgeMonths }),
+    api.post('/api/bills/negotiation-script', {
+      provider,
+      current_plan: currentPlan,
+      account_age_months: accountAgeMonths,
+    }),
   monthlyReport: () => api.get('/api/bills/monthly-report'),
 };
 
@@ -100,7 +101,11 @@ export const groceryService = {
   wasteAlert: (inventory: any[]) =>
     api.post('/api/grocery/waste-alert', { inventory }),
   modifyMeal: (currentPlan: any, day: string, newPreference: string) =>
-    api.post('/api/grocery/meal-plan/modify', { current_plan: currentPlan, day, new_preference: newPreference }),
+    api.post('/api/grocery/meal-plan/modify', {
+      current_plan: currentPlan,
+      day,
+      new_preference: newPreference,
+    }),
 };
 
 // ==================== MAINTENANCE ====================
@@ -139,7 +144,26 @@ export const chiefService = {
       context: context || {},
     }),
   dashboardSummary: (householdData?: any) =>
-    api.post('/api/chief/dashboard-summary', { household_data: householdData || {} }),
+    api.post('/api/chief/dashboard-summary', {
+      household_data: householdData || {},
+    }),
+};
+
+// ==================== AUTOMATION (Home Assistant) ====================
+export const automationService = {
+  getStatus: () =>
+    api.get('/api/automation/status'),
+  connect: (haInstanceUrl: string, haAccessToken: string) =>
+    api.post('/api/automation/connect', {
+      ha_instance_url: haInstanceUrl,
+      ha_access_token: haAccessToken,
+    }),
+  getDevices: () =>
+    api.get('/api/automation/devices'),
+  getEvents: (limit = 20) =>
+    api.get(`/api/automation/events?limit=${limit}`),
+  executeAction: (entityId: string, action: string, payload: any = {}) =>
+    api.post('/api/automation/action', { entity_id: entityId, action, payload }),
 };
 
 // ==================== NOTIFICATIONS ====================
