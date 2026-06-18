@@ -42,10 +42,15 @@ export default function DashboardScreen() {
   const { tasks = [], fetchTasks } = useMaintenanceStore();
   const { triageHistory = [], fetchMedications } = useHealthStore();
   const { dashboardSummary, fetchDashboardSummary } = useChiefOfStaffStore();
-  const { status: haStatus, events: haEvents, fetchStatus: fetchHAStatus, fetchEvents: fetchHAEvents, executeAction } = useAutomationStore();
+  const {
+    status: haStatus, events: haEvents,
+    fetchStatus: fetchHAStatus, fetchEvents: fetchHAEvents,
+    executeAction,
+  } = useAutomationStore();
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+  const fabAnim   = useRef(new Animated.Value(0)).current;
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,6 +58,7 @@ export default function DashboardScreen() {
     Animated.parallel([
       Animated.timing(fadeAnim,  { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+      Animated.spring(fabAnim,   { toValue: 1, useNativeDriver: true, friction: 5, tension: 60, delay: 800 }),
     ]).start();
   }, []);
 
@@ -61,17 +67,12 @@ export default function DashboardScreen() {
     fetchBills(); fetchMonthlyReport();
     fetchInventory(); fetchTasks();
     fetchMedications(); fetchDashboardSummary();
-    // HA data — only if connected
-    fetchHAStatus();
-    fetchHAEvents();
+    fetchHAStatus(); fetchHAEvents();
   };
 
-  // Document alerts (expired/critical)
   const urgentDocAlerts = alerts.filter(
     (a: any) => a.urgency === 'critical' || a.urgency === 'expired'
   );
-
-  // HA events that have an actionable Chief of Staff message
   const urgentHAEvents = haEvents.filter(
     (e: HAEvent) => e.alert_sent && e.attributes?.chief_message
   ).slice(0, 3);
@@ -91,16 +92,12 @@ export default function DashboardScreen() {
     'there';
 
   const handleHAAction = async (action: SuggestedAction) => {
-    if (action.action === 'draft_claim') {
-      router.push('/(tabs)/documents');
-      return;
-    }
+    if (action.action === 'draft_claim') { router.push('/(tabs)/documents'); return; }
     if (action.action === 'call_emergency') {
       Alert.alert('Emergency', 'Please call your local emergency services immediately.');
       return;
     }
     if (!action.entity_id) return;
-
     setActionLoading(`${action.entity_id}_${action.action}`);
     try {
       await executeAction(action.entity_id, action.action);
@@ -115,13 +112,14 @@ export default function DashboardScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={false} onRefresh={loadAll} tintColor={COLORS.accent} />
         }
       >
-        {/* ── Header ── */}
+        {/* Header */}
         <LinearGradient colors={[COLORS.bg, '#112240']} style={styles.header}>
           <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
             <View style={styles.headerRow}>
@@ -141,7 +139,6 @@ export default function DashboardScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-
             {!!dashboardSummary?.chief_message && (
               <View style={styles.chiefMsg}>
                 <Text style={styles.chiefMsgIcon}>✦</Text>
@@ -151,12 +148,10 @@ export default function DashboardScreen() {
           </Animated.View>
         </LinearGradient>
 
-        {/* ── Needs Attention ── */}
+        {/* Needs Attention */}
         {hasUrgent && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>⚠️ Needs Attention</Text>
-
-            {/* Document alerts */}
             {urgentDocAlerts.map((alert: any, i: number) => (
               <TouchableOpacity
                 key={`doc-${i}`}
@@ -168,26 +163,18 @@ export default function DashboardScreen() {
                 <Ionicons name="chevron-forward" size={14} color={COLORS.muted} />
               </TouchableOpacity>
             ))}
-
-            {/* ── HA Smart Home Alerts (the moat) ── */}
             {urgentHAEvents.map((event: HAEvent, i: number) => (
               <View key={`ha-${i}`} style={styles.haAlertCard}>
-                {/* Chief of Staff message */}
                 <View style={styles.haAlertHeader}>
                   <View style={styles.haAlertIconBox}>
                     <Ionicons name="home" size={16} color={COLORS.warning} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.haAlertLabel}>SMART HOME</Text>
-                    <Text style={styles.haAlertMessage}>
-                      {event.attributes.chief_message}
-                    </Text>
+                    <Text style={styles.haAlertMessage}>{event.attributes.chief_message}</Text>
                   </View>
                 </View>
-
-                {/* Action buttons — rendered inline in the alert card */}
-                {event.attributes.suggested_actions &&
-                  event.attributes.suggested_actions.length > 0 && (
+                {event.attributes.suggested_actions && event.attributes.suggested_actions.length > 0 && (
                   <View style={styles.haActionRow}>
                     {event.attributes.suggested_actions.map((action, j) => {
                       const loadingKey = `${action.entity_id}_${action.action}`;
@@ -203,11 +190,7 @@ export default function DashboardScreen() {
                             <ActivityIndicator size="small" color={action.color} />
                           ) : (
                             <>
-                              <Ionicons
-                                name={action.icon as any}
-                                size={14}
-                                color={action.color}
-                              />
+                              <Ionicons name={action.icon as any} size={14} color={action.color} />
                               <Text style={[styles.haActionBtnText, { color: action.color }]}>
                                 {action.label}
                               </Text>
@@ -223,44 +206,33 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* ── Stats row ── */}
+        {/* Stats */}
         <View style={styles.statsRow}>
           <StatItem value={documents.length} label="Documents" />
           <StatItem value={`$${monthlySpend.toFixed(0)}`} label="Monthly bills" />
           <StatItem value={pendingTasks} label="Tasks due" />
         </View>
 
-        {/* ── Module grid ── */}
+        {/* Module grid */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Household</Text>
           <View style={styles.moduleGrid}>
-            <ModuleCard
-              module="documents" title="Documents"
+            <ModuleCard module="documents" title="Documents"
               subtitle={`${documents.length} stored`}
               badge={urgentDocAlerts.length || undefined}
-              onPress={() => router.push('/(tabs)/documents')}
-            />
-            <ModuleCard
-              module="bills" title="Bills"
+              onPress={() => router.push('/(tabs)/documents')} />
+            <ModuleCard module="bills" title="Bills"
               subtitle={bills.length ? `${bills.length} active` : 'Add first bill'}
-              onPress={() => router.push('/(tabs)/bills')}
-            />
-            <ModuleCard
-              module="grocery" title="Grocery"
+              onPress={() => router.push('/(tabs)/bills')} />
+            <ModuleCard module="grocery" title="Grocery"
               subtitle={inventory.length ? `${inventory.length} items` : 'Plan meals'}
-              onPress={() => router.push('/(tabs)/grocery')}
-            />
-            <ModuleCard
-              module="maintenance" title="Maintenance"
+              onPress={() => router.push('/(tabs)/grocery')} />
+            <ModuleCard module="maintenance" title="Maintenance"
               subtitle={pendingTasks > 0 ? `${pendingTasks} pending` : 'All clear'}
-              onPress={() => router.push('/(tabs)/maintenance')}
-            />
+              onPress={() => router.push('/(tabs)/maintenance')} />
           </View>
 
-          <TouchableOpacity
-            style={styles.healthRow}
-            onPress={() => router.push('/(tabs)/health')}
-          >
+          <TouchableOpacity style={styles.healthRow} onPress={() => router.push('/(tabs)/health')}>
             <View style={[styles.healthIcon, { backgroundColor: MODULE_INFO.health.bg }]}>
               <Ionicons name="heart" size={22} color={MODULE_INFO.health.accent} />
             </View>
@@ -273,7 +245,6 @@ export default function DashboardScreen() {
             <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
           </TouchableOpacity>
 
-          {/* ── Smart Home status row (shows when connected) ── */}
           {haStatus.connected && (
             <TouchableOpacity
               style={styles.smartHomeRow}
@@ -285,7 +256,7 @@ export default function DashboardScreen() {
               <View style={styles.healthText}>
                 <Text style={styles.moduleTitle}>Smart Home</Text>
                 <Text style={styles.moduleSubtitle}>
-                  {haStatus.device_count} devices connected · Autopilot active
+                  {haStatus.device_count} devices · Autopilot active
                 </Text>
               </View>
               <View style={styles.connectedDot} />
@@ -293,15 +264,11 @@ export default function DashboardScreen() {
           )}
         </View>
 
-        {/* ── Chief of Staff CTA ── */}
-        <TouchableOpacity
-          style={styles.chiefCTA}
-          onPress={() => router.push('/(tabs)/chief-of-staff')}
-        >
+        {/* Chief CTA */}
+        <TouchableOpacity style={styles.chiefCTA} onPress={() => router.push('/(tabs)/chief-of-staff')}>
           <LinearGradient
             colors={['#1A3A5C', '#2D1B4E']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
             style={styles.chiefGradient}
           >
             <View style={styles.chiefLeft}>
@@ -315,7 +282,7 @@ export default function DashboardScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* ── Upcoming expiries ── */}
+        {/* Upcoming expiries */}
         {alerts.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Upcoming Expiries</Text>
@@ -324,15 +291,13 @@ export default function DashboardScreen() {
                 <View style={[styles.expiryDot, {
                   backgroundColor:
                     alert.urgency === 'expired'  ? COLORS.danger :
-                    alert.urgency === 'critical' ? '#FF9F1C' :
-                    COLORS.accent,
+                    alert.urgency === 'critical' ? '#FF9F1C' : COLORS.accent,
                 }]} />
                 <Text style={styles.expiryTitle} numberOfLines={1}>{alert.title}</Text>
                 <Text style={[styles.expiryDays, {
                   color:
                     alert.urgency === 'expired'  ? COLORS.danger :
-                    alert.urgency === 'critical' ? '#FF9F1C' :
-                    COLORS.muted,
+                    alert.urgency === 'critical' ? '#FF9F1C' : COLORS.muted,
                 }]}>
                   {alert.days_until_expiry < 0 ? 'Expired' : `${alert.days_until_expiry}d`}
                 </Text>
@@ -341,8 +306,32 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* ── Scan Anything FAB ── */}
+      <Animated.View style={[
+        styles.fab,
+        {
+          opacity: fabAnim,
+          transform: [{ scale: fabAnim }],
+        }
+      ]}>
+        <TouchableOpacity
+          style={styles.fabBtn}
+          onPress={() => router.push('/(tabs)/scan')}
+          activeOpacity={0.85}
+        >
+          <LinearGradient
+            colors={['#4FC3F7', '#C77DFF']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={styles.fabGradient}
+          >
+            <Ionicons name="scan-outline" size={22} color={COLORS.bg} />
+            <Text style={styles.fabText}>Scan</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
     </View>
   );
 }
@@ -389,8 +378,6 @@ const styles = StyleSheet.create({
   chiefMsgText: { flex: 1, fontSize: 13, color: '#B8D4E8', lineHeight: 19, fontStyle: 'italic' },
   section:      { paddingHorizontal: 20, marginBottom: 8 },
   sectionTitle: { fontSize: 13, fontWeight: '600', color: COLORS.muted, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 12, marginTop: 8 },
-
-  // Document alert card
   alertCard: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(255,107,107,0.08)', borderRadius: 10,
@@ -398,14 +385,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,107,107,0.2)', gap: 10,
   },
   alertText: { flex: 1, fontSize: 13, color: '#FFB3B3' },
-
-  // ── HA smart home alert card ──
   haAlertCard: {
     backgroundColor: 'rgba(255,209,102,0.06)', borderRadius: 14,
     padding: 14, marginBottom: 10,
     borderWidth: 1, borderColor: 'rgba(255,209,102,0.25)',
   },
-  haAlertHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
+  haAlertHeader:  { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
   haAlertIconBox: {
     width: 32, height: 32, borderRadius: 8,
     backgroundColor: 'rgba(255,209,102,0.12)',
@@ -421,7 +406,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
   haActionBtnText: { fontSize: 12, fontWeight: '600' },
-
   statsRow: {
     flexDirection: 'row', marginHorizontal: 20, marginBottom: 28,
     backgroundColor: COLORS.surface, borderRadius: 16, padding: 20,
@@ -430,7 +414,6 @@ const styles = StyleSheet.create({
   statCard:  { flex: 1, alignItems: 'center' },
   statValue: { fontSize: 22, fontWeight: '700', color: COLORS.white, marginBottom: 4 },
   statLabel: { fontSize: 11, color: COLORS.muted, letterSpacing: 0.3 },
-
   moduleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 12 },
   moduleCard: {
     width: '47%', backgroundColor: COLORS.surface, borderRadius: 16, padding: 16,
@@ -448,9 +431,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
   },
   moduleBadgeText: { fontSize: 10, color: COLORS.white, fontWeight: '700' },
-  moduleTitle:     { fontSize: 14, fontWeight: '600', color: COLORS.white, marginBottom: 3 },
-  moduleSubtitle:  { fontSize: 12, color: COLORS.muted },
-
+  moduleTitle:    { fontSize: 14, fontWeight: '600', color: COLORS.white, marginBottom: 3 },
+  moduleSubtitle: { fontSize: 12, color: COLORS.muted },
   healthRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.surface, borderRadius: 16,
@@ -459,8 +441,6 @@ const styles = StyleSheet.create({
   },
   healthIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   healthText: { flex: 1 },
-
-  // Smart home status row
   smartHomeRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(255,209,102,0.05)', borderRadius: 16,
@@ -472,18 +452,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,209,102,0.1)',
     alignItems: 'center', justifyContent: 'center',
   },
-  connectedDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: COLORS.success,
-  },
-
+  connectedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.success },
   chiefCTA:      { marginHorizontal: 20, marginBottom: 28, borderRadius: 16, overflow: 'hidden' },
   chiefGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18 },
   chiefLeft:     { flexDirection: 'row', alignItems: 'center', gap: 14 },
   chiefLeftIcon: { fontSize: 20, color: COLORS.accent },
   chiefTitle:    { fontSize: 15, fontWeight: '700', color: COLORS.white, marginBottom: 2 },
   chiefSub:      { fontSize: 12, color: COLORS.muted },
-
   expiryRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.surface, borderRadius: 10,
@@ -493,4 +468,14 @@ const styles = StyleSheet.create({
   expiryDot:   { width: 8, height: 8, borderRadius: 4 },
   expiryTitle: { flex: 1, fontSize: 14, color: COLORS.white },
   expiryDays:  { fontSize: 13, fontWeight: '600' },
+
+  // ── Scan FAB ──
+  fab: {
+    position: 'absolute',
+    bottom: 28,
+    right: 20,
+  },
+  fabBtn:      { borderRadius: 28, overflow: 'hidden', elevation: 8, shadowColor: '#4FC3F7', shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
+  fabGradient: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 14 },
+  fabText:     { color: COLORS.bg, fontWeight: '700', fontSize: 15 },
 });

@@ -9,37 +9,33 @@ from app.agents.health_agent import HealthAgent
 
 
 class ChiefOfStaffAgent(BaseHouseholdAgent):
-    """
-    The central AI brain of Hearth.
-    Uses Claude for complex reasoning and conversation (heavy tasks).
-    Uses NVIDIA for fast/light tasks (intent classification, simple summaries).
-    """
 
     SYSTEM_PROMPT = """You are Hearth's Chief of Staff AI — a warm, intelligent, and proactive assistant.
-You help households manage documents, bills, groceries, maintenance, and health.
+You help households manage documents, bills, groceries, maintenance, health, and smart home devices.
 
 IMPORTANT RULES:
 - Always remember and reference what the user told you earlier in the conversation.
 - If the user shared their name, partner's name, or any personal detail — remember it.
 - Never contradict something you were told earlier.
-- Be warm, concise, and genuinely helpful.
+- Be warm, concise, and genuinely helpful — no markdown, no bullet points, plain conversational text only.
+- When smart home alerts are present, treat them as the highest priority items.
+- Cross-reference smart home events with documents when relevant (e.g. leak → insurance policy).
 - Reference household context when relevant.
 - If you don't have enough information, ask clarifying questions politely."""
 
     def __init__(self, household_id: str, user_id: str):
         super().__init__(household_id, user_id)
-        self.document_agent = DocumentAgent(household_id, user_id)
-        self.bill_agent = BillAgent(household_id, user_id)
-        self.grocery_agent = GroceryAgent(household_id, user_id)
+        self.document_agent    = DocumentAgent(household_id, user_id)
+        self.bill_agent        = BillAgent(household_id, user_id)
+        self.grocery_agent     = GroceryAgent(household_id, user_id)
         self.maintenance_agent = MaintenanceAgent(household_id, user_id)
-        self.health_agent = HealthAgent(household_id, user_id)
+        self.health_agent      = HealthAgent(household_id, user_id)
 
     def run(self, input_data: Any) -> Any:
         action = input_data.get("action")
         if action == "get_dashboard_summary":
             return self.get_dashboard_summary(input_data.get("household_data", {}))
-        else:
-            raise ValueError(f"Unknown sync action: {action}")
+        raise ValueError(f"Unknown sync action: {action}")
 
     async def process_chat(
         self,
@@ -50,35 +46,34 @@ IMPORTANT RULES:
         if conversation_history is None:
             conversation_history = []
 
-        # LIGHT TASK: Use NVIDIA for fast intent classification
         category = await self._classify_intent(message)
 
         response = {
             "category": category,
             "message": "",
             "proactive_suggestions": [],
-            "actions_taken": []
+            "actions_taken": [],
         }
 
-        # HEAVY TASK: Use Claude for the actual conversation response
         try:
             response["message"] = self._ai_response_with_memory(
                 message=message,
                 category=category,
                 context=context,
-                conversation_history=conversation_history
+                conversation_history=conversation_history,
             )
         except Exception as e:
             print(f"⚠️ Chief of Staff chat error: {e}")
             response["message"] = "I'm having trouble processing that right now. Could you try rephrasing?"
 
-        # Add proactive suggestions based on category
         if category == "grocery":
             response["proactive_suggestions"].append("Generate weekly meal plan")
         elif category == "maintenance":
             response["proactive_suggestions"].append("Show upcoming maintenance tasks")
         elif category == "bills":
             response["proactive_suggestions"].append("Find unused subscriptions")
+        elif category == "smart_home":
+            response["proactive_suggestions"].append("Show all smart home alerts")
 
         self.log_action("chat", f"{category}: {message[:80]}")
         return response
@@ -88,47 +83,69 @@ IMPORTANT RULES:
         message: str,
         category: str,
         context: Dict,
-        conversation_history: List
+        conversation_history: List,
     ) -> str:
-        """Builds rich prompt with memory and household context. Uses Claude."""
+        # Build conversation history text
         history_text = ""
         if conversation_history:
             history_lines = []
-            for msg in conversation_history[-15:]:  # Keep last 15 messages for context
+            for msg in conversation_history[-15:]:
                 role = "User" if msg.get("role") == "user" else "Hearth"
                 history_lines.append(f"{role}: {msg.get('content', '')}")
             history_text = "\n".join(history_lines)
 
-        # Build household context
+        # ── Build household context summary ──
         context_parts = []
 
+        # Documents
         if context.get("documents"):
             context_parts.append(f"{len(context['documents'])} documents in vault")
 
-        # Surface urgent document alerts (expired/critical/urgent) by name so
-        # the Chief can proactively flag things like "your passport expired"
-        # instead of saying it has no household data.
+        # Document expiry alerts
         alerts = context.get("alerts") or []
         urgent_alerts = [a for a in alerts if a.get("urgency") in ("expired", "critical", "urgent")]
         if urgent_alerts:
-            alert_lines = "; ".join(a.get("message", "") for a in urgent_alerts[:5] if a.get("message"))
+            alert_lines = "; ".join(
+                a.get("message", "") for a in urgent_alerts[:5] if a.get("message")
+            )
             if alert_lines:
                 context_parts.append(f"URGENT document alerts: {alert_lines}")
 
+        # Bills
         if context.get("bills"):
             total = sum(b.get("amount", 0) for b in context["bills"])
-            context_parts.append(f"{len(context['bills'])} active bills (₦{total:,.0f}/month)")
+            context_parts.append(f"{len(context['bills'])} active bills (${total:,.0f}/month)")
 
+        # Tasks
         tasks = context.get("tasks") or []
         if tasks:
             pending = [t for t in tasks if not t.get("completed")]
             context_parts.append(f"{len(pending)} pending maintenance tasks")
 
+        # Inventory
         if context.get("inventory"):
             context_parts.append(f"{len(context['inventory'])} grocery items")
 
+        # Medications
         if context.get("medications"):
             context_parts.append(f"{len(context['medications'])} medications tracked")
+
+        # ── Smart home context — highest priority ──
+        smart_home_alerts = context.get("smart_home_alerts") or []
+        if smart_home_alerts:
+            ha_lines = []
+            for alert in smart_home_alerts[:5]:
+                entity   = alert.get("entity", "device")
+                msg_text = alert.get("message", "")
+                state    = alert.get("new_state", "")
+                ha_lines.append(f"{entity} is {state}: {msg_text}")
+            context_parts.append(
+                f"ACTIVE SMART HOME ALERTS ({len(smart_home_alerts)}): "
+                + " | ".join(ha_lines)
+            )
+        elif context.get("smart_home_connected"):
+            device_count = context.get("smart_home_device_count", 0)
+            context_parts.append(f"Smart home connected ({device_count} devices, no active alerts)")
 
         household_summary = ", ".join(context_parts) if context_parts else "No household data loaded yet"
 
@@ -139,26 +156,26 @@ HOUSEHOLD OVERVIEW: {household_summary}
 
 CURRENT MESSAGE FROM USER: {message}
 
-Respond as Hearth Chief of Staff. Follow these rules:
-1. Remember anything the user told you earlier (names, preferences, situations).
-2. If there are URGENT document alerts, proactively mention the most important one(s) — this is exactly what "what needs attention" questions are asking about.
-3. Reference relevant household data when helpful.
-4. Give a warm, concise, and genuinely useful response.
+Respond as Hearth Chief of Staff. Rules:
+1. Remember anything the user told you earlier.
+2. SMART HOME ALERTS are highest priority — mention them first if the user asks what needs attention.
+3. Cross-reference smart home events with documents when relevant (e.g. leak detected → check insurance policy in vault).
+4. Give a warm, concise, plain text response — no markdown, no asterisks, no bullet points.
 5. Never repeat information unnecessarily.
 6. Build naturally on the conversation."""
 
         return self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=500)
 
     async def _classify_intent(self, message: str) -> str:
-        """LIGHT TASK: Use NVIDIA for fast classification"""
         try:
             if self.nvidia_client:
                 return self.nvidia_client.classify_intent(message)
         except Exception:
             pass
 
-        # Fallback keyword classification
         msg = message.lower()
+        if any(w in msg for w in ["smart home", "sensor", "leak", "door", "lock", "device", "garage", "valve"]):
+            return "smart_home"
         if any(w in msg for w in ["document", "passport", "insurance", "expire", "warranty"]):
             return "documents"
         if any(w in msg for w in ["bill", "subscription", "payment", "rent"]):
@@ -172,30 +189,29 @@ Respond as Hearth Chief of Staff. Follow these rules:
         return "general"
 
     def get_dashboard_summary(self, household_data: Dict) -> Dict:
-        """Generate dashboard summary. Uses LIGHT model for the greeting."""
         summary = {
-            "documents": self._get_document_snapshot(household_data.get("documents", [])),
-            "bills": self._get_bill_snapshot(household_data.get("bills", [])),
-            "grocery": self._get_grocery_snapshot(household_data.get("inventory", [])),
+            "documents":   self._get_document_snapshot(household_data.get("documents", [])),
+            "bills":       self._get_bill_snapshot(household_data.get("bills", [])),
+            "grocery":     self._get_grocery_snapshot(household_data.get("inventory", [])),
             "maintenance": self._get_maintenance_snapshot(household_data.get("tasks", [])),
-            "health": self._get_health_snapshot(household_data.get("health_events", [])),
-            "chief_message": ""
+            "health":      self._get_health_snapshot(household_data.get("health_events", [])),
+            "chief_message": "",
         }
 
-        doc_count = len(household_data.get("documents", []))
+        doc_count  = len(household_data.get("documents", []))
         bill_count = len(household_data.get("bills", []))
         task_count = len(household_data.get("tasks", []))
+        ha_alerts  = len(household_data.get("smart_home_alerts", []))
 
         prompt = (
-            f"Write a short, warm one-sentence greeting for a household dashboard. "
-            f"Context: {doc_count} documents, {bill_count} bills, {task_count} tasks. "
-            f"Keep it under 20 words and upbeat."
+            f"Write a short warm one-sentence greeting for a household dashboard. "
+            f"Context: {doc_count} documents, {bill_count} bills, {task_count} tasks"
+            + (f", {ha_alerts} smart home alert(s) active" if ha_alerts else "")
+            + ". Keep it under 20 words and upbeat. No markdown."
         )
 
-        # LIGHT TASK: Use NVIDIA for simple greeting
         summary["chief_message"] = self.ask_light(prompt, max_tokens=60)
         self.log_action("dashboard_summary", "generated")
-
         return summary
 
     def _get_document_snapshot(self, documents: List) -> Dict:
@@ -203,16 +219,16 @@ Respond as Hearth Chief of Staff. Follow these rules:
         return {
             "total": len(documents),
             "expiring_soon": len(expiring_soon),
-            "next_expiry": expiring_soon[0].get("title") if expiring_soon else None
+            "next_expiry": expiring_soon[0].get("title") if expiring_soon else None,
         }
 
     def _get_bill_snapshot(self, bills: List) -> Dict:
-        total = sum(b.get("amount", 0) for b in bills)
+        total   = sum(b.get("amount", 0) for b in bills)
         largest = max(bills, key=lambda x: x.get("amount", 0)) if bills else None
         return {
             "total": len(bills),
             "monthly_spend": round(total, 2),
-            "largest_bill": largest.get("provider") if largest else None
+            "largest_bill": largest.get("provider") if largest else None,
         }
 
     def _get_grocery_snapshot(self, inventory: List) -> Dict:

@@ -12,6 +12,7 @@ from app.routers import (
     notifications,
     chief_of_staff,
     automation,
+    intake,
 )
 
 app = FastAPI(
@@ -20,16 +21,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # Tighten to your Render URL in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Routers
 app.include_router(auth.router,           prefix="/api/auth",          tags=["Auth"])
 app.include_router(household.router,      prefix="/api/household",     tags=["Household"])
 app.include_router(documents.router,      prefix="/api/documents",     tags=["Documents"])
@@ -40,6 +39,7 @@ app.include_router(health.router,         prefix="/api/health",        tags=["He
 app.include_router(notifications.router,  prefix="/api/notifications", tags=["Notifications"])
 app.include_router(chief_of_staff.router, prefix="/api/chief",         tags=["ChiefOfStaff"])
 app.include_router(automation.router,     prefix="/api/automation",    tags=["Automation"])
+app.include_router(intake.router,         prefix="/api/intake",        tags=["Intake"])
 
 
 @app.get("/")
