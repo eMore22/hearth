@@ -1,5 +1,5 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '../src/stores/authStore';
 import { useHouseholdStore } from '../src/stores/householdStore';
@@ -8,56 +8,84 @@ import { setUnauthorizedHandler } from '../src/services/api';
 export default function RootLayout() {
   const { session, loading: authLoading, loadSession } = useAuthStore();
   const { household, loading: householdLoading, fetchHousehold } = useHouseholdStore();
-  const segments = useSegments();
-  const router = useRouter();
+  const segments  = useSegments();
+  const router    = useRouter();
 
-  const inAuthGroup = segments[0] === '(auth)';
+  // ── Navigation guards ─────────────────────────────────────────────────────
+  // Prevent the redirect effect from firing more than once per state change.
+  // Without these, a session + no-household state triggers fetchHousehold →
+  // re-render → effect fires again → fetchHousehold → infinite loop.
+  const hasCheckedHousehold = useRef(false);
+  const isNavigating        = useRef(false);
+
+  const inAuthGroup       = segments[0] === '(auth)';
   const inOnboardingGroup = segments[0] === 'onboarding';
 
-  // Load session once when app starts
+  // Load session once on mount
   useEffect(() => {
     loadSession();
   }, []);
 
-  // If any request comes back 401 (token actually expired/invalid), clear
-  // session + household state so the redirect effect below sends the user
-  // back to login — instead of leaving the app "logged in" while every
-  // request silently 401s with a wiped token.
+  // Register global unauthorized handler (clears session on 401)
   useEffect(() => {
     setUnauthorizedHandler(() => {
+      hasCheckedHousehold.current = false;
+      isNavigating.current        = false;
       useAuthStore.setState({ session: null, user: null });
       useHouseholdStore.getState().clearHousehold();
     });
   }, []);
 
-  // Fetch household when user is logged in
+  // Fetch household exactly once when session becomes available
   useEffect(() => {
-    if (session && !household && !householdLoading) {
+    if (session && !hasCheckedHousehold.current && !householdLoading) {
+      hasCheckedHousehold.current = true;
       fetchHousehold();
+    }
+    // Reset guard when session is cleared (logout)
+    if (!session) {
+      hasCheckedHousehold.current = false;
     }
   }, [session]);
 
-  // Handle navigation redirects
+  // Navigate based on auth + household state — fires only once per decision
   useEffect(() => {
+    // Wait until both loading states settle
     if (authLoading || householdLoading) return;
+    // Don't navigate if we're already mid-navigation
+    if (isNavigating.current) return;
 
-    // Not logged in → Login screen
-    if (!session && !inAuthGroup) {
-      router.replace('/(auth)/login');
+    if (!session) {
+      // Not logged in → login
+      if (!inAuthGroup) {
+        isNavigating.current = true;
+        router.replace('/(auth)/login');
+        setTimeout(() => { isNavigating.current = false; }, 1000);
+      }
+      return;
     }
 
-    // Logged in but no household → Onboarding
-    else if (session && !household && !inOnboardingGroup && !inAuthGroup) {
-      router.replace('/onboarding/welcome');
-    }
+    // Logged in but household fetch hasn't been triggered yet — wait
+    if (!hasCheckedHousehold.current) return;
 
-    // Logged in with household but in auth/onboarding → Main app
-    else if (session && household && (inAuthGroup || inOnboardingGroup)) {
-      router.replace('/(tabs)');
+    if (!household) {
+      // Logged in, no household → onboarding
+      if (!inOnboardingGroup && !inAuthGroup) {
+        isNavigating.current = true;
+        router.replace('/onboarding/welcome');
+        setTimeout(() => { isNavigating.current = false; }, 1000);
+      }
+    } else {
+      // Logged in with household → main app
+      if (inAuthGroup || inOnboardingGroup) {
+        isNavigating.current = true;
+        router.replace('/(tabs)/dashboard');
+        setTimeout(() => { isNavigating.current = false; }, 1000);
+      }
     }
-  }, [session, household, authLoading, householdLoading, inAuthGroup, inOnboardingGroup]);
+  }, [session, household, authLoading, householdLoading]);
 
-  if (authLoading || householdLoading) {
+  if (authLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0A1628' }}>
         <ActivityIndicator size="large" color="#C77DFF" />

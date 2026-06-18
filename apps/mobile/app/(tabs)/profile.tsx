@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  Alert, ActivityIndicator, StatusBar, Modal, KeyboardAvoidingView, Platform,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ScrollView, Alert, ActivityIndicator, StatusBar,
+  Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +13,6 @@ import { useAutomationStore } from '../../src/stores/automationStore';
 const NAVY    = '#0A1628';
 const SURFACE = '#162035';
 const ACCENT  = '#4FC3F7';
-const PURPLE  = '#C77DFF';
 const WHITE   = '#F8FAFF';
 const MUTED   = '#8899AA';
 const DANGER  = '#FF6B6B';
@@ -20,37 +20,43 @@ const WARNING = '#FFD166';
 const SUCCESS = '#06D6A0';
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuthStore();
-  const { household, isLoading, fetchHousehold, updateHousehold } = useHouseholdStore();
-  const { status: haStatus, connectHA, fetchStatus: fetchHAStatus } = useAutomationStore();
+  // ── Safe store access — every value has a fallback ────────────────────────
+  const user     = useAuthStore(s => s.user);
+  const signOut  = useAuthStore(s => s.signOut);
+  const household        = useHouseholdStore(s => s.household);
+  const isLoading        = useHouseholdStore(s => s.isLoading) ?? false;
+  const fetchHousehold   = useHouseholdStore(s => s.fetchHousehold);
+  const updateHousehold  = useHouseholdStore(s => s.updateHousehold);
+  const haStatus         = useAutomationStore(s => s.status);
+  const connectHA        = useAutomationStore(s => s.connectHA);
+  const fetchHAStatus    = useAutomationStore(s => s.fetchStatus);
 
-  const [editName, setEditName] = useState(household?.name || '');
-  const [editAddress, setEditAddress] = useState(household?.address || '');
-  const [editCountry, setEditCountry] = useState(household?.country || '');
-  const [isEditing, setIsEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [editName,    setEditName]    = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editCountry, setEditCountry] = useState('');
+  const [isEditing,   setIsEditing]   = useState(false);
+  const [saving,      setSaving]      = useState(false);
 
-  // HA connection modal state
-  const [showHAModal, setShowHAModal] = useState(false);
-  const [haUrl, setHaUrl] = useState('http://192.168.1.10:8123');
-  const [haToken, setHaToken] = useState('');
+  const [showHAModal,  setShowHAModal]  = useState(false);
+  const [haUrl,        setHaUrl]        = useState('http://192.168.1.10:8123');
+  const [haToken,      setHaToken]      = useState('');
   const [haConnecting, setHaConnecting] = useState(false);
 
   React.useEffect(() => {
-    fetchHousehold();
-    fetchHAStatus();
+    try { fetchHousehold(); } catch {}
+    try { fetchHAStatus();  } catch {}
   }, []);
 
   React.useEffect(() => {
     if (household) {
-      setEditName(household.name || '');
+      setEditName(household.name    || '');
       setEditAddress(household.address || '');
       setEditCountry(household.country || '');
     }
   }, [household]);
 
   const handleSave = async () => {
-    if (!editName.trim()) { Alert.alert('Error', 'Household name cannot be empty'); return; }
+    if (!editName.trim()) { Alert.alert('Error', 'Name cannot be empty'); return; }
     setSaving(true);
     try {
       await updateHousehold({
@@ -59,9 +65,9 @@ export default function ProfileScreen() {
         country: editCountry.trim() || undefined,
       });
       setIsEditing(false);
-      Alert.alert('Success', 'Household updated');
+      Alert.alert('Saved', 'Household updated.');
     } catch (err: any) {
-      Alert.alert('Note', err.message || 'Changes shown locally');
+      Alert.alert('Note', err?.message || 'Saved locally.');
       setIsEditing(false);
     } finally {
       setSaving(false);
@@ -69,31 +75,38 @@ export default function ProfileScreen() {
   };
 
   const handleConnectHA = async () => {
-    if (!haUrl.trim()) { Alert.alert('Error', 'Please enter your HA URL'); return; }
-    if (!haToken.trim()) { Alert.alert('Error', 'Please enter your HA access token'); return; }
-
+    if (!haUrl.trim())   { Alert.alert('Error', 'Please enter your HA URL');   return; }
+    if (!haToken.trim()) { Alert.alert('Error', 'Please enter your HA token'); return; }
     setHaConnecting(true);
     try {
       const result = await connectHA(haUrl.trim(), haToken.trim());
       setShowHAModal(false);
       setHaToken('');
-      Alert.alert(
-        '🏠 Connected!',
-        result.message || `Hearth is now connected to ${result.device_count} household devices.`
-      );
+      Alert.alert('🏠 Connected!', result?.message || 'Home Assistant connected.');
     } catch (err: any) {
-      Alert.alert('Connection Failed', err.message || 'Could not reach Home Assistant. Check your URL and token.');
+      Alert.alert('Failed', err?.message || 'Could not reach Home Assistant.');
     } finally {
       setHaConnecting(false);
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.replace('/(auth)/login');
+    } catch {
+      router.replace('/(auth)/login');
+    }
+  };
+
+  // ── Safe display values ───────────────────────────────────────────────────
   const displayName =
     user?.user_metadata?.full_name ||
-    user?.email?.split('@')[0] ||
+    user?.email?.split('@')[0]     ||
     'User';
 
   const avatarLetter = displayName.charAt(0).toUpperCase();
+  const email        = user?.email || '';
 
   return (
     <View style={styles.container}>
@@ -102,7 +115,7 @@ export default function ProfileScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => { try { router.back(); } catch { router.replace('/(tabs)/dashboard'); } }} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color={WHITE} />
           </TouchableOpacity>
           <Text style={styles.title}>Profile & Household</Text>
@@ -118,12 +131,12 @@ export default function ProfileScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.infoName}>{displayName}</Text>
-              <Text style={styles.infoEmail}>{user?.email || ''}</Text>
+              <Text style={styles.infoEmail}>{email}</Text>
             </View>
           </View>
         </View>
 
-        {/* Household info */}
+        {/* Household */}
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionLabel}>Household</Text>
@@ -140,72 +153,50 @@ export default function ProfileScreen() {
 
           {isEditing ? (
             <>
-              <TextInput style={styles.input} value={editName} onChangeText={setEditName}
-                placeholder="Household name" placeholderTextColor={MUTED} />
-              <TextInput style={styles.input} value={editAddress} onChangeText={setEditAddress}
-                placeholder="Address (optional)" placeholderTextColor={MUTED} />
-              <TextInput style={styles.input} value={editCountry} onChangeText={setEditCountry}
-                placeholder="Country" placeholderTextColor={MUTED} />
+              <TextInput style={styles.input} value={editName}
+                onChangeText={setEditName} placeholder="Household name"
+                placeholderTextColor={MUTED} />
+              <TextInput style={styles.input} value={editAddress}
+                onChangeText={setEditAddress} placeholder="Address (optional)"
+                placeholderTextColor={MUTED} />
+              <TextInput style={styles.input} value={editCountry}
+                onChangeText={setEditCountry} placeholder="Country"
+                placeholderTextColor={MUTED} />
               <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]}
                 onPress={handleSave} disabled={saving}>
-                {saving ? <ActivityIndicator color={WHITE} /> :
-                  <Text style={styles.saveBtnText}>Save Changes</Text>}
+                {saving
+                  ? <ActivityIndicator color={WHITE} />
+                  : <Text style={styles.saveBtnText}>Save Changes</Text>}
               </TouchableOpacity>
             </>
           ) : (
             <>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Name</Text>
-                <Text style={styles.infoValue}>{household?.name || '—'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Country</Text>
-                <Text style={styles.infoValue}>{household?.country || '—'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Address</Text>
-                <Text style={styles.infoValue}>{household?.address || '—'}</Text>
-              </View>
+              <InfoRow label="Name"    value={household?.name    || '—'} />
+              <InfoRow label="Country" value={household?.country || '—'} />
+              <InfoRow label="Address" value={household?.address || '—'} />
             </>
           )}
         </View>
 
-        {/* ── Smart Home / Home Assistant ── */}
+        {/* Smart Home */}
         <View style={styles.card}>
           <Text style={styles.sectionLabel}>Smart Home</Text>
-
-          {haStatus.connected ? (
+          {haStatus?.connected ? (
             <>
               <View style={styles.haConnectedRow}>
                 <View style={styles.haConnectedDot} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.haConnectedText}>Home Assistant Connected</Text>
                   <Text style={styles.haConnectedSub}>
-                    {haStatus.device_count} devices · Autopilot active
+                    {haStatus.device_count ?? 0} devices · Autopilot active
                   </Text>
                 </View>
                 <Ionicons name="checkmark-circle" size={22} color={SUCCESS} />
               </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Instance URL</Text>
-                <Text style={styles.infoValue} numberOfLines={1}>
-                  {haStatus.ha_instance_url}
-                </Text>
-              </View>
-              {haStatus.last_sync_at && (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Last synced</Text>
-                  <Text style={styles.infoValue}>
-                    {new Date(haStatus.last_sync_at).toLocaleTimeString('en-GB', {
-                      hour: '2-digit', minute: '2-digit',
-                    })}
-                  </Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={styles.reconnectBtn}
-                onPress={() => setShowHAModal(true)}
-              >
+              {haStatus.ha_instance_url ? (
+                <InfoRow label="Instance URL" value={haStatus.ha_instance_url} />
+              ) : null}
+              <TouchableOpacity style={styles.reconnectBtn} onPress={() => setShowHAModal(true)}>
                 <Text style={styles.reconnectBtnText}>Reconnect / Change Instance</Text>
               </TouchableOpacity>
             </>
@@ -224,10 +215,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Sign out */}
-        <TouchableOpacity
-          style={styles.signOutBtn}
-          onPress={() => { signOut(); router.replace('/(auth)/login'); }}
-        >
+        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
           <Ionicons name="log-out-outline" size={18} color={DANGER} />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
@@ -235,7 +223,7 @@ export default function ProfileScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ── Connect HA Modal ── */}
+      {/* HA Modal */}
       <Modal visible={showHAModal} animationType="slide" presentationStyle="pageSheet">
         <KeyboardAvoidingView
           style={styles.modal}
@@ -255,26 +243,15 @@ export default function ProfileScreen() {
           </View>
 
           <Text style={styles.fieldLabel}>Home Assistant URL</Text>
-          <TextInput
-            style={styles.input}
-            value={haUrl}
-            onChangeText={setHaUrl}
-            placeholder="http://192.168.1.10:8123"
-            placeholderTextColor={MUTED}
-            autoCapitalize="none"
-            keyboardType="url"
-          />
+          <TextInput style={styles.input} value={haUrl} onChangeText={setHaUrl}
+            placeholder="http://192.168.1.10:8123" placeholderTextColor={MUTED}
+            autoCapitalize="none" keyboardType="url" />
 
           <Text style={styles.fieldLabel}>Long-lived Access Token</Text>
-          <TextInput
-            style={[styles.input, { minHeight: 80 }]}
-            value={haToken}
-            onChangeText={setHaToken}
+          <TextInput style={[styles.input, { minHeight: 80 }]}
+            value={haToken} onChangeText={setHaToken}
             placeholder="Paste your HA long-lived access token here"
-            placeholderTextColor={MUTED}
-            secureTextEntry
-            multiline
-          />
+            placeholderTextColor={MUTED} secureTextEntry multiline />
 
           <View style={styles.haHelpBox}>
             <Ionicons name="information-circle-outline" size={16} color={MUTED} />
@@ -288,14 +265,13 @@ export default function ProfileScreen() {
             onPress={handleConnectHA}
             disabled={haConnecting}
           >
-            {haConnecting ? (
-              <ActivityIndicator color={NAVY} />
-            ) : (
-              <>
-                <Ionicons name="wifi-outline" size={18} color={NAVY} />
-                <Text style={styles.connectHABtnText}>Test & Connect</Text>
-              </>
-            )}
+            {haConnecting
+              ? <ActivityIndicator color={NAVY} />
+              : <>
+                  <Ionicons name="wifi-outline" size={18} color={NAVY} />
+                  <Text style={styles.connectHABtnText}>Test & Connect</Text>
+                </>
+            }
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />
@@ -304,6 +280,13 @@ export default function ProfileScreen() {
     </View>
   );
 }
+
+const InfoRow = ({ label, value }: { label: string; value: string }) => (
+  <View style={{ marginBottom: 12 }}>
+    <Text style={{ fontSize: 11, color: '#8899AA', marginBottom: 2 }}>{label}</Text>
+    <Text style={{ fontSize: 16, color: '#F8FAFF' }} numberOfLines={2}>{value}</Text>
+  </View>
+);
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: NAVY },
@@ -318,34 +301,36 @@ const styles = StyleSheet.create({
     backgroundColor: SURFACE, borderRadius: 16, padding: 20, marginBottom: 20,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
   },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sectionLabel:  { fontSize: 12, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 16 },
-  avatarRow:     { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  sectionHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 16,
+  },
+  sectionLabel: {
+    fontSize: 12, fontWeight: '600', color: MUTED,
+    textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 16,
+  },
+  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   avatar: {
     width: 52, height: 52, borderRadius: 26,
-    backgroundColor: 'rgba(79,195,247,0.2)', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(79,195,247,0.2)',
+    alignItems: 'center', justifyContent: 'center',
   },
   avatarText:  { fontSize: 22, fontWeight: '700', color: ACCENT },
   infoName:    { fontSize: 18, fontWeight: '600', color: WHITE },
   infoEmail:   { fontSize: 13, color: MUTED, marginTop: 2 },
-  infoRow:     { marginBottom: 12 },
-  infoLabel:   { fontSize: 11, color: MUTED, marginBottom: 2 },
-  infoValue:   { fontSize: 16, color: WHITE },
   input: {
     backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: 14,
     fontSize: 15, color: WHITE, marginBottom: 12,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  saveBtn:     { backgroundColor: ACCENT, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 10 },
+  saveBtn:     { backgroundColor: ACCENT, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8 },
   saveBtnText: { color: NAVY, fontWeight: '700', fontSize: 15 },
-
-  // Smart home section
-  haConnectedRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  haConnectedDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: SUCCESS },
+  haConnectedRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  haConnectedDot:  { width: 10, height: 10, borderRadius: 5, backgroundColor: SUCCESS },
   haConnectedText: { fontSize: 15, fontWeight: '600', color: WHITE },
   haConnectedSub:  { fontSize: 12, color: MUTED, marginTop: 2 },
   reconnectBtn: {
-    marginTop: 12, paddingVertical: 10, alignItems: 'center',
+    marginTop: 10, paddingVertical: 10, alignItems: 'center',
     borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
   reconnectBtnText: { color: MUTED, fontSize: 13 },
@@ -355,7 +340,6 @@ const styles = StyleSheet.create({
     gap: 10, backgroundColor: WARNING, borderRadius: 14, padding: 16,
   },
   connectHABtnText: { color: NAVY, fontWeight: '700', fontSize: 15 },
-
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 10, padding: 14, borderRadius: 14,
@@ -363,14 +347,18 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,107,107,0.2)',
   },
   signOutText: { color: DANGER, fontSize: 15, fontWeight: '600' },
-
-  // Modal
   modal:       { flex: 1, backgroundColor: NAVY, padding: 24 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 24 },
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', marginTop: 20, marginBottom: 24,
+  },
   modalTitle:  { fontSize: 24, fontWeight: '700', color: WHITE, marginBottom: 4 },
   modalHint:   { fontSize: 13, color: MUTED },
   modalClose:  { padding: 6, backgroundColor: SURFACE, borderRadius: 10 },
-  fieldLabel:  { fontSize: 12, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
+  fieldLabel:  {
+    fontSize: 12, fontWeight: '600', color: MUTED,
+    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16,
+  },
   haHelpBox: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8,
     backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 12, marginTop: 4,
