@@ -16,7 +16,13 @@ Be caring but responsible."""
 
     def run(self, input_data: Any) -> Any:
         action = input_data.get("action")
-        if action == "triage_symptoms":
+        # ── primary action used by the live router ──
+        if action == "triage":
+            return self.triage(
+                input_data.get("symptoms", ""),
+                input_data.get("patient_profile", {})
+            )
+        elif action == "triage_symptoms":      # keep backward compatibility
             return self.triage_symptoms(input_data.get("symptoms", ""))
         elif action == "generate_health_reminders":
             return self.generate_reminders(input_data.get("health_data", {}))
@@ -25,11 +31,18 @@ Be caring but responsible."""
         else:
             raise ValueError(f"Unknown action: {action}")
 
-    def triage_symptoms(self, symptoms: str) -> Dict:
-        """Provide general guidance for reported symptoms."""
+    def triage(self, symptoms: str, patient_profile: Dict = None) -> Dict:
+        """Provide general guidance for reported symptoms (uses patient_profile if given)."""
+        profile_text = ""
+        if patient_profile:
+            age = patient_profile.get("age", "unknown")
+            conditions = patient_profile.get("conditions", [])
+            profile_text = f"Patient age: {age}. Existing conditions: {', '.join(conditions) if conditions else 'none'}."
+
         prompt = f"""Provide general, non-diagnostic guidance for these symptoms:
 
 Symptoms: "{symptoms}"
+{profile_text}
 
 Return ONLY valid JSON:
 {{
@@ -52,6 +65,10 @@ Return ONLY valid JSON:
                 "urgent_care_warning": None,
                 "disclaimer": "This is not medical advice. Please consult a doctor."
             }
+
+    def triage_symptoms(self, symptoms: str) -> Dict:
+        """Backward‑compatible wrapper that calls triage without a patient profile."""
+        return self.triage(symptoms)
 
     def generate_reminders(self, health_data: Dict) -> List[Dict]:
         """Generate health-related reminders (medications, checkups, etc.)."""

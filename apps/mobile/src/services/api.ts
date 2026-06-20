@@ -9,7 +9,6 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// ---- Unauthorized Handler ----
 type UnauthorizedHandler = () => void;
 let unauthorizedHandler: UnauthorizedHandler | null = null;
 
@@ -17,7 +16,6 @@ export const setUnauthorizedHandler = (handler: UnauthorizedHandler) => {
   unauthorizedHandler = handler;
 };
 
-// ---- Request Interceptor ----
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     const token = await getToken();
@@ -30,7 +28,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ---- Response Interceptor ----
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -43,7 +40,6 @@ api.interceptors.response.use(
   }
 );
 
-// ==================== AUTH ====================
 export const authService = {
   signIn: (email: string, password: string) =>
     api.post('/api/auth/signin', { email, password }),
@@ -52,7 +48,6 @@ export const authService = {
   signOut: () => api.post('/api/auth/signout'),
 };
 
-// ==================== HOUSEHOLD ====================
 export const householdService = {
   get: () => api.get('/api/household/'),
   create: (data: { name: string; address?: string; country?: string }) =>
@@ -62,7 +57,6 @@ export const householdService = {
   getMembers: () => api.get('/api/household/members'),
 };
 
-// ==================== DOCUMENTS ====================
 export const documentService = {
   list: () => api.get('/api/documents/'),
   upload: (formData: FormData) =>
@@ -75,7 +69,6 @@ export const documentService = {
   ask: (question: string) => api.post('/api/documents/ask', { question }),
 };
 
-// ==================== BILLS ====================
 export const billService = {
   list: () => api.get('/api/bills/'),
   create: (data: any) => api.post('/api/bills/', data),
@@ -90,7 +83,7 @@ export const billService = {
   monthlyReport: () => api.get('/api/bills/monthly-report'),
 };
 
-// ==================== GROCERY ====================
+// ==================== GROCERY (with currency support) ====================
 export const groceryService = {
   getInventory: () => api.get('/api/grocery/inventory'),
   addInventory: (item: any) => api.post('/api/grocery/inventory', item),
@@ -106,9 +99,16 @@ export const groceryService = {
       day,
       new_preference: newPreference,
     }),
+  saveMealPlan: (mealPlan: any) =>
+    api.post('/api/grocery/meal-plan/save', { meal_plan: mealPlan }),
+  generateBudgetShoppingList: (mealPlan: any, weeklyBudget: number) =>
+    api.post('/api/grocery/shopping-list/generate', { meal_plan: mealPlan, weekly_budget: weeklyBudget }),
+  getBudget: () =>
+    api.get('/api/grocery/budget'),
+  setBudget: (weeklyBudget: number, currency: string = 'NGN') =>
+    api.put('/api/grocery/budget', { weekly_budget: weeklyBudget, currency }),
 };
 
-// ==================== MAINTENANCE ====================
 export const maintenanceService = {
   getTasks: () => api.get('/api/maintenance/tasks'),
   generateCalendar: (profile: any) =>
@@ -123,7 +123,6 @@ export const maintenanceService = {
     api.post(`/api/maintenance/tasks/${taskId}/complete`),
 };
 
-// ==================== HEALTH ====================
 export const healthService = {
   getMedications: () => api.get('/api/health/medications'),
   addMedication: (med: any) => api.post('/api/health/medications', med),
@@ -135,7 +134,6 @@ export const healthService = {
     api.post('/api/health/medication-schedule', { medications }),
 };
 
-// ==================== CHIEF OF STAFF ====================
 export const chiefService = {
   chat: (message: string, conversationHistory: any[] = [], context?: any) =>
     api.post('/api/chief/chat', {
@@ -149,24 +147,19 @@ export const chiefService = {
     }),
 };
 
-// ==================== AUTOMATION (Home Assistant) ====================
 export const automationService = {
-  getStatus: () =>
-    api.get('/api/automation/status'),
+  getStatus: () => api.get('/api/automation/status'),
   connect: (haInstanceUrl: string, haAccessToken: string) =>
     api.post('/api/automation/connect', {
       ha_instance_url: haInstanceUrl,
       ha_access_token: haAccessToken,
     }),
-  getDevices: () =>
-    api.get('/api/automation/devices'),
-  getEvents: (limit = 20) =>
-    api.get(`/api/automation/events?limit=${limit}`),
+  getDevices: () => api.get('/api/automation/devices'),
+  getEvents: (limit = 20) => api.get(`/api/automation/events?limit=${limit}`),
   executeAction: (entityId: string, action: string, payload: any = {}) =>
     api.post('/api/automation/action', { entity_id: entityId, action, payload }),
 };
 
-// ==================== NOTIFICATIONS ====================
 export const notificationService = {
   registerToken: (token: string, deviceType: string) =>
     api.post('/api/notifications/register-token', { token, device_type: deviceType }),

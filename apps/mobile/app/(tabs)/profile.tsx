@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, ActivityIndicator, StatusBar,
@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useHouseholdStore } from '../../src/stores/householdStore';
 import { useAutomationStore } from '../../src/stores/automationStore';
+import { useGroceryStore } from '../../src/stores/groceryStore';
 
 const NAVY    = '#0A1628';
 const SURFACE = '#162035';
@@ -19,8 +20,17 @@ const DANGER  = '#FF6B6B';
 const WARNING = '#FFD166';
 const SUCCESS = '#06D6A0';
 
+const CURRENCIES = [
+  { label: '🇳🇬 NGN (₦)', value: 'NGN' },
+  { label: '🇺🇸 USD ($)', value: 'USD' },
+  { label: '🇬🇧 GBP (£)', value: 'GBP' },
+  { label: '🇪🇺 EUR (€)', value: 'EUR' },
+  { label: '🇿🇦 ZAR (R)', value: 'ZAR' },
+  { label: '🇬🇭 GHS (GH₵)', value: 'GHS' },
+];
+
 export default function ProfileScreen() {
-  // ── Safe store access — every value has a fallback ────────────────────────
+  // ── Safe store access ──
   const user     = useAuthStore(s => s.user);
   const signOut  = useAuthStore(s => s.signOut);
   const household        = useHouseholdStore(s => s.household);
@@ -30,6 +40,9 @@ export default function ProfileScreen() {
   const haStatus         = useAutomationStore(s => s.status);
   const connectHA        = useAutomationStore(s => s.connectHA);
   const fetchHAStatus    = useAutomationStore(s => s.fetchStatus);
+  const currency         = useGroceryStore(s => s.currency);
+  const setCurrency      = useGroceryStore(s => s.setBudget); // we reuse setBudget to update currency only
+  const budget           = useGroceryStore(s => s.budget);
 
   const [editName,    setEditName]    = useState('');
   const [editAddress, setEditAddress] = useState('');
@@ -42,12 +55,14 @@ export default function ProfileScreen() {
   const [haToken,      setHaToken]      = useState('');
   const [haConnecting, setHaConnecting] = useState(false);
 
-  React.useEffect(() => {
+  const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+
+  useEffect(() => {
     try { fetchHousehold(); } catch {}
     try { fetchHAStatus();  } catch {}
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (household) {
       setEditName(household.name    || '');
       setEditAddress(household.address || '');
@@ -99,7 +114,19 @@ export default function ProfileScreen() {
     }
   };
 
-  // ── Safe display values ───────────────────────────────────────────────────
+  const handleCurrencySelect = async (newCurrency: string) => {
+    // Update both currency state and persist to backend (using setBudget with existing budget)
+    try {
+      await setCurrency(budget, newCurrency);
+      setShowCurrencyModal(false);
+    } catch {
+      // fallback: update locally only
+      useGroceryStore.setState({ currency: newCurrency });
+      setShowCurrencyModal(false);
+    }
+  };
+
+  // ── Safe display values ──
   const displayName =
     user?.user_metadata?.full_name ||
     user?.email?.split('@')[0]     ||
@@ -176,6 +203,26 @@ export default function ProfileScreen() {
               <InfoRow label="Address" value={household?.address || '—'} />
             </>
           )}
+        </View>
+
+        {/* Currency Picker */}
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>Preferences</Text>
+          <TouchableOpacity style={styles.currencyRow} onPress={() => setShowCurrencyModal(true)}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="cash-outline" size={20} color={WARNING} />
+              <View>
+                <Text style={{ color: WHITE, fontSize: 15, fontWeight: '600' }}>Currency</Text>
+                <Text style={{ color: MUTED, fontSize: 13 }}>Display currency for budget and costs</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={{ color: ACCENT, fontSize: 15, fontWeight: '600' }}>
+                {CURRENCIES.find(c => c.value === currency)?.label || currency}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={MUTED} />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Smart Home */}
@@ -285,6 +332,43 @@ export default function ProfileScreen() {
           <View style={{ height: 40 }} />
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Currency Picker Modal */}
+      <Modal visible={showCurrencyModal} transparent animationType="fade">
+        <View style={styles.currencyModalOverlay}>
+          <View style={styles.currencyModalCard}>
+            <Text style={styles.currencyModalTitle}>Select Currency</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {CURRENCIES.map(item => (
+                <TouchableOpacity
+                  key={item.value}
+                  style={[
+                    styles.currencyOption,
+                    currency === item.value && styles.currencyOptionSelected,
+                  ]}
+                  onPress={() => handleCurrencySelect(item.value)}
+                >
+                  <Text style={[
+                    styles.currencyOptionText,
+                    currency === item.value && styles.currencyOptionTextSelected,
+                  ]}>
+                    {item.label}
+                  </Text>
+                  {currency === item.value && (
+                    <Ionicons name="checkmark-circle" size={20} color={ACCENT} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.currencyCancelBtn}
+              onPress={() => setShowCurrencyModal(false)}
+            >
+              <Text style={styles.currencyCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -379,4 +463,40 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 12, marginTop: 4,
   },
   haHelpText: { flex: 1, fontSize: 12, color: MUTED, lineHeight: 18 },
+  currencyRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  currencyModalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  currencyModalCard: {
+    backgroundColor: SURFACE, borderRadius: 16, padding: 24, width: '100%',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  currencyModalTitle: {
+    fontSize: 18, fontWeight: '700', color: WHITE, marginBottom: 20,
+  },
+  currencyOption: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12,
+    borderRadius: 10, marginBottom: 4,
+  },
+  currencyOptionSelected: {
+    backgroundColor: 'rgba(79,195,247,0.08)',
+  },
+  currencyOptionText: {
+    fontSize: 15, color: WHITE,
+  },
+  currencyOptionTextSelected: {
+    color: ACCENT, fontWeight: '600',
+  },
+  currencyCancelBtn: {
+    marginTop: 20, paddingVertical: 12, alignItems: 'center',
+    borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  currencyCancelText: {
+    color: MUTED, fontSize: 15,
+  },
 });

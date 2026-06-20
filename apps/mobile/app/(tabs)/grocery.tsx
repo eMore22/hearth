@@ -28,29 +28,33 @@ const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'S
 
 export default function GroceryScreen() {
   const {
-    mealPlan, shoppingList, inventory, wasteAlerts, isLoading,
+    mealPlan, shoppingList, inventory, wasteAlerts, isLoading, budget, currency,
     generateMealPlan, createShoppingList, fetchWasteAlerts, fetchInventory,
+    fetchBudget, setBudget, saveMealPlan, generateBudgetShoppingList,
   } = useGroceryStore()
 
   const [showList, setShowList] = useState(false)
   const [showCustomMealModal, setShowCustomMealModal] = useState(false)
+  const [showBudgetModal, setShowBudgetModal] = useState(false)
+  const [budgetInput, setBudgetInput] = useState('')
 
-  // Custom meal form
   const [customDay, setCustomDay] = useState('Monday')
   const [customSlot, setCustomSlot] = useState<typeof MEAL_SLOTS[number]>('dinner')
   const [customMealName, setCustomMealName] = useState('')
-  // Local override state — so custom entries show immediately without re-fetching
   const [localOverrides, setLocalOverrides] = useState<Record<string, Record<string, string>>>({})
 
   useEffect(() => {
     fetchInventory()
+    fetchBudget()
     if (!mealPlan) generateMealPlan(DEFAULT_PREFS)
   }, [])
 
   useEffect(() => { if (inventory.length > 0) fetchWasteAlerts() }, [inventory])
 
-  const handleCreateList = () => {
-    if (mealPlan) { createShoppingList(mealPlan); setShowList(true) }
+  const handleCreateList = async () => {
+    if (!mealPlan) return
+    await generateBudgetShoppingList(mealPlan, budget)
+    setShowList(true)
   }
 
   const handleSaveCustomMeal = () => {
@@ -64,7 +68,6 @@ export default function GroceryScreen() {
     Alert.alert('✅ Meal logged', `${customMealName} added to ${customDay} ${customSlot}.`)
   }
 
-  // Merge AI plan with any local overrides
   const getMealName = (day: string, slot: string, aiName: string) => {
     return localOverrides[day]?.[slot] || aiName
   }
@@ -91,6 +94,13 @@ export default function GroceryScreen() {
           </View>
         )}
       </LinearGradient>
+
+      {/* Budget Bar */}
+      <TouchableOpacity style={styles.budgetBar} onPress={() => { setBudgetInput(String(budget)); setShowBudgetModal(true); }}>
+        <Ionicons name="wallet-outline" size={16} color={ACCENT} />
+        <Text style={styles.budgetText}>{currency}{budget.toLocaleString()} / week</Text>
+        <Ionicons name="chevron-down" size={14} color={MUTED} />
+      </TouchableOpacity>
 
       <ScrollView
         style={styles.scroll}
@@ -119,7 +129,6 @@ export default function GroceryScreen() {
           </View>
         )}
 
-        {/* Action buttons */}
         <View style={styles.section}>
           <TouchableOpacity
             style={styles.generateBtn}
@@ -132,7 +141,6 @@ export default function GroceryScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* ── LOG CUSTOM MEAL BUTTON ── */}
           <TouchableOpacity
             style={styles.customMealBtn}
             onPress={() => setShowCustomMealModal(true)}
@@ -192,8 +200,23 @@ export default function GroceryScreen() {
               )}
               <View style={styles.listFooter}>
                 <Text style={styles.listTotal}>Total: {shoppingList.total_items} items</Text>
-                <Text style={styles.listCost}>Est. ${shoppingList.estimated_cost}</Text>
+                <Text style={styles.listCost}>Est. {currency}{shoppingList.estimated_total?.toLocaleString() || shoppingList.estimated_cost}</Text>
               </View>
+              {shoppingList.over_budget && (
+                <View style={styles.budgetWarning}>
+                  <Ionicons name="warning-outline" size={14} color={WARNING} />
+                  <Text style={styles.budgetWarningText}>
+                    Over budget by {currency}{shoppingList.budget_gap?.toLocaleString()}
+                  </Text>
+                </View>
+              )}
+              {shoppingList.suggestions?.length > 0 && (
+                <View style={styles.suggestionsBox}>
+                  {shoppingList.suggestions.map((s: string, i: number) => (
+                    <Text key={i} style={styles.suggestionText}>💡 {s}</Text>
+                  ))}
+                </View>
+              )}
             </View>
           </View>
         )}
@@ -201,7 +224,7 @@ export default function GroceryScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ── LOG CUSTOM MEAL MODAL ── */}
+      {/* Log Custom Meal Modal */}
       <Modal visible={showCustomMealModal} animationType="slide" presentationStyle="pageSheet">
         <KeyboardAvoidingView
           style={styles.modal}
@@ -268,6 +291,35 @@ export default function GroceryScreen() {
           <View style={{ height: 40 }} />
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Budget Modal */}
+      <Modal visible={showBudgetModal} transparent animationType="fade">
+        <View style={styles.budgetModalOverlay}>
+          <View style={styles.budgetModalCard}>
+            <Text style={styles.budgetModalTitle}>Weekly Grocery Budget</Text>
+            <TextInput
+              style={styles.budgetInput}
+              value={budgetInput}
+              onChangeText={setBudgetInput}
+              keyboardType="numeric"
+              placeholder={`${currency}0`}
+              placeholderTextColor={MUTED}
+            />
+            <View style={styles.budgetModalActions}>
+              <TouchableOpacity onPress={() => setShowBudgetModal(false)}>
+                <Text style={styles.budgetCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.budgetSaveBtn} onPress={async () => {
+                const amount = parseFloat(budgetInput) || 0;
+                await setBudget(amount, currency);
+                setShowBudgetModal(false);
+              }}>
+                <Text style={styles.budgetSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -279,6 +331,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 28, fontWeight: '700', color: WHITE, marginBottom: 12 },
   summaryPill: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: 'rgba(6,214,160,0.1)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
   summaryText: { fontSize: 12, color: ACCENT },
+  budgetBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 20, marginTop: 16, backgroundColor: 'rgba(6,214,160,0.08)', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: 'rgba(6,214,160,0.2)' },
+  budgetText: { flex: 1, fontSize: 14, fontWeight: '600', color: ACCENT },
   scroll: { flex: 1 },
   section: { paddingHorizontal: 20, marginTop: 24 },
   sectionTitle: { fontSize: 11, fontWeight: '600', color: MUTED, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12 },
@@ -289,7 +343,6 @@ const styles = StyleSheet.create({
   wasteDays: { fontSize: 13, fontWeight: '700', color: WARNING },
   generateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(6,214,160,0.1)', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: 'rgba(6,214,160,0.25)', marginBottom: 10 },
   generateBtnText: { color: ACCENT, fontWeight: '600', fontSize: 15 },
-  // ── Custom Meal Button ──
   customMealBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
     borderRadius: 14, padding: 15,
@@ -310,7 +363,11 @@ const styles = StyleSheet.create({
   listFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   listTotal: { fontSize: 13, color: MUTED },
   listCost: { fontSize: 14, fontWeight: '700', color: WHITE },
-  // Modal
+  budgetWarning: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: 'rgba(255,159,28,0.08)', borderRadius: 8, padding: 8 },
+  budgetWarningText: { fontSize: 12, color: WARNING, fontWeight: '600' },
+  suggestionsBox: { marginTop: 8, gap: 4 },
+  suggestionText: { fontSize: 12, color: '#B8D4E8', fontStyle: 'italic' },
+  // Modal styles
   modal: { flex: 1, backgroundColor: NAVY, padding: 24 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 24 },
   modalTitle: { fontSize: 24, fontWeight: '700', color: WHITE, marginBottom: 4 },
@@ -331,4 +388,13 @@ const styles = StyleSheet.create({
   input: { backgroundColor: SURFACE, borderRadius: 12, padding: 16, fontSize: 15, color: WHITE, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
   saveBtn: { backgroundColor: PURPLE, borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 24 },
   saveBtnText: { color: WHITE, fontWeight: '700', fontSize: 16 },
+  // Budget modal
+  budgetModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  budgetModalCard: { backgroundColor: SURFACE, borderRadius: 16, padding: 24, width: '100%', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  budgetModalTitle: { fontSize: 18, fontWeight: '700', color: WHITE, marginBottom: 16 },
+  budgetInput: { backgroundColor: NAVY, borderRadius: 12, padding: 16, fontSize: 24, fontWeight: '700', color: WHITE, textAlign: 'center', marginBottom: 20 },
+  budgetModalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 16 },
+  budgetCancelText: { fontSize: 15, color: MUTED },
+  budgetSaveBtn: { backgroundColor: ACCENT, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10 },
+  budgetSaveText: { fontSize: 15, fontWeight: '700', color: NAVY },
 })

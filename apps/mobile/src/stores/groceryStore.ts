@@ -14,10 +14,14 @@ export interface MealPlan {
 }
 
 export interface ShoppingList {
-  week_of: string;
+  week_of?: string;
   categories: Record<string, string[]>;
   total_items: number;
   estimated_cost: number;
+  estimated_total?: number;
+  over_budget?: boolean;
+  budget_gap?: number;
+  suggestions?: string[];
 }
 
 export interface InventoryItem {
@@ -42,6 +46,8 @@ interface GroceryState {
   shoppingList: ShoppingList | null;
   inventory: InventoryItem[];
   wasteAlerts: WasteAlert[];
+  budget: number;
+  currency: string;
   isLoading: boolean;
   error: string | null;
 
@@ -52,6 +58,10 @@ interface GroceryState {
   modifyMeal: (currentPlan: MealPlan, day: string, newPreference: string) => Promise<any>;
   fetchInventory: () => Promise<void>;
   addInventoryItem: (item: Partial<InventoryItem>) => Promise<void>;
+  fetchBudget: () => Promise<void>;
+  setBudget: (amount: number, currency?: string) => Promise<void>;
+  saveMealPlan: (plan: MealPlan) => Promise<void>;
+  generateBudgetShoppingList: (plan: MealPlan, budget: number) => Promise<any>;
   clearError: () => void;
 }
 
@@ -61,6 +71,8 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
   shoppingList: null,
   inventory: [],
   wasteAlerts: [],
+  budget: 0,
+  currency: 'NGN',
   isLoading: false,
   error: null,
 
@@ -138,6 +150,47 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
       set({ inventory: [...get().inventory, response.data], isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
+    }
+  },
+
+  fetchBudget: async () => {
+    try {
+      const res = await groceryService.getBudget();
+      set({
+        budget: res.data?.weekly_budget || 0,
+        currency: res.data?.currency || 'NGN',
+      });
+    } catch {}
+  },
+
+  setBudget: async (amount, currency = 'NGN') => {
+    try {
+      await groceryService.setBudget(amount, currency);
+      set({ budget: amount, currency });
+    } catch (error: any) {
+      set({ error: error.message });
+    }
+  },
+
+  saveMealPlan: async (plan) => {
+    set({ isLoading: true, error: null });
+    try {
+      await groceryService.saveMealPlan(plan);
+      set({ isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+    }
+  },
+
+  generateBudgetShoppingList: async (plan, budget) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await groceryService.generateBudgetShoppingList(plan, budget);
+      set({ shoppingList: res.data, isLoading: false });
+      return res.data;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
     }
   },
 
