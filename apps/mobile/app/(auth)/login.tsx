@@ -12,7 +12,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Link, useRouter } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'   // <-- added for the eye icon
+import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../src/stores/authStore'
 import { householdService } from '../../src/services/api'
 import { COLORS, TYPOGRAPHY, SPACING } from '../../src/utils/theme'
@@ -20,13 +20,37 @@ import { COLORS, TYPOGRAPHY, SPACING } from '../../src/utils/theme'
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)   // <-- new
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const { signIn } = useAuthStore()
   const router = useRouter()
 
   const handleSignIn = async () => {
-    // ... exactly the same as before ...
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter email and password')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await signIn(email, password)
+
+      // Check if household exists and navigate accordingly
+      try {
+        const householdRes = await householdService.get()
+        if (householdRes.data && Object.keys(householdRes.data).length > 0) {
+          router.replace('/(tabs)/dashboard')
+        } else {
+          router.replace('/onboarding/welcome')
+        }
+      } catch (householdError) {
+        router.replace('/onboarding/welcome')
+      }
+    } catch (error: any) {
+      Alert.alert('Sign In Failed', error.response?.data?.detail || error.message || 'An error occurred')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -50,7 +74,6 @@ export default function LoginScreen() {
               editable={!loading}
             />
 
-            {/* Password field with visibility toggle */}
             <View style={styles.passwordContainer}>
               <TextInput
                 style={styles.passwordInput}
@@ -98,7 +121,6 @@ export default function LoginScreen() {
   )
 }
 
-// ---- styles (only password container & input added; everything else unchanged) ----
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -137,7 +159,6 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     ...TYPOGRAPHY.body,
   },
-  // ---------- new styles ----------
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -156,7 +177,6 @@ const styles = StyleSheet.create({
   eyeButton: {
     paddingHorizontal: SPACING.md,
   },
-  // --------------------------------
   button: {
     backgroundColor: COLORS.primary,
     borderRadius: 10,
