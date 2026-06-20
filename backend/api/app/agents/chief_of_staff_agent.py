@@ -66,6 +66,17 @@ IMPORTANT RULES:
             print(f"⚠️ Chief of Staff chat error: {e}")
             response["message"] = "I'm having trouble processing that right now. Could you try rephrasing?"
 
+        # ── Device command detection ──
+        # Only attempt this for smart_home intent, and only if the frontend
+        # sent the household's device list. Matches simple natural-language
+        # commands ("close the garage door", "turn off kitchen light") to a
+        # known entity_id + HA action. Deliberately rule-based rather than
+        # another LLM call — keeps this fast and predictable.
+        if category == "smart_home":
+            device_command = self._detect_device_command(message, context.get("ha_devices") or [])
+            if device_command:
+                response["device_command"] = device_command
+
         if category == "grocery":
             response["proactive_suggestions"].append("Generate weekly meal plan")
         elif category == "maintenance":
@@ -187,6 +198,76 @@ Respond as Hearth Chief of Staff. Rules:
         if any(w in msg for w in ["sick", "health", "doctor", "medication"]):
             return "health"
         return "general"
+
+    def _detect_device_command(self, message: str, devices: List[Dict]) -> Optional[Dict]:
+        """
+        Match a natural-language command to a known device + HA action.
+        Returns {"entity_id": ..., "action": ...} or None if no confident match.
+
+        Deliberately conservative: only fires on clear action verbs paired
+        with a device name substring match, so ambiguous messages ("is the
+        garage door open?") fall through to a normal conversational reply
+        instead of accidentally triggering a command.
+        """
+        if not devices:
+            return None
+
+        msg = message.lower()
+
+        ACTION_VERBS = [
+            (["close", "shut"],            "close"),
+            (["open"],                     "open"),
+            (["lock"],                     "lock"),
+            (["unlock"],                   "unlock"),
+            (["turn off", "switch off"],   "turn_off"),
+            (["turn on", "switch on"],     "turn_on"),
+        ]
+
+        detected_action = None
+        for phrases, action in ACTION_VERBS:
+            if any(p in msg for p in phrases):
+                detected_action = action
+                break
+
+        if not detected_action:
+            return None
+
+        best_match = None
+        best_score = 0
+        for device in devices:
+            name = (device.get("friendly_name") or "").lower()
+            if not name:
+                continue
+            name_words = set(name.split())
+            msg_words = set(msg.split())
+            overlap = len(name_words & msg_words)
+            if overlap > best_score:
+                best_score = overlap
+                best_match = device
+
+        if not best_match or best_score == 0:
+            return None
+
+        if not best_match.get("is_actionable"):
+            return None
+
+        domain = best_match.get("domain", "")
+        VALID_ACTIONS_BY_DOMAIN = {
+            "cover":  {"open", "close"},
+            "lock":   {"lock", "unlock"},
+            "switch": {"turn_on", "turn_off"},
+            "light":  {"turn_on", "turn_off"},
+            "fan":    {"turn_on", "turn_off"},
+        }
+        valid_actions = VALID_ACTIONS_BY_DOMAIN.get(domain, {"turn_on", "turn_off"})
+        if detected_action not in valid_actions:
+            return None
+
+        return {
+            "entity_id":     best_match["entity_id"],
+            "action":        detected_action,
+            "friendly_name": best_match.get("friendly_name"),
+        }
 
     def get_dashboard_summary(self, household_data: Dict) -> Dict:
         summary = {

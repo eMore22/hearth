@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.dependencies import get_current_user, get_supabase_admin
 from app.agents.bill_agent import BillAgent
+from app.services.analytics import log_event
 
 router = APIRouter(tags=["bills"])
 
@@ -48,14 +49,14 @@ async def create_bill(
     try:
         insert_data = {
             "household_id": household_id,
-            "name": payload.provider,        # table uses 'name' as primary label
-            "provider": payload.provider,    # also stored in provider for agent queries
-            "amount": payload.amount,
-            "category": payload.category,
+            "name":         payload.provider,        # table uses 'name' as primary label
+            "provider":     payload.provider,         # also stored in provider for agent queries
+            "amount":       payload.amount,
+            "category":     payload.category,
             "billing_cycle": payload.billing_cycle,
-            "currency": payload.currency,
-            "notes": payload.notes,
-            "is_active": True,
+            "currency":     payload.currency,
+            "notes":        payload.notes,
+            "is_active":    True,
         }
         if payload.next_due_date:
             insert_data["next_due_date"] = payload.next_due_date
@@ -63,6 +64,16 @@ async def create_bill(
         result = supabase.table("bills").insert(insert_data).execute()
         if not result.data:
             raise HTTPException(status_code=400, detail="Failed to create bill")
+
+        log_event(
+            supabase=supabase,
+            user_id=current_user["id"],
+            household_id=household_id,
+            event_name="bill_added_manually",
+            module="bills",
+            metadata={"category": payload.category, "billing_cycle": payload.billing_cycle},
+        )
+
         return result.data[0]
     except HTTPException:
         raise
@@ -83,14 +94,27 @@ async def analyze_bill(request: Request, current_user: dict = Depends(get_curren
 @router.post("/detect-unused")
 async def detect_unused(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
+    household_id = current_user.get("household_id")
     agent = BillAgent(
-        household_id=current_user.get("household_id"),
+        household_id=household_id,
         user_id=str(current_user["id"])
     )
-    return agent.run({
+    result = agent.run({
         "action": "detect_unused_subscriptions",
         "bills": body.get("bills", [])
     })
+
+    if household_id:
+        log_event(
+            supabase=get_supabase_admin(),
+            user_id=current_user["id"],
+            household_id=household_id,
+            event_name="unused_subscriptions_checked",
+            module="bills",
+            metadata={"found_count": len(result) if isinstance(result, list) else 0},
+        )
+
+    return result
 
 
 @router.post("/negotiation-script")

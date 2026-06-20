@@ -193,6 +193,14 @@ export default function ProfileScreen() {
                 </View>
                 <Ionicons name="checkmark-circle" size={22} color={SUCCESS} />
               </View>
+              <TouchableOpacity
+                style={styles.viewDevicesBtn}
+                onPress={() => router.push('/(tabs)/devices')}
+              >
+                <Ionicons name="grid-outline" size={16} color={ACCENT} />
+                <Text style={styles.viewDevicesBtnText}>View all devices</Text>
+                <Ionicons name="chevron-forward" size={16} color={MUTED} style={{ marginLeft: 'auto' }} />
+              </TouchableOpacity>
               {haStatus.ha_instance_url ? (
                 <InfoRow label="Instance URL" value={haStatus.ha_instance_url} />
               ) : null}
@@ -333,6 +341,13 @@ const styles = StyleSheet.create({
     marginTop: 10, paddingVertical: 10, alignItems: 'center',
     borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
+  viewDevicesBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(79,195,247,0.06)', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10,
+    borderWidth: 1, borderColor: 'rgba(79,195,247,0.15)',
+  },
+  viewDevicesBtnText: { fontSize: 13, color: ACCENT, fontWeight: '600' },
   reconnectBtnText: { color: MUTED, fontSize: 13 },
   haDescription: { fontSize: 13, color: MUTED, lineHeight: 20, marginBottom: 16 },
   connectHABtn: {

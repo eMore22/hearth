@@ -4,6 +4,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '../src/stores/authStore';
 import { useHouseholdStore } from '../src/stores/householdStore';
 import { setUnauthorizedHandler } from '../src/services/api';
+import { registerForPushNotificationsAsync } from '../src/services/notifications';
 
 export default function RootLayout() {
   const { session, loading: authLoading, loadSession } = useAuthStore();
@@ -17,6 +18,7 @@ export default function RootLayout() {
   // re-render → effect fires again → fetchHousehold → infinite loop.
   const hasCheckedHousehold = useRef(false);
   const isNavigating        = useRef(false);
+  const hasRegisteredPush   = useRef(false);
 
   const inAuthGroup       = segments[0] === '(auth)';
   const inOnboardingGroup = segments[0] === 'onboarding';
@@ -45,6 +47,21 @@ export default function RootLayout() {
     // Reset guard when session is cleared (logout)
     if (!session) {
       hasCheckedHousehold.current = false;
+    }
+  }, [session]);
+
+  // Register for push notifications once per session. Done here (root
+  // layout) rather than on the dashboard so it fires immediately on login,
+  // not only when the user happens to visit a specific screen.
+  useEffect(() => {
+    if (session && !hasRegisteredPush.current) {
+      hasRegisteredPush.current = true;
+      registerForPushNotificationsAsync().catch((err) => {
+        console.log('Push registration failed (non-fatal):', err);
+      });
+    }
+    if (!session) {
+      hasRegisteredPush.current = false;
     }
   }, [session]);
 

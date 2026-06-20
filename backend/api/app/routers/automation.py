@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from pydantic import BaseModel
 from app.dependencies import get_current_user, get_supabase_admin
 from app.services.ha_bridge import build_ha_bridge, HABridgeService
+from app.services.analytics import log_event
 
 router = APIRouter(tags=["automation"])
 
@@ -40,18 +41,12 @@ def _strip_markdown(text: str) -> str:
     Remove markdown formatting so the message renders as clean plain text
     in React Native's <Text> component.
     """
-    # Remove bold/italic markers
     text = re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', text)
-    # Remove inline links [label](url) → label
     text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
-    # Remove bare URLs
     text = re.sub(r'https?://\S+', '', text)
-    # Remove markdown list markers (-, *, numbered)
     text = re.sub(r'^\s*[-*•]\s+', '', text, flags=re.MULTILINE)
     text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
-    # Remove heading markers
     text = re.sub(r'^#+\s+', '', text, flags=re.MULTILINE)
-    # Collapse multiple blank lines
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
@@ -155,7 +150,19 @@ async def receive_webhook(
     except Exception:
         pass
 
-    # 3. Process with Chief of Staff
+    # 3. Analytics — every event that hits the webhook, not just critical
+    #    ones, so you can see overall HA traffic volume per household.
+    log_event(
+        supabase=supabase,
+        user_id=None,  # webhook has no authenticated user — system event
+        household_id=household_id,
+        event_name="ha_event_received",
+        module="automation",
+        metadata={"entity_id": entity_id, "new_state": new_state, "device_class": attributes.get("device_class")},
+    )
+
+    # 4. Process with Chief of Staff (handles critical-event filtering,
+    #    alert generation, and push notification internally)
     try:
         await _process_event_with_chief(
             household_id=household_id,
@@ -206,6 +213,15 @@ async def connect_ha(
         raise HTTPException(status_code=400, detail=f"Failed to save connection: {e}")
 
     device_count = await _sync_devices(household_id, bridge, supabase)
+
+    log_event(
+        supabase=supabase,
+        user_id=current_user["id"],
+        household_id=household_id,
+        event_name="ha_connected",
+        module="automation",
+        metadata={"device_count": device_count},
+    )
 
     return {
         "status":       "connected",
@@ -327,6 +343,15 @@ async def execute_action(
                 "ha_response": ha_response,
             }).eq("id", action_id).execute()
 
+        log_event(
+            supabase=supabase,
+            user_id=current_user["id"],
+            household_id=household_id,
+            event_name="device_action_executed",
+            module="automation",
+            metadata={"entity_id": payload.entity_id, "action": payload.action, "initiated_by": "user"},
+        )
+
         return {"status": "sent", "entity_id": payload.entity_id, "action": payload.action}
 
     except HTTPException:
@@ -395,7 +420,6 @@ async def _process_event_with_chief(
 ):
     from app.agents.chief_of_staff_agent import ChiefOfStaffAgent
 
-    # Only process critical state transitions
     CRITICAL_TRANSITIONS = [
         ("off",     "on",       ["moisture", "smoke", "carbon_monoxide", "gas"]),
         ("closed",  "open",     ["door", "window", "garage"]),
@@ -418,7 +442,6 @@ async def _process_event_with_chief(
             .execute()
         return
 
-    # Get user_id for agent
     try:
         member  = supabase.table("household_members")\
             .select("user_id")\
@@ -429,7 +452,6 @@ async def _process_event_with_chief(
     except Exception:
         user_id = "system"
 
-    # Fetch insurance/home docs for cross-referencing
     try:
         docs_res = supabase.table("documents")\
             .select("title, document_type, summary")\
@@ -444,10 +466,8 @@ async def _process_event_with_chief(
     except Exception:
         insurance_docs = []
 
-    # Build suggested actions
     suggested_actions = _get_suggested_actions(entity_id, device_class, new_state)
 
-    # ── Tight prompt — no markdown, 2 sentences, plain text only ──
     doc_context = ""
     if insurance_docs:
         names = ", ".join(d["title"] for d in insurance_docs[:2])
@@ -487,3 +507,35 @@ async def _process_event_with_chief(
       .eq("entity_id", entity_id)\
       .eq("processed", False)\
       .execute()
+
+    # ── Analytics — critical events specifically, the ones that actually
+    # demonstrate the cross-domain "Chief connects HA to documents" story.
+    log_event(
+        supabase=supabase,
+        user_id=None,
+        household_id=household_id,
+        event_name="ha_critical_alert_generated",
+        module="automation",
+        metadata={
+            "entity_id": entity_id,
+            "device_class": device_class,
+            "cross_referenced_documents": len(insurance_docs) > 0,
+            "suggested_action_count": len(suggested_actions),
+        },
+    )
+
+    # ── Push notification — fire immediately, don't wait for the user to
+    # open the app. This is the whole point of a smart-home alert: the
+    # household needs to know about a leak or open door right now, not
+    # whenever they next check the dashboard.
+    try:
+        from app.services.push_service import send_push_to_household
+        await send_push_to_household(
+            household_id=household_id,
+            title=f"🏠 {friendly_name}",
+            body=chief_message,
+            data={"type": "ha_alert", "entity_id": entity_id, "screen": "dashboard"},
+            supabase=supabase,
+        )
+    except Exception as e:
+        print(f"⚠️ Push notification failed for HA event: {e}")

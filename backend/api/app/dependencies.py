@@ -12,7 +12,15 @@ os.environ['SSL_CERT_FILE'] = certifi.where()
 security = HTTPBearer()
 
 # Cached JWKS client — fetches Supabase's public signing keys once and caches
-# them (default 5 min), so most requests verify with zero network calls.
+# them, so most requests verify with zero network calls.
+#
+# IMPORTANT: this client is self-healing. If a verification attempt fails
+# for ANY reason (network blip, transient bad key fetch right after a Render
+# redeploy, etc.), we discard this cached client below so the *next* request
+# builds a brand new one from scratch — rather than getting permanently
+# stuck reusing a client that's in a bad state for the rest of the process
+# lifetime, which is what caused real users to get repeatedly 401'd until
+# the next deploy.
 _jwks_client: PyJWKClient | None = None
 
 
@@ -32,6 +40,12 @@ def _get_jwks_client() -> PyJWKClient:
     return _jwks_client
 
 
+def _reset_jwks_client():
+    """Force the next call to _get_jwks_client() to build a fresh client."""
+    global _jwks_client
+    _jwks_client = None
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
@@ -41,6 +55,7 @@ async def get_current_user(
     user_id = None
     email = None
     full_name = ""
+    jwks_error = None
 
     # ── Fast path: verify locally against Supabase's published public keys (JWKS) ──
     # Supabase signs access tokens with an asymmetric key (ES256 / ECC P-256).
@@ -61,12 +76,20 @@ async def get_current_user(
         email = payload.get("email")
         full_name = (payload.get("user_metadata") or {}).get("full_name", "")
     except jwt.ExpiredSignatureError:
+        # Genuinely expired — no point falling back, the Supabase API would
+        # reject this too. Fail fast with a clear message.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token expired. Please sign in again."
         )
     except Exception as e:
+        jwks_error = e
         print(f"⚠️ Local JWT verify failed ({e}), falling back to Supabase auth API")
+        # Self-heal: throw away the cached client. If this was caused by a
+        # bad/stale key fetch (e.g. right after a deploy, or mid key-rotation
+        # on Supabase's side), the next request gets a clean client instead
+        # of repeating the same failure indefinitely.
+        _reset_jwks_client()
 
     # ── Fallback: ask Supabase to verify ──
     # Used only if JWKS fetch/verification failed for some other reason
@@ -91,6 +114,9 @@ async def get_current_user(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Token expired. Please sign in again."
                 )
+            # Both verification paths failed. Log both errors clearly so
+            # this is debuggable from Render logs instead of a bare 401.
+            print(f"❌ Both JWT verification paths failed. JWKS error: {jwks_error} | Supabase API error: {e}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials"

@@ -84,6 +84,7 @@ export default function TabLayout() {
       {/* Hidden from tab bar — accessible via router.push */}
       <Tabs.Screen name="profile" options={{ href: null }} />
       <Tabs.Screen name="scan"    options={{ href: null }} />
+      <Tabs.Screen name="devices" options={{ href: null }} />
     </Tabs>
   );
 }

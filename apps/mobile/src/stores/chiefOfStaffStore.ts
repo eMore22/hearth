@@ -8,6 +8,8 @@ export interface ChatMessage {
   timestamp: string;
   category?: string;
   proactive_suggestions?: string[];
+  // Present when the Chief executed a smart-home command during this reply
+  action_result?: { status: 'sent' | 'failed'; entity_id?: string; action?: string; error?: string };
 }
 
 export interface DashboardSummary {
@@ -68,6 +70,7 @@ export const useChiefOfStaffStore = create<ChiefOfStaffState>((set, get) => ({
         timestamp: new Date().toISOString(),
         category: response.data.category,
         proactive_suggestions: response.data.proactive_suggestions,
+        action_result: response.data.action_result,
       };
 
       set({
