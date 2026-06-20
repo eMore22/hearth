@@ -247,11 +247,10 @@ async def _route_to_destination(
     elif category in ("medical_record", "prescription"):
         result = supabase.table("health_events").insert({
             "household_id": household_id,
-            "user_id":      user_id,
-            "event_type":   "document_scan",
-            "title":        extracted.get("title", "Medical Record"),
-            "description":  extracted.get("summary"),
-            "notes":        str(extracted.get("key_fields") or {}),
+            "member_name":  member_name or "Unknown",
+            "symptoms":     extracted.get("summary") or extracted.get("title", "Medical Record"),
+            "triage_result": "document_scanned",
+            "ai_response":  str(extracted.get("key_fields") or {}),
         }).execute()
 
         return result.data[0] if result.data else {}
