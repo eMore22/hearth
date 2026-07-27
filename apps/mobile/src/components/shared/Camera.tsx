@@ -5,7 +5,11 @@ import {
 } from 'react-native'
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera'
 import { Ionicons } from '@expo/vector-icons'
-import { COLORS } from '../../utils/theme'
+
+const NAVY = '#0A1628'
+const ACCENT = '#4FC3F7'
+const WHITE = '#F8FAFF'
+const MUTED = '#8899AA'
 
 interface CameraComponentProps {
   onCapture: (asset: any) => void
@@ -234,28 +238,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    backgroundColor: '#fff'
+    backgroundColor: NAVY
   },
   permissionText: {
     fontSize: 18,
     textAlign: 'center',
     marginBottom: 24,
-    color: COLORS.text
+    color: WHITE
   },
   permissionButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: ACCENT,
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 10,
     marginBottom: 12
   },
   permissionButtonText: {
-    color: '#fff',
+    color: NAVY,
     fontSize: 16,
     fontWeight: '600'
   },
   closeButton: { padding: 12 },
-  closeButtonText: { color: COLORS.muted, fontSize: 16 },
+  closeButtonText: { color: MUTED, fontSize: 16 },
   previewContainer: { flex: 1, backgroundColor: '#000' },
   previewImage: { flex: 1, resizeMode: 'contain' },
   previewActions: {
@@ -272,7 +276,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 30
   },
-  useButton: { backgroundColor: COLORS.primary },
+  useButton: { backgroundColor: ACCENT },
   previewButtonText: {
     color: '#fff',
     marginLeft: 8,

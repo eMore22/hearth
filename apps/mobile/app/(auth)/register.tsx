@@ -1,11 +1,16 @@
 import { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, Alert, ScrollView
+  StyleSheet, KeyboardAvoidingView, Platform, Alert, ScrollView, StatusBar
 } from 'react-native'
 import { Link, router } from 'expo-router'
 import { useAuthStore } from '../../src/stores/authStore'
-import { COLORS } from '../../src/utils/theme'
+
+const NAVY = '#0A1628'
+const SURFACE = '#162035'
+const ACCENT = '#4FC3F7'
+const WHITE = '#F8FAFF'
+const MUTED = '#8899AA'
 
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState('')
@@ -39,87 +44,115 @@ export default function RegisterScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={styles.inner}>
-        <Text style={styles.logo}>🏠 Hearth</Text>
-        <Text style={styles.tagline}>Set up your household in 60 seconds</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView contentContainerStyle={styles.inner}>
+          <View style={styles.logoBox}>
+            <Text style={styles.logoIcon}>✦</Text>
+          </View>
+          <Text style={styles.title}>Hearth</Text>
+          <Text style={styles.tagline}>Set up your household in 60 seconds</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Full name"
-          placeholderTextColor={COLORS.muted}
-          value={fullName}
-          onChangeText={setFullName}
-          autoCapitalize="words"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor={COLORS.muted}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password (min 8 characters)"
-          placeholderTextColor={COLORS.muted}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+          <Text style={styles.fieldLabel}>Full Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Jane Doe"
+            placeholderTextColor={MUTED}
+            value={fullName}
+            onChangeText={setFullName}
+            autoCapitalize="words"
+            editable={!loading}
+          />
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleRegister}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Creating account...' : 'Create Account'}
-          </Text>
-        </TouchableOpacity>
+          <Text style={styles.fieldLabel}>Email</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="you@example.com"
+            placeholderTextColor={MUTED}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            editable={!loading}
+          />
 
-        <Link href="/(auth)/login" asChild>
-          <TouchableOpacity style={styles.linkRow}>
-            <Text style={styles.linkText}>
-              Already have an account? <Text style={styles.linkAccent}>Sign in</Text>
+          <Text style={styles.fieldLabel}>Password</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Min 8 characters"
+            placeholderTextColor={MUTED}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            editable={!loading}
+          />
+
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleRegister}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? 'Creating account...' : 'Create Account'}
             </Text>
           </TouchableOpacity>
-        </Link>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+          <Link href="/(auth)/login" asChild>
+            <TouchableOpacity style={styles.linkRow} disabled={loading}>
+              <Text style={styles.linkText}>
+                Already have an account? <Text style={styles.linkAccent}>Sign in</Text>
+              </Text>
+            </TouchableOpacity>
+          </Link>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: NAVY },
+  keyboardView: { flex: 1 },
   inner: { flexGrow: 1, justifyContent: 'center', padding: 28 },
-  logo: { fontSize: 36, fontWeight: '700', color: COLORS.primary, textAlign: 'center', marginBottom: 8 },
-  tagline: { fontSize: 15, color: COLORS.muted, textAlign: 'center', marginBottom: 40 },
+  logoBox: {
+    width: 64, height: 64, borderRadius: 20,
+    backgroundColor: 'rgba(79,195,247,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+    alignSelf: 'center', marginBottom: 20,
+    borderWidth: 1, borderColor: 'rgba(79,195,247,0.25)',
+  },
+  logoIcon: { fontSize: 26, color: ACCENT },
+  title: { fontSize: 32, fontWeight: '700', color: WHITE, textAlign: 'center', marginBottom: 6 },
+  tagline: { fontSize: 14, color: MUTED, textAlign: 'center', marginBottom: 32 },
+  fieldLabel: {
+    fontSize: 12, fontWeight: '600', color: MUTED,
+    textTransform: 'uppercase', letterSpacing: 0.8,
+    marginBottom: 8, marginTop: 4,
+  },
   input: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: SURFACE,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 14,
+    marginBottom: 16,
     fontSize: 15,
-    color: COLORS.text,
+    color: WHITE,
     borderWidth: 1,
-    borderColor: COLORS.border
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   button: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: ACCENT,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    marginTop: 8
+    marginTop: 8,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  linkRow: { marginTop: 24, alignItems: 'center' },
-  linkText: { color: COLORS.muted, fontSize: 14 },
-  linkAccent: { color: COLORS.accent, fontWeight: '600' }
+  buttonText: { color: NAVY, fontSize: 15, fontWeight: '700' },
+  linkRow: { marginTop: 22, alignItems: 'center' },
+  linkText: { color: MUTED, fontSize: 14 },
+  linkAccent: { color: ACCENT, fontWeight: '600' },
 })

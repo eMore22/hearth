@@ -1,16 +1,17 @@
 import { TouchableOpacity, Text, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { COLORS } from '../../utils/theme'
 import { router } from 'expo-router'
+
+const ACCENT = '#4FC3F7'
 
 interface ChiefOfStaffButtonProps {
   label?: string
   onPress?: () => void
 }
 
-export default function ChiefOfStaffButton({ 
-  label = 'Ask Hearth', 
-  onPress 
+export default function ChiefOfStaffButton({
+  label = 'Ask Hearth',
+  onPress
 }: ChiefOfStaffButtonProps) {
   const handlePress = () => {
     if (onPress) {
@@ -33,7 +34,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 20,
     right: 20,
-    backgroundColor: COLORS.primary,
+    backgroundColor: ACCENT,
     borderRadius: 30,
     paddingVertical: 12,
     paddingHorizontal: 18,

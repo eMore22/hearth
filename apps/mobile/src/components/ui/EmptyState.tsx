@@ -1,6 +1,9 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { COLORS } from '../../utils/theme'
+
+const ACCENT = '#4FC3F7'
+const WHITE = '#F8FAFF'
+const MUTED = '#8899AA'
 
 interface EmptyStateProps {
   icon?: keyof typeof Ionicons.glyphMap
@@ -10,16 +13,16 @@ interface EmptyStateProps {
   onAction?: () => void
 }
 
-export default function EmptyState({ 
-  icon = 'folder-open', 
-  title, 
-  message, 
-  actionLabel, 
-  onAction 
+export default function EmptyState({
+  icon = 'folder-open',
+  title,
+  message,
+  actionLabel,
+  onAction
 }: EmptyStateProps) {
   return (
     <View style={styles.container}>
-      <Ionicons name={`${icon}-outline` as any} size={64} color={COLORS.muted} />
+      <Ionicons name={`${icon}-outline` as any} size={64} color={MUTED} />
       <Text style={styles.title}>{title}</Text>
       {message && <Text style={styles.message}>{message}</Text>}
       {actionLabel && onAction && (
@@ -41,25 +44,25 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: COLORS.text,
+    color: WHITE,
     marginTop: 16,
     textAlign: 'center'
   },
   message: {
     fontSize: 14,
-    color: COLORS.muted,
+    color: MUTED,
     marginTop: 8,
     textAlign: 'center'
   },
   button: {
     marginTop: 24,
-    backgroundColor: COLORS.primary,
+    backgroundColor: ACCENT,
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 25
   },
   buttonText: {
-    color: '#fff',
+    color: '#0A1628',
     fontWeight: '600',
     fontSize: 15
   }
