@@ -4,6 +4,8 @@ import {
 } from 'react-native'
 import { useEffect, useState } from 'react'
 import { useBillStore } from '../../src/stores/billStore'
+import { useHouseholdStore } from '../../src/stores/householdStore'
+import { getCurrencySymbol } from '../../src/utils/currency'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -20,20 +22,26 @@ const BILLING_CYCLES = ['monthly', 'weekly', 'quarterly', 'annually']
 
 export default function BillsScreen() {
   const { bills, monthlyReport, unusedSubscriptions, isLoading, fetchBills, fetchMonthlyReport, detectUnused, generateNegotiationScript, createBill } = useBillStore()
+  const household = useHouseholdStore(s => s.household)
+  const fetchHousehold = useHouseholdStore(s => s.fetchHousehold)
+  const currencySymbol = getCurrencySymbol(household?.currency)
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [showUnused, setShowUnused] = useState(false)
   const [detectLoading, setDetectLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // Add bill form state
   const [billName, setBillName] = useState('')
   const [billAmount, setBillAmount] = useState('')
   const [billCategory, setBillCategory] = useState('other')
   const [billingCycle, setBillingCycle] = useState('monthly')
   const [billNotes, setBillNotes] = useState('')
 
-  useEffect(() => { fetchBills(); fetchMonthlyReport() }, [])
+  useEffect(() => {
+    fetchBills()
+    fetchMonthlyReport()
+    if (!household) fetchHousehold()
+  }, [])
 
   const resetForm = () => {
     setBillName(''); setBillAmount(''); setBillCategory('other')
@@ -89,7 +97,7 @@ export default function BillsScreen() {
         <Text style={styles.headerTitle}>Bills & Subscriptions</Text>
         <View style={styles.summaryRow}>
           <View style={styles.summaryPill}>
-            <Text style={styles.summaryValue}>${totalMonthly.toFixed(0)}</Text>
+            <Text style={styles.summaryValue}>{currencySymbol}{totalMonthly.toFixed(0)}</Text>
             <Text style={styles.summaryLabel}>Monthly</Text>
           </View>
           <View style={styles.summaryPill}>
@@ -114,7 +122,7 @@ export default function BillsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Monthly Summary</Text>
             <View style={styles.reportCard}>
-              <Text style={styles.reportAmount}>${monthlyReport.total_spent?.toFixed(2) || '0.00'}</Text>
+              <Text style={styles.reportAmount}>{currencySymbol}{monthlyReport.total_spent?.toFixed(2) || '0.00'}</Text>
               <Text style={styles.reportSummary}>{monthlyReport.summary}</Text>
             </View>
           </View>
@@ -134,7 +142,7 @@ export default function BillsScreen() {
               <View key={i} style={styles.unusedCard}>
                 <View style={styles.unusedTop}>
                   <Text style={styles.unusedProvider}>{sub.provider}</Text>
-                  <Text style={styles.unusedSaving}>-${sub.monthly_savings}/mo</Text>
+                  <Text style={styles.unusedSaving}>-{currencySymbol}{sub.monthly_savings}/mo</Text>
                 </View>
                 <Text style={styles.unusedReason}>{sub.reason}</Text>
                 <TouchableOpacity onPress={() => handleNegotiation(sub.provider, 'current plan')}>
@@ -153,7 +161,6 @@ export default function BillsScreen() {
               <Ionicons name="card-outline" size={40} color={MUTED} />
               <Text style={styles.emptyTitle}>No bills added yet</Text>
               <Text style={styles.emptySubtitle}>Add your recurring bills to track spending</Text>
-              {/* ── ADD BILL BUTTON (empty state) ── */}
               <TouchableOpacity style={styles.addBillBtnPrimary} onPress={() => setShowAddModal(true)}>
                 <Ionicons name="add-circle-outline" size={20} color={WHITE} />
                 <Text style={styles.addBillBtnPrimaryText}>➕ Add Manual Bill</Text>
@@ -170,10 +177,9 @@ export default function BillsScreen() {
                     <Text style={styles.billProvider}>{bill.provider || bill.name}</Text>
                     <Text style={styles.billMeta}>{bill.category} · {bill.billing_cycle}</Text>
                   </View>
-                  <Text style={styles.billAmount}>${bill.amount}</Text>
+                  <Text style={styles.billAmount}>{currencySymbol}{bill.amount}</Text>
                 </View>
               ))}
-              {/* ── ADD BILL BUTTON (has bills) ── */}
               <TouchableOpacity style={styles.addBillBtnSecondary} onPress={() => setShowAddModal(true)}>
                 <Ionicons name="add-outline" size={18} color={ACCENT} />
                 <Text style={styles.addBillBtnSecondaryText}>Add Another Bill</Text>
@@ -185,7 +191,6 @@ export default function BillsScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ── ADD BILL MODAL ── */}
       <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
         <KeyboardAvoidingView
           style={styles.modal}
@@ -214,7 +219,7 @@ export default function BillsScreen() {
               onChangeText={setBillName}
             />
 
-            <Text style={styles.fieldLabel}>Amount ($) *</Text>
+            <Text style={styles.fieldLabel}>Amount ({currencySymbol}) *</Text>
             <TextInput
               style={styles.input}
               placeholder="0.00"
@@ -329,7 +334,6 @@ const styles = StyleSheet.create({
   billProvider: { fontSize: 15, fontWeight: '600', color: WHITE, marginBottom: 2 },
   billMeta: { fontSize: 12, color: MUTED },
   billAmount: { fontSize: 16, fontWeight: '700', color: WHITE },
-  // Modal
   modal: { flex: 1, backgroundColor: NAVY, padding: 24 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 24 },
   modalTitle: { fontSize: 24, fontWeight: '700', color: WHITE, marginBottom: 4 },

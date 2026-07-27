@@ -4,6 +4,8 @@ import {
 } from 'react-native'
 import { useEffect, useState } from 'react'
 import { useGroceryStore } from '../../src/stores/groceryStore'
+import { useHouseholdStore } from '../../src/stores/householdStore'
+import { getCurrencySymbol } from '../../src/utils/currency'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -28,10 +30,14 @@ const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'S
 
 export default function GroceryScreen() {
   const {
-    mealPlan, shoppingList, inventory, wasteAlerts, isLoading, budget, currency,
+    mealPlan, shoppingList, inventory, wasteAlerts, isLoading, budget,
     generateMealPlan, createShoppingList, fetchWasteAlerts, fetchInventory,
     fetchBudget, setBudget, saveMealPlan, generateBudgetShoppingList,
   } = useGroceryStore()
+
+  const household = useHouseholdStore(s => s.household)
+  const fetchHousehold = useHouseholdStore(s => s.fetchHousehold)
+  const currencySymbol = getCurrencySymbol(household?.currency)
 
   const [showList, setShowList] = useState(false)
   const [showCustomMealModal, setShowCustomMealModal] = useState(false)
@@ -46,6 +52,7 @@ export default function GroceryScreen() {
   useEffect(() => {
     fetchInventory()
     fetchBudget()
+    if (!household) fetchHousehold()
     if (!mealPlan) generateMealPlan(DEFAULT_PREFS)
   }, [])
 
@@ -98,7 +105,7 @@ export default function GroceryScreen() {
       {/* Budget Bar */}
       <TouchableOpacity style={styles.budgetBar} onPress={() => { setBudgetInput(String(budget)); setShowBudgetModal(true); }}>
         <Ionicons name="wallet-outline" size={16} color={ACCENT} />
-        <Text style={styles.budgetText}>{currency}{budget.toLocaleString()} / week</Text>
+        <Text style={styles.budgetText}>{currencySymbol}{budget.toLocaleString()} / week</Text>
         <Ionicons name="chevron-down" size={14} color={MUTED} />
       </TouchableOpacity>
 
@@ -200,13 +207,13 @@ export default function GroceryScreen() {
               )}
               <View style={styles.listFooter}>
                 <Text style={styles.listTotal}>Total: {shoppingList.total_items} items</Text>
-                <Text style={styles.listCost}>Est. {currency}{shoppingList.estimated_total?.toLocaleString() || shoppingList.estimated_cost}</Text>
+                <Text style={styles.listCost}>Est. {currencySymbol}{shoppingList.estimated_total?.toLocaleString() || shoppingList.estimated_cost}</Text>
               </View>
               {shoppingList.over_budget && (
                 <View style={styles.budgetWarning}>
                   <Ionicons name="warning-outline" size={14} color={WARNING} />
                   <Text style={styles.budgetWarningText}>
-                    Over budget by {currency}{shoppingList.budget_gap?.toLocaleString()}
+                    Over budget by {currencySymbol}{shoppingList.budget_gap?.toLocaleString()}
                   </Text>
                 </View>
               )}
@@ -302,7 +309,7 @@ export default function GroceryScreen() {
               value={budgetInput}
               onChangeText={setBudgetInput}
               keyboardType="numeric"
-              placeholder={`${currency}0`}
+              placeholder={`${currencySymbol}0`}
               placeholderTextColor={MUTED}
             />
             <View style={styles.budgetModalActions}>
@@ -311,7 +318,7 @@ export default function GroceryScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.budgetSaveBtn} onPress={async () => {
                 const amount = parseFloat(budgetInput) || 0;
-                await setBudget(amount, currency);
+                await setBudget(amount, household?.currency || 'NGN');
                 setShowBudgetModal(false);
               }}>
                 <Text style={styles.budgetSaveText}>Save</Text>
@@ -367,7 +374,6 @@ const styles = StyleSheet.create({
   budgetWarningText: { fontSize: 12, color: WARNING, fontWeight: '600' },
   suggestionsBox: { marginTop: 8, gap: 4 },
   suggestionText: { fontSize: 12, color: '#B8D4E8', fontStyle: 'italic' },
-  // Modal styles
   modal: { flex: 1, backgroundColor: NAVY, padding: 24 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 24 },
   modalTitle: { fontSize: 24, fontWeight: '700', color: WHITE, marginBottom: 4 },
@@ -388,7 +394,6 @@ const styles = StyleSheet.create({
   input: { backgroundColor: SURFACE, borderRadius: 12, padding: 16, fontSize: 15, color: WHITE, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
   saveBtn: { backgroundColor: PURPLE, borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 24 },
   saveBtnText: { color: WHITE, fontWeight: '700', fontSize: 16 },
-  // Budget modal
   budgetModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   budgetModalCard: { backgroundColor: SURFACE, borderRadius: 16, padding: 24, width: '100%', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
   budgetModalTitle: { fontSize: 18, fontWeight: '700', color: WHITE, marginBottom: 16 },

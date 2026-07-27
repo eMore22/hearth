@@ -17,6 +17,7 @@ const TRIAGE_CONFIG: Record<string, { color: string; bg: string; label: string; 
   emergency: { color: DANGER, bg: 'rgba(255,107,107,0.12)', label: 'EMERGENCY', icon: 'warning' },
   urgent_care: { color: WARNING, bg: 'rgba(255,159,28,0.12)', label: 'URGENT CARE', icon: 'medkit' },
   gp_visit: { color: '#FFD166', bg: 'rgba(255,209,102,0.12)', label: 'GP VISIT', icon: 'person' },
+  pharmacy: { color: '#4EA8DE', bg: 'rgba(78,168,222,0.12)', label: 'PHARMACY', icon: 'medical' },
   home_care: { color: SUCCESS, bg: 'rgba(6,214,160,0.12)', label: 'HOME CARE', icon: 'home' },
 }
 
@@ -62,11 +63,22 @@ export default function HealthScreen() {
               <Text style={styles.triageRec}>{lastTriage.recommendation}</Text>
               {lastTriage.home_care_tips?.length > 0 && (
                 <View style={styles.tipsBox}>
-                  <Text style={styles.tipsTitle}>Home care tips</Text>
+                  <Text style={styles.tipsTitle}>Home care / first aid</Text>
                   {lastTriage.home_care_tips.map((tip: string, i: number) => (
                     <Text key={i} style={styles.tip}>• {tip}</Text>
                   ))}
                 </View>
+              )}
+              {lastTriage.red_flags?.length > 0 && (
+                <View style={styles.redFlagsBox}>
+                  <Text style={styles.redFlagsTitle}>⚠ Seek immediate care if you notice:</Text>
+                  {lastTriage.red_flags.map((flag: string, i: number) => (
+                    <Text key={i} style={styles.redFlag}>• {flag}</Text>
+                  ))}
+                </View>
+              )}
+              {lastTriage.suggested_otc && (
+                <Text style={styles.otcText}>Suggested OTC: {lastTriage.suggested_otc}</Text>
               )}
               {lastTriage.disclaimer && <Text style={styles.triageDisclaimer}>{lastTriage.disclaimer}</Text>}
             </View>
@@ -136,6 +148,10 @@ const styles = StyleSheet.create({
   tipsBox: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 12, gap: 4 },
   tipsTitle: { fontSize: 12, fontWeight: '600', color: WHITE, marginBottom: 6 },
   tip: { fontSize: 13, color: '#B8D4E8', lineHeight: 20 },
+  redFlagsBox: { backgroundColor: 'rgba(255,107,107,0.1)', borderRadius: 10, padding: 12, gap: 4, marginTop: 10, borderWidth: 1, borderColor: 'rgba(255,107,107,0.25)' },
+  redFlagsTitle: { fontSize: 12, fontWeight: '700', color: DANGER, marginBottom: 6 },
+  redFlag: { fontSize: 13, color: '#FFD0D0', lineHeight: 20 },
+  otcText: { fontSize: 13, color: '#B8D4E8', marginTop: 10, fontStyle: 'italic' },
   triageDisclaimer: { fontSize: 11, color: MUTED, marginTop: 10, fontStyle: 'italic' },
   inputCard: { backgroundColor: SURFACE, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
   input: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 14, fontSize: 14, color: WHITE, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', minHeight: 70, textAlignVertical: 'top', marginBottom: 12 },

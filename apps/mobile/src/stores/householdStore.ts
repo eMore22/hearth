@@ -6,6 +6,7 @@ export interface Household {
   name: string;
   address?: string | null;
   country?: string;
+  currency?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -17,8 +18,8 @@ interface HouseholdState {
   error: string | null;
 
   fetchHousehold: () => Promise<void>;
-  createHousehold: (data: { name: string; address?: string; country?: string }) => Promise<void>;
-  updateHousehold: (data: { name?: string; address?: string; country?: string }) => Promise<void>;
+  createHousehold: (data: { name: string; address?: string; country?: string; currency?: string }) => Promise<void>;
+  updateHousehold: (data: { name?: string; address?: string; country?: string; currency?: string }) => Promise<void>;
   clearHousehold: () => void;
   clearError: () => void;
 }
@@ -36,7 +37,6 @@ export const useHouseholdStore = create<HouseholdState>((set, get) => ({
       if (res.data?.households) {
         set({ household: res.data.households });
       } else if (res.data?.id) {
-        // Some responses return the household object directly
         set({ household: res.data });
       } else {
         set({ household: null });
@@ -69,11 +69,8 @@ export const useHouseholdStore = create<HouseholdState>((set, get) => ({
     set({ loading: true, isLoading: true, error: null });
     try {
       await api.patch(`/api/household/${current.id}`, data);
-      // Refresh from server so UI reflects persisted state
       await get().fetchHousehold();
     } catch (error: any) {
-      // If the patch endpoint doesn't exist yet, apply the update locally
-      // so the UI isn't broken while the backend endpoint is wired up
       set({ household: { ...current, ...data }, loading: false, isLoading: false });
       const message = error.response?.data?.detail || 'Failed to update household';
       set({ error: message });

@@ -1,5 +1,4 @@
 import json
-import re
 from typing import Any, Dict, List, Optional
 from app.agents.base_agent import BaseHouseholdAgent
 
@@ -32,59 +31,58 @@ Respond with ONLY the JSON object requested — no preamble, no explanation, no 
         else:
             raise ValueError(f"Unknown action: {action}")
 
-    @staticmethod
-    def _extract_json(text: str) -> str:
-        """
-        Pull a JSON object/array out of a Claude response even if it added
-        stray prose around it. Claude is told not to, but occasionally does
-        anyway — this makes parsing resilient instead of failing on the
-        first character that isn't '{'.
-        """
-        cleaned = text.replace("```json", "").replace("```", "").strip()
-        # If there's leading/trailing prose, grab the outermost {...} or [...]
-        match = re.search(r'(\{.*\}|\[.*\])', cleaned, re.DOTALL)
-        return match.group(1) if match else cleaned
-
     def triage(self, symptoms: str, patient_profile: Dict = None) -> Dict:
-        """Provide general guidance for reported symptoms (uses patient_profile if given)."""
+        """
+        Provide general, informational guidance for reported symptoms:
+        likely common cause, standard first-aid/home-care steps, and a
+        care-pathway recommendation. NOT a clinical diagnosis.
+        """
         profile_text = ""
         if patient_profile:
             age = patient_profile.get("age", "unknown")
             conditions = patient_profile.get("conditions", [])
             profile_text = f"Patient age: {age}. Existing conditions: {', '.join(conditions) if conditions else 'none'}."
 
-        prompt = f"""Provide general, non-diagnostic guidance for these symptoms:
+        prompt = f"""A household member is reporting these symptoms. Provide general, informational health guidance — the kind of standard, well-known first-aid and home-care information found in a reputable home health reference (e.g. Mayo Clinic, NHS). Do not provide a clinical diagnosis.
 
 Symptoms: "{symptoms}"
 {profile_text}
 
 Return ONLY valid JSON:
 {{
-  "severity_level": "low|medium|high",
-  "home_care_suggestions": ["suggestion 1", "suggestion 2"],
-  "when_to_see_doctor": "specific conditions",
-  "urgent_care_warning": "symptoms that require immediate attention or null",
-  "disclaimer": "This is general information only. Consult a healthcare professional."
+  "triage_level": "home_care|pharmacy|gp_visit|urgent_care|emergency",
+  "recommendation": "1-2 sentence summary naming the most common, well-known explanation for these symptoms and what to do",
+  "home_care_tips": ["specific, standard first-aid/home-care step 1", "step 2", "step 3"],
+  "red_flags": ["symptom that would require immediate escalation"],
+  "suggested_otc": "commonly used over-the-counter option if relevant, or null",
+  "disclaimer": "This is general information only and is not a medical diagnosis. Consult a healthcare professional for medical advice."
 }}"""
 
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
         try:
             clean = self._extract_json(response)
-            return json.loads(clean)
+            result = json.loads(clean)
+            # Defensive defaults so the frontend never renders `undefined`
+            result.setdefault("triage_level", "home_care")
+            result.setdefault("home_care_tips", [])
+            result.setdefault("red_flags", [])
+            result.setdefault("suggested_otc", None)
+            result.setdefault(
+                "disclaimer",
+                "This is general information only and is not a medical diagnosis. Consult a healthcare professional for medical advice."
+            )
+            return result
         except Exception as e:
-            # Log the REAL failure reason and Claude's raw output, instead
-            # of silently swallowing it. This is what made the previous bug
-            # invisible — a generic except: meant we never knew Claude's
-            # actual response, or why it failed to parse.
             print(f"⚠️ Health triage JSON parse failed: {e}")
             print(f"⚠️ Raw Claude response was: {response[:500]}")
             return {
-                "severity_level": "medium",
-                "home_care_suggestions": ["Rest and stay hydrated"],
-                "when_to_see_doctor": "If symptoms persist beyond 48 hours",
-                "urgent_care_warning": None,
+                "triage_level": "home_care",
+                "recommendation": "We couldn't complete a full assessment right now. If symptoms persist or worsen, contact a healthcare professional.",
+                "home_care_tips": ["Rest and stay hydrated"],
+                "red_flags": [],
+                "suggested_otc": None,
                 "disclaimer": "This is not medical advice. Please consult a doctor.",
-                "_fallback_used": True,  # lets the frontend/logs know this was a fallback, not a real answer
+                "_fallback_used": True,
             }
 
     def triage_symptoms(self, symptoms: str) -> Dict:

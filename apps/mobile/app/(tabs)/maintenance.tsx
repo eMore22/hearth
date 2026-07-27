@@ -11,8 +11,17 @@ const ACCENT = '#FFD166'
 const WHITE = '#F8FAFF'
 const MUTED = '#8899AA'
 const SUCCESS = '#06D6A0'
+const WARNING = '#FF9F1C'
+const DANGER = '#FF6B6B'
 
 const DEFAULT_PROFILE = { property_type: 'house', appliances: ['furnace', 'water heater'], climate: 'temperate' }
+
+const URGENCY_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
+  emergency: { color: DANGER, bg: 'rgba(255,107,107,0.12)', label: 'EMERGENCY' },
+  high: { color: WARNING, bg: 'rgba(255,159,28,0.12)', label: 'HIGH URGENCY' },
+  medium: { color: ACCENT, bg: 'rgba(255,209,102,0.12)', label: 'MEDIUM URGENCY' },
+  low: { color: SUCCESS, bg: 'rgba(6,214,160,0.12)', label: 'LOW URGENCY' },
+}
 
 export default function MaintenanceScreen() {
   const { tasks = [], isLoading, generateCalendar, diagnoseProblem, getDIYInstructions, fetchTasks, completeTask } = useMaintenanceStore()
@@ -43,6 +52,7 @@ export default function MaintenanceScreen() {
   }
 
   const upcomingTasks = tasks.filter((t: any) => !t.completed).slice(0, 8)
+  const urgencyCfg = diagnosis ? (URGENCY_CONFIG[diagnosis.urgency] || URGENCY_CONFIG.medium) : null
 
   return (
     <View style={styles.container}>
@@ -109,15 +119,51 @@ export default function MaintenanceScreen() {
             <TouchableOpacity style={styles.diagnoseBtn} onPress={handleDiagnose} disabled={diagnosing}>
               <Text style={styles.diagnoseBtnText}>{diagnosing ? 'Diagnosing...' : 'Diagnose'}</Text>
             </TouchableOpacity>
+
             {diagnosis && (
               <View style={styles.diagnosisResult}>
-                <Text style={styles.diagnosisSubtitle}>Likely causes:</Text>
+                {urgencyCfg && (
+                  <View style={[styles.urgencyBadge, { backgroundColor: urgencyCfg.bg, borderColor: urgencyCfg.color + '33' }]}>
+                    <Text style={[styles.urgencyText, { color: urgencyCfg.color }]}>{urgencyCfg.label}</Text>
+                  </View>
+                )}
+
+                <Text style={styles.diagnosisSubtitle}>Likely causes</Text>
                 {diagnosis.likely_causes?.map((cause: string, i: number) => (
                   <Text key={i} style={styles.diagnosisCause}>• {cause}</Text>
                 ))}
-                <Text style={styles.diagnosisSubtitle}>Recommendation:</Text>
-                <Text style={styles.diagnosisText}>{diagnosis.recommendation || 'Consult a professional'}</Text>
-                {diagnosis.estimated_cost_range && <Text style={styles.diagnosisCost}>Est. cost: {diagnosis.estimated_cost_range}</Text>}
+
+                {diagnosis.immediate_steps?.length > 0 && (
+                  <>
+                    <Text style={styles.diagnosisSubtitle}>What to do now</Text>
+                    {diagnosis.immediate_steps.map((step: string, i: number) => (
+                      <Text key={i} style={styles.diagnosisCause}>• {step}</Text>
+                    ))}
+                  </>
+                )}
+
+                <View style={styles.metaRow}>
+                  {diagnosis.diy_possible !== undefined && (
+                    <View style={styles.metaChip}>
+                      <Text style={styles.metaChipText}>{diagnosis.diy_possible ? '🔧 DIY possible' : '👷 Pro recommended'}</Text>
+                    </View>
+                  )}
+                  {diagnosis.estimated_repair_cost && (
+                    <View style={styles.metaChip}>
+                      <Text style={styles.metaChipText}>Est. cost: {diagnosis.estimated_repair_cost}</Text>
+                    </View>
+                  )}
+                </View>
+
+                {diagnosis.safety_warning && (
+                  <View style={styles.safetyWarningBox}>
+                    <Text style={styles.safetyWarningText}>⚠ {diagnosis.safety_warning}</Text>
+                  </View>
+                )}
+
+                {diagnosis.disclaimer && (
+                  <Text style={styles.diagnosisDisclaimer}>{diagnosis.disclaimer}</Text>
+                )}
               </View>
             )}
           </View>
@@ -156,8 +202,15 @@ const styles = StyleSheet.create({
   diagnoseBtn: { backgroundColor: ACCENT, borderRadius: 12, padding: 14, alignItems: 'center' },
   diagnoseBtnText: { color: NAVY, fontWeight: '700', fontSize: 14 },
   diagnosisResult: { marginTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)', paddingTop: 16, gap: 6 },
+  urgencyBadge: { alignSelf: 'flex-start', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, marginBottom: 8 },
+  urgencyText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
   diagnosisSubtitle: { fontSize: 12, fontWeight: '700', color: ACCENT, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8 },
   diagnosisCause: { fontSize: 13, color: '#B8D4E8' },
   diagnosisText: { fontSize: 13, color: '#B8D4E8', lineHeight: 19 },
-  diagnosisCost: { fontSize: 12, color: MUTED, marginTop: 4 },
+  metaRow: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
+  metaChip: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  metaChipText: { fontSize: 12, color: '#B8D4E8' },
+  safetyWarningBox: { backgroundColor: 'rgba(255,107,107,0.1)', borderRadius: 10, padding: 12, marginTop: 10, borderWidth: 1, borderColor: 'rgba(255,107,107,0.25)' },
+  safetyWarningText: { fontSize: 13, color: '#FFD0D0', lineHeight: 19 },
+  diagnosisDisclaimer: { fontSize: 11, color: MUTED, marginTop: 10, fontStyle: 'italic' },
 })

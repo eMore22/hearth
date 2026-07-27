@@ -47,7 +47,6 @@ interface GroceryState {
   inventory: InventoryItem[];
   wasteAlerts: WasteAlert[];
   budget: number;
-  currency: string;
   isLoading: boolean;
   error: string | null;
 
@@ -59,6 +58,9 @@ interface GroceryState {
   fetchInventory: () => Promise<void>;
   addInventoryItem: (item: Partial<InventoryItem>) => Promise<void>;
   fetchBudget: () => Promise<void>;
+  // currency param kept for backend compatibility (household_preferences still
+  // stores it), but the UI should always pass the household's currency here —
+  // it is no longer read back for display anywhere.
   setBudget: (amount: number, currency?: string) => Promise<void>;
   saveMealPlan: (plan: MealPlan) => Promise<void>;
   generateBudgetShoppingList: (plan: MealPlan, budget: number) => Promise<any>;
@@ -72,7 +74,6 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
   inventory: [],
   wasteAlerts: [],
   budget: 0,
-  currency: 'NGN',
   isLoading: false,
   error: null,
 
@@ -156,17 +157,14 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
   fetchBudget: async () => {
     try {
       const res = await groceryService.getBudget();
-      set({
-        budget: res.data?.weekly_budget || 0,
-        currency: res.data?.currency || 'NGN',
-      });
+      set({ budget: res.data?.weekly_budget || 0 });
     } catch {}
   },
 
   setBudget: async (amount, currency = 'NGN') => {
     try {
       await groceryService.setBudget(amount, currency);
-      set({ budget: amount, currency });
+      set({ budget: amount });
     } catch (error: any) {
       set({ error: error.message });
     }

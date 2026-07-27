@@ -1,4 +1,5 @@
 import json
+import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -30,6 +31,19 @@ class BaseHouseholdAgent(ABC):
             except Exception:
                 self._nvidia_client = None
         return self._nvidia_client
+
+    @staticmethod
+    def _extract_json(text: str) -> str:
+        """
+        Pull a JSON object/array out of a Claude response even if it added
+        stray prose around it. Agents are told to return ONLY JSON, but this
+        makes parsing resilient instead of failing on the first character
+        that isn't '{'. Shared across all agents so every diagnose/triage
+        call gets the same protection.
+        """
+        cleaned = text.replace("```json", "").replace("```", "").strip()
+        match = re.search(r'(\{.*\}|\[.*\])', cleaned, re.DOTALL)
+        return match.group(1) if match else cleaned
 
     def load_household_context(self) -> Dict[str, Any]:
         """Override in subclasses to load relevant household data."""

@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useHouseholdStore } from '../../src/stores/householdStore';
 import { useAutomationStore } from '../../src/stores/automationStore';
-import { useGroceryStore } from '../../src/stores/groceryStore';
+import { CURRENCIES } from '../../src/utils/currency';
 
 const NAVY    = '#0A1628';
 const SURFACE = '#162035';
@@ -20,17 +20,7 @@ const DANGER  = '#FF6B6B';
 const WARNING = '#FFD166';
 const SUCCESS = '#06D6A0';
 
-const CURRENCIES = [
-  { label: '🇳🇬 NGN (₦)', value: 'NGN' },
-  { label: '🇺🇸 USD ($)', value: 'USD' },
-  { label: '🇬🇧 GBP (£)', value: 'GBP' },
-  { label: '🇪🇺 EUR (€)', value: 'EUR' },
-  { label: '🇿🇦 ZAR (R)', value: 'ZAR' },
-  { label: '🇬🇭 GHS (GH₵)', value: 'GHS' },
-];
-
 export default function ProfileScreen() {
-  // ── Safe store access ──
   const user     = useAuthStore(s => s.user);
   const signOut  = useAuthStore(s => s.signOut);
   const household        = useHouseholdStore(s => s.household);
@@ -40,9 +30,8 @@ export default function ProfileScreen() {
   const haStatus         = useAutomationStore(s => s.status);
   const connectHA        = useAutomationStore(s => s.connectHA);
   const fetchHAStatus    = useAutomationStore(s => s.fetchStatus);
-  const currency         = useGroceryStore(s => s.currency);
-  const setCurrency      = useGroceryStore(s => s.setBudget); // we reuse setBudget to update currency only
-  const budget           = useGroceryStore(s => s.budget);
+
+  const currency = household?.currency || 'NGN';
 
   const [editName,    setEditName]    = useState('');
   const [editAddress, setEditAddress] = useState('');
@@ -56,6 +45,7 @@ export default function ProfileScreen() {
   const [haConnecting, setHaConnecting] = useState(false);
 
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+  const [savingCurrency, setSavingCurrency] = useState(false);
 
   useEffect(() => {
     try { fetchHousehold(); } catch {}
@@ -115,18 +105,18 @@ export default function ProfileScreen() {
   };
 
   const handleCurrencySelect = async (newCurrency: string) => {
-    // Update both currency state and persist to backend (using setBudget with existing budget)
+    setSavingCurrency(true);
     try {
-      await setCurrency(budget, newCurrency);
-      setShowCurrencyModal(false);
+      await updateHousehold({ currency: newCurrency });
     } catch {
-      // fallback: update locally only
-      useGroceryStore.setState({ currency: newCurrency });
+      // updateHousehold already falls back to an optimistic local update,
+      // so the UI still reflects the change even if the request failed.
+    } finally {
+      setSavingCurrency(false);
       setShowCurrencyModal(false);
     }
   };
 
-  // ── Safe display values ──
   const displayName =
     user?.user_metadata?.full_name ||
     user?.email?.split('@')[0]     ||
@@ -140,7 +130,6 @@ export default function ProfileScreen() {
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
       <ScrollView contentContainerStyle={styles.content}>
 
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => { try { router.back(); } catch { router.replace('/(tabs)/dashboard'); } }} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color={WHITE} />
@@ -149,7 +138,6 @@ export default function ProfileScreen() {
           <View style={{ width: 32 }} />
         </View>
 
-        {/* Personal info */}
         <View style={styles.card}>
           <Text style={styles.sectionLabel}>Personal Information</Text>
           <View style={styles.avatarRow}>
@@ -163,7 +151,6 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Household */}
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionLabel}>Household</Text>
@@ -205,27 +192,31 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Currency Picker */}
         <View style={styles.card}>
           <Text style={styles.sectionLabel}>Preferences</Text>
-          <TouchableOpacity style={styles.currencyRow} onPress={() => setShowCurrencyModal(true)}>
+          <TouchableOpacity style={styles.currencyRow} onPress={() => setShowCurrencyModal(true)} disabled={savingCurrency}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Ionicons name="cash-outline" size={20} color={WARNING} />
               <View>
                 <Text style={{ color: WHITE, fontSize: 15, fontWeight: '600' }}>Currency</Text>
-                <Text style={{ color: MUTED, fontSize: 13 }}>Display currency for budget and costs</Text>
+                <Text style={{ color: MUTED, fontSize: 13 }}>Applies across the whole household</Text>
               </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={{ color: ACCENT, fontSize: 15, fontWeight: '600' }}>
-                {CURRENCIES.find(c => c.value === currency)?.label || currency}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={MUTED} />
+              {savingCurrency ? (
+                <ActivityIndicator size="small" color={ACCENT} />
+              ) : (
+                <>
+                  <Text style={{ color: ACCENT, fontSize: 15, fontWeight: '600' }}>
+                    {CURRENCIES.find(c => c.value === currency)?.label || currency}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={MUTED} />
+                </>
+              )}
             </View>
           </TouchableOpacity>
         </View>
 
-        {/* Smart Home */}
         <View style={styles.card}>
           <Text style={styles.sectionLabel}>Smart Home</Text>
           {haStatus?.connected ? (
@@ -269,7 +260,6 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Sign out */}
         <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
           <Ionicons name="log-out-outline" size={18} color={DANGER} />
           <Text style={styles.signOutText}>Sign Out</Text>
@@ -278,7 +268,6 @@ export default function ProfileScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* HA Modal */}
       <Modal visible={showHAModal} animationType="slide" presentationStyle="pageSheet">
         <KeyboardAvoidingView
           style={styles.modal}
@@ -333,7 +322,6 @@ export default function ProfileScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Currency Picker Modal */}
       <Modal visible={showCurrencyModal} transparent animationType="fade">
         <View style={styles.currencyModalOverlay}>
           <View style={styles.currencyModalCard}>

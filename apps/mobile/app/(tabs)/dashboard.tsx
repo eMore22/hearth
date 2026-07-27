@@ -14,6 +14,8 @@ import { useMaintenanceStore } from '../../src/stores/maintenanceStore';
 import { useHealthStore } from '../../src/stores/healthStore';
 import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore';
 import { useAutomationStore, HAEvent, SuggestedAction } from '../../src/stores/automationStore';
+import { useHouseholdStore } from '../../src/stores/householdStore';
+import { getCurrencySymbol } from '../../src/utils/currency';
 
 const COLORS = {
   bg:      '#0A1628',
@@ -36,6 +38,9 @@ const MODULE_INFO: Record<string, { bg: string; accent: string; icon: keyof type
 
 export default function DashboardScreen() {
   const { user, signOut } = useAuthStore();
+  const household = useHouseholdStore(s => s.household);
+  const fetchHouseholdData = useHouseholdStore(s => s.fetchHousehold);
+  const currencySymbol = getCurrencySymbol(household?.currency);
   const { documents = [], alerts = [], fetchDocuments, fetchAlerts } = useDocumentStore();
   const { bills = [], monthlyReport, fetchBills, fetchMonthlyReport } = useBillStore();
   const { inventory = [], fetchInventory } = useGroceryStore();
@@ -63,6 +68,7 @@ export default function DashboardScreen() {
   }, []);
 
   const loadAll = () => {
+    if (!household) fetchHouseholdData();
     fetchDocuments(); fetchAlerts();
     fetchBills(); fetchMonthlyReport();
     fetchInventory(); fetchTasks();
@@ -209,7 +215,7 @@ export default function DashboardScreen() {
         {/* Stats */}
         <View style={styles.statsRow}>
           <StatItem value={documents.length} label="Documents" />
-          <StatItem value={`$${monthlySpend.toFixed(0)}`} label="Monthly bills" />
+          <StatItem value={`${currencySymbol}${monthlySpend.toFixed(0)}`} label="Monthly bills" />
           <StatItem value={pendingTasks} label="Tasks due" />
         </View>
 

@@ -9,13 +9,20 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Link, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../src/stores/authStore'
 import { householdService } from '../../src/services/api'
-import { COLORS, TYPOGRAPHY, SPACING } from '../../src/utils/theme'
+
+const NAVY = '#0A1628'
+const NAVY_LIGHT = '#112240'
+const SURFACE = '#162035'
+const ACCENT = '#4FC3F7'
+const WHITE = '#F8FAFF'
+const MUTED = '#8899AA'
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
@@ -35,7 +42,6 @@ export default function LoginScreen() {
     try {
       await signIn(email, password)
 
-      // Check if household exists and navigate accordingly
       try {
         const householdRes = await householdService.get()
         if (householdRes.data && Object.keys(householdRes.data).length > 0) {
@@ -54,154 +60,176 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <View style={styles.content}>
-          <Text style={styles.title}>Hearth</Text>
-          <Text style={styles.subtitle}>Your household's AI chief of staff</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          style={styles.keyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.content}>
+            <View style={styles.logoBox}>
+              <Text style={styles.logoIcon}>✦</Text>
+            </View>
+            <Text style={styles.title}>Hearth</Text>
+            <Text style={styles.subtitle}>Your household's AI chief of staff</Text>
 
-          <View style={styles.form}>
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!loading}
-            />
-
-            <View style={styles.passwordContainer}>
+            <View style={styles.form}>
+              <Text style={styles.fieldLabel}>Email</Text>
               <TextInput
-                style={styles.passwordInput}
-                placeholder="Password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
+                style={styles.input}
+                placeholder="you@example.com"
+                placeholderTextColor={MUTED}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
                 editable={!loading}
               />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowPassword(!showPassword)}
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color={COLORS.muted}
+
+              <Text style={styles.fieldLabel}>Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="••••••••"
+                  placeholderTextColor={MUTED}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  editable={!loading}
                 />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowPassword(!showPassword)}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={MUTED}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleSignIn}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={NAVY} />
+                ) : (
+                  <Text style={styles.buttonText}>Sign In</Text>
+                )}
               </TouchableOpacity>
+
+              <Link href="/(auth)/register" asChild>
+                <TouchableOpacity style={styles.linkButton} disabled={loading}>
+                  <Text style={styles.linkText}>
+                    Don't have an account? <Text style={styles.linkTextBold}>Create one</Text>
+                  </Text>
+                </TouchableOpacity>
+              </Link>
             </View>
-
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleSignIn}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
-
-            <Link href="/(auth)/register" asChild>
-              <TouchableOpacity style={styles.linkButton} disabled={loading}>
-                <Text style={styles.linkText}>
-                  Don't have an account? <Text style={styles.linkTextBold}>Create one</Text>
-                </Text>
-              </TouchableOpacity>
-            </Link>
           </View>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  keyboardView: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: NAVY },
+  safeArea: { flex: 1 },
+  keyboardView: { flex: 1 },
   content: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: 28,
   },
+  logoBox: {
+    width: 64, height: 64, borderRadius: 20,
+    backgroundColor: 'rgba(79,195,247,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+    alignSelf: 'center', marginBottom: 20,
+    borderWidth: 1, borderColor: 'rgba(79,195,247,0.25)',
+  },
+  logoIcon: { fontSize: 26, color: ACCENT },
   title: {
-    ...TYPOGRAPHY.heading1,
-    color: COLORS.primary,
+    fontSize: 32,
+    fontWeight: '700',
+    color: WHITE,
     textAlign: 'center',
-    marginBottom: SPACING.xs,
+    marginBottom: 6,
   },
   subtitle: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.muted,
+    fontSize: 14,
+    color: MUTED,
     textAlign: 'center',
-    marginBottom: SPACING.xl,
+    marginBottom: 36,
   },
   form: {
     width: '100%',
   },
+  fieldLabel: {
+    fontSize: 12, fontWeight: '600', color: MUTED,
+    textTransform: 'uppercase', letterSpacing: 0.8,
+    marginBottom: 8, marginTop: 4,
+  },
   input: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: SURFACE,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    marginBottom: SPACING.md,
-    ...TYPOGRAPHY.body,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 16,
+    fontSize: 15,
+    color: WHITE,
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    backgroundColor: SURFACE,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    marginBottom: SPACING.md,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    marginBottom: 16,
   },
   passwordInput: {
     flex: 1,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    ...TYPOGRAPHY.body,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: WHITE,
   },
   eyeButton: {
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: 14,
   },
   button: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    paddingVertical: SPACING.md,
+    backgroundColor: ACCENT,
+    borderRadius: 12,
+    paddingVertical: 15,
     alignItems: 'center',
-    marginTop: SPACING.sm,
+    marginTop: 8,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
-    ...TYPOGRAPHY.body,
-    color: '#fff',
-    fontWeight: '600',
+    fontSize: 15,
+    color: NAVY,
+    fontWeight: '700',
   },
   linkButton: {
-    marginTop: SPACING.lg,
+    marginTop: 22,
     alignItems: 'center',
   },
   linkText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.muted,
+    fontSize: 14,
+    color: MUTED,
   },
   linkTextBold: {
-    color: COLORS.primary,
+    color: ACCENT,
     fontWeight: '600',
   },
 })

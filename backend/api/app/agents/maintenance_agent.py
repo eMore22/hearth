@@ -43,39 +43,58 @@ Return ONLY a JSON array of tasks:
 
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=1200)
         try:
-            clean = response.replace("```json", "").replace("```", "").strip()
+            clean = self._extract_json(response)
             return json.loads(clean)
-        except:
+        except Exception as e:
+            print(f"⚠️ Maintenance calendar JSON parse failed: {e}")
+            print(f"⚠️ Raw Claude response was: {response[:500]}")
             return []
 
     def diagnose_issue(self, problem: str) -> Dict:
-        """Diagnose a home maintenance problem."""
-        prompt = f"""Diagnose this home issue and provide guidance:
+        """
+        Diagnose a home maintenance problem: likely causes, immediate
+        safety/action steps (the maintenance equivalent of "first aid"),
+        urgency, and whether it's DIY-safe.
+        """
+        prompt = f"""Diagnose this home maintenance issue and provide practical, well-known guidance — the kind of standard troubleshooting information found in a reputable home-repair reference.
 
 Problem: "{problem}"
 
 Return ONLY valid JSON:
 {{
-  "likely_causes": ["cause 1", "cause 2"],
+  "likely_causes": ["most common, well-known cause 1", "cause 2"],
+  "immediate_steps": ["specific, standard first step to take right now", "step 2", "step 3"],
   "urgency": "low|medium|high|emergency",
-  "recommended_action": "what to do first",
   "diy_possible": true/false,
   "estimated_repair_cost": "low|medium|high",
-  "safety_warning": "any safety note or null"
+  "safety_warning": "any safety note relevant to this issue, or null",
+  "disclaimer": "This is general guidance only and not a substitute for an in-person assessment by a licensed professional."
 }}"""
 
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
         try:
-            clean = response.replace("```json", "").replace("```", "").strip()
-            return json.loads(clean)
-        except:
+            clean = self._extract_json(response)
+            result = json.loads(clean)
+            result.setdefault("immediate_steps", [])
+            result.setdefault("diy_possible", False)
+            result.setdefault("safety_warning", None)
+            result.setdefault(
+                "disclaimer",
+                "This is general guidance only and not a substitute for an in-person assessment by a licensed professional."
+            )
+            return result
+        except Exception as e:
+            print(f"⚠️ Maintenance diagnosis JSON parse failed: {e}")
+            print(f"⚠️ Raw Claude response was: {response[:500]}")
             return {
-                "likely_causes": ["Unknown"],
+                "likely_causes": ["Unable to determine — try describing the issue in more detail"],
+                "immediate_steps": [],
                 "urgency": "medium",
-                "recommended_action": "Consult a professional",
                 "diy_possible": False,
                 "estimated_repair_cost": "medium",
-                "safety_warning": "Do not attempt if unsure"
+                "safety_warning": "Do not attempt repairs if unsure",
+                "disclaimer": "This is general guidance only and not a substitute for an in-person assessment by a licensed professional.",
+                "_fallback_used": True,
             }
 
     def get_diy_instructions(self, task: str) -> Dict:
@@ -95,9 +114,11 @@ Return ONLY valid JSON:
 
         response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=1000)
         try:
-            clean = response.replace("```json", "").replace("```", "").strip()
+            clean = self._extract_json(response)
             return json.loads(clean)
-        except:
+        except Exception as e:
+            print(f"⚠️ DIY instructions JSON parse failed: {e}")
+            print(f"⚠️ Raw Claude response was: {response[:500]}")
             return {
                 "difficulty": "medium",
                 "tools_needed": [],

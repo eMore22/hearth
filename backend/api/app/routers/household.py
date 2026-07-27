@@ -10,12 +10,14 @@ class CreateHouseholdRequest(BaseModel):
     name: str
     address: Optional[str] = None
     country: Optional[str] = None
+    currency: Optional[str] = "NGN"
 
 
 class UpdateHouseholdRequest(BaseModel):
     name: Optional[str] = None
     address: Optional[str] = None
     country: Optional[str] = None
+    currency: Optional[str] = None
 
 
 class InviteMemberRequest(BaseModel):
@@ -49,6 +51,7 @@ async def create_household(
             "name": payload.name,
             "address": payload.address,
             "country": payload.country,
+            "currency": payload.currency,
             "created_by": user["id"]
         }).execute()
 
@@ -99,11 +102,10 @@ async def update_household(
     payload: UpdateHouseholdRequest,
     user=Depends(get_current_user),
 ):
-    """Update household name/address/country. Only the household owner can do this."""
+    """Update household name/address/country/currency. Only the household owner can do this."""
     supabase = get_supabase_admin()
 
     try:
-        # Verify user is a member of this household
         member = supabase.table("household_members")\
             .select("role")\
             .eq("household_id", household_id)\
