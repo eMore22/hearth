@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  Image,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Link, useRouter } from 'expo-router'
@@ -69,7 +70,11 @@ export default function LoginScreen() {
         >
           <View style={styles.content}>
             <View style={styles.logoBox}>
-              <Text style={styles.logoIcon}>✦</Text>
+              <Image
+                source={require('../../assets/icon.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.title}>Hearth</Text>
             <Text style={styles.subtitle}>Your household's AI chief of staff</Text>
@@ -152,8 +157,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     alignSelf: 'center', marginBottom: 20,
     borderWidth: 1, borderColor: 'rgba(79,195,247,0.25)',
+    overflow: 'hidden',
   },
-  logoIcon: { fontSize: 26, color: ACCENT },
+  logoImage: {
+    width: 44, height: 44,
+  },
   title: {
     fontSize: 32,
     fontWeight: '700',

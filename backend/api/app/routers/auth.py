@@ -4,6 +4,11 @@ from app.dependencies import get_supabase
 
 router = APIRouter()
 
+# Where users land after tapping the email confirmation link.
+# Update this to a real dedicated confirmation page once the
+# landing page site is available to edit.
+EMAIL_CONFIRM_REDIRECT_URL = "https://hearthhq.online/email-confirmed"
+
 
 class SignUpRequest(BaseModel):
     email: EmailStr
@@ -26,7 +31,10 @@ async def signup(payload: SignUpRequest, supabase=Depends(get_supabase)):
         res = supabase.auth.sign_up({
             "email": payload.email,
             "password": payload.password,
-            "options": {"data": {"full_name": payload.full_name}}
+            "options": {
+                "data": {"full_name": payload.full_name},
+                "email_redirect_to": EMAIL_CONFIRM_REDIRECT_URL,
+            }
         })
         return {"message": "Account created. Check your email to verify.", "user_id": res.user.id}
     except Exception as e:

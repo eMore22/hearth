@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, Alert, ScrollView, StatusBar
+  StyleSheet, KeyboardAvoidingView, Platform, Alert, ScrollView, StatusBar, Image
 } from 'react-native'
 import { Link, router } from 'expo-router'
 import { useAuthStore } from '../../src/stores/authStore'
@@ -52,7 +52,11 @@ export default function RegisterScreen() {
       >
         <ScrollView contentContainerStyle={styles.inner}>
           <View style={styles.logoBox}>
-            <Text style={styles.logoIcon}>✦</Text>
+            <Image
+              source={require('../../assets/icon.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.title}>Hearth</Text>
           <Text style={styles.tagline}>Set up your household in 60 seconds</Text>
@@ -124,8 +128,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     alignSelf: 'center', marginBottom: 20,
     borderWidth: 1, borderColor: 'rgba(79,195,247,0.25)',
+    overflow: 'hidden',
   },
-  logoIcon: { fontSize: 26, color: ACCENT },
+  logoImage: {
+    width: 44, height: 44,
+  },
   title: { fontSize: 32, fontWeight: '700', color: WHITE, textAlign: 'center', marginBottom: 6 },
   tagline: { fontSize: 14, color: MUTED, textAlign: 'center', marginBottom: 32 },
   fieldLabel: {
