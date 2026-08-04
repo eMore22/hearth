@@ -127,7 +127,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+      <StatusBar barStyle="light-content" />
       <ScrollView contentContainerStyle={styles.content}>
 
         <View style={styles.header}>

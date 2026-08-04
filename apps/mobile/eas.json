@@ -18,7 +18,11 @@
       }
     },
     "production": {
-      "distribution": "store"
+      "distribution": "store",
+      "env": {
+        "EXPO_ROUTER_APP_ROOT": "./app",
+        "EXPO_PUBLIC_API_URL": "https://hearth-hq.onrender.com"
+      }
     }
   }
 }

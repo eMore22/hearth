@@ -87,7 +87,7 @@ export default function DevicesScreen() {
   if (!status.connected) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <StatusBar barStyle="light-content" />
         <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color={WHITE} />
@@ -109,7 +109,7 @@ export default function DevicesScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+      <StatusBar barStyle="light-content" />
 
       <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
         <View style={styles.headerRow}>

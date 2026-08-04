@@ -1,7 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { getToken, removeToken, removeUser } from '../lib/authToken';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.175.202:8000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://hearth-hq.onrender.com';
 
 const api = axios.create({
   baseURL: API_URL,

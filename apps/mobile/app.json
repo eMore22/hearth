@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.hearth.app",
+      "bundleIdentifier": "com.emore22.hearth",
       "infoPlist": {
         "NSCameraUsageDescription": "Hearth needs camera access to scan your documents.",
         "NSPhotoLibraryUsageDescription": "Hearth needs photo access to upload your documents."
@@ -27,7 +27,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1E3A5F"
       },
-      "package": "com.hearth.app",
+      "package": "com.emore22.hearth",
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",

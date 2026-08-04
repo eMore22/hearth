@@ -56,7 +56,7 @@ export default function MaintenanceScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+      <StatusBar barStyle="light-content" />
       <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
         <Text style={styles.headerLabel}>HOME</Text>
         <Text style={styles.headerTitle}>Maintenance</Text>

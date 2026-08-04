@@ -87,7 +87,7 @@ export default function GroceryScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+      <StatusBar barStyle="light-content" />
 
       <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
         <Text style={styles.headerLabel}>NUTRITION</Text>

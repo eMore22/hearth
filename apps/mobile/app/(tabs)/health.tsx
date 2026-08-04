@@ -39,7 +39,7 @@ export default function HealthScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+      <StatusBar barStyle="light-content" />
       <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
         <Text style={styles.headerLabel}>WELLNESS</Text>
         <Text style={styles.headerTitle}>Health Triage</Text>

@@ -99,7 +99,7 @@ export default function DocumentsScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+      <StatusBar barStyle="light-content" />
 
       {/* Header */}
       <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>

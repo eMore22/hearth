@@ -146,7 +146,7 @@ export default function ScanScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+      <StatusBar barStyle="light-content" />
 
       {/* Header */}
       <LinearGradient colors={[NAVY, '#112240']} style={styles.header}>
