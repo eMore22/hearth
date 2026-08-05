@@ -61,12 +61,12 @@
     ],
     "scheme": "hearth",
     "extra": {
-      "router": {
-        "origin": ""
-      },
       "eas": {
         "projectId": "cbdcf3cb-ccb0-41db-8abd-4a63fc0364d4"
       }
+    },
+    "router": {
+      "root": "./app"
     }
   }
 }
