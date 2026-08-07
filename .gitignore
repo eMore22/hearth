@@ -59,3 +59,6 @@ out/
 # Supabase
 supabase/.branches
 supabase/.temp
+*.jks
+*.keystore
+*.pem
