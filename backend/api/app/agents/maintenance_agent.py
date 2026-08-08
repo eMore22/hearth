@@ -41,7 +41,7 @@ Return ONLY a JSON array of tasks:
   "priority": "high|medium|low"
 }}]"""
 
-        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=1200)
+        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=3000)
         try:
             clean = self._extract_json(response)
             return json.loads(clean)
