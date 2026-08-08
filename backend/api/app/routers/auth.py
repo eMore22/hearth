@@ -7,7 +7,7 @@ router = APIRouter()
 # Where users land after tapping the email confirmation link.
 # Update this to a real dedicated confirmation page once the
 # landing page site is available to edit.
-EMAIL_CONFIRM_REDIRECT_URL = "https://hearthhq.online/email-confirmed"
+EMAIL_CONFIRM_REDIRECT_URL = "https://www.hearthhq.online/email-confirmed.html"
 
 
 class SignUpRequest(BaseModel):
