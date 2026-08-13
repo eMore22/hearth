@@ -15,6 +15,7 @@ celery_app = Celery(
         "app.workers.meal_planner",
         "app.workers.maintenance_scheduler",
         "app.workers.health_reminder",
+        "app.workers.task_reminder",
     ],
 )
 
@@ -56,5 +57,9 @@ celery_app.conf.beat_schedule = {
     "daily-health-reminders": {
         "task": "health_reminder.daily_health_reminders",
         "schedule": crontab(hour=8, minute=0),  # Daily 8 AM UTC
+    },
+    "check-due-tasks": {
+        "task": "tasks.check_due_tasks",
+        "schedule": crontab(minute="*/15"),  # Every 15 minutes
     },
 }

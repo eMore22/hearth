@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
+import { registerForPushNotificationsAsync } from '../../src/services/notifications';
 
 export default function PermissionsScreen() {
   const [isLoading, setIsLoading] = useState(false);
@@ -14,9 +15,7 @@ export default function PermissionsScreen() {
   const handleEnable = async () => {
     setIsLoading(true);
     try {
-      // TODO: Request notification permissions using expo-notifications
-      // For now we simulate success
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      await registerForPushNotificationsAsync();
       router.replace('/(tabs)');
     } catch (error) {
       router.replace('/(tabs)');
@@ -34,14 +33,14 @@ export default function PermissionsScreen() {
       <View style={styles.content}>
         <Text style={styles.title}>Stay Updated</Text>
         <Text style={styles.subtitle}>
-          Enable notifications so Hearth can remind you about bills, document expiries, 
+          Enable notifications so Hearth can remind you about bills, document expiries,
           maintenance tasks, and important updates.
         </Text>
       </View>
 
       <View style={styles.footer}>
-        <TouchableOpacity 
-          style={styles.enableButton} 
+        <TouchableOpacity
+          style={styles.enableButton}
           onPress={handleEnable}
           disabled={isLoading}
         >

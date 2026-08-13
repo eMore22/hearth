@@ -167,7 +167,7 @@ export default function ChiefOfStaffScreen() {
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           style={styles.keyboardView}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>

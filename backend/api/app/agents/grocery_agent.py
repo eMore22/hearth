@@ -42,10 +42,53 @@ Be practical and realistic with your suggestions."""
         else:
             raise ValueError(f"Unknown action: {action}")
 
+    def _get_household_country(self) -> Optional[str]:
+        """
+        Looks up the household's country so meal suggestions can be localized.
+        Returns None if there's no household_id or no country set — callers
+        should treat that as "no location data, stay generic," not default
+        to any specific cuisine.
+        """
+        household_id = getattr(self, "household_id", None)
+        if not household_id:
+            return None
+        supabase = get_supabase_admin()
+        try:
+            result = supabase.table("households")\
+                .select("country")\
+                .eq("id", household_id)\
+                .maybe_single()\
+                .execute()
+            if result.data:
+                country = result.data.get("country")
+                return country.strip() if country else None
+            return None
+        except Exception:
+            return None
+
     def generate_meal_plan(self, preferences: Dict) -> Dict:
+        country = self._get_household_country()
+
+        if country:
+            locale_instruction = (
+                f"This household is located in {country}. Build the meal plan around "
+                f"dishes, ingredients, and cooking styles that are commonly eaten in "
+                f"{country} and the surrounding region — make that the default, not an "
+                f"occasional inclusion. If the preferences below list specific "
+                f"cuisine_preferences, treat those as additional variety to mix in "
+                f"alongside local dishes, not a replacement for them."
+            )
+        else:
+            locale_instruction = (
+                "No location is set for this household. Keep meals broadly familiar "
+                "and avoid assuming any single country's cuisine as the default."
+            )
+
         prompt = f"""Create a realistic 7-day meal plan based on these preferences:
 
 {json.dumps(preferences)}
+
+{locale_instruction}
 
 Return ONLY valid JSON with this structure:
 {{

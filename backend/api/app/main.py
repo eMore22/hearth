@@ -13,6 +13,7 @@ from app.routers import (
     chief_of_staff,
     automation,
     intake,
+    tasks,
 )
 
 app = FastAPI(
@@ -40,6 +41,7 @@ app.include_router(notifications.router,  prefix="/api/notifications", tags=["No
 app.include_router(chief_of_staff.router, prefix="/api/chief",         tags=["ChiefOfStaff"])
 app.include_router(automation.router,     prefix="/api/automation",    tags=["Automation"])
 app.include_router(intake.router,         prefix="/api/intake",        tags=["Intake"])
+app.include_router(tasks.router,          prefix="/api/tasks",         tags=["Tasks"])
 
 
 @app.get("/")

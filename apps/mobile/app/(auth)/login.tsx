@@ -90,6 +90,8 @@ export default function LoginScreen() {
                 autoCapitalize="none"
                 keyboardType="email-address"
                 editable={!loading}
+                autoComplete="username"
+                textContentType="username"
               />
 
               <Text style={styles.fieldLabel}>Password</Text>
@@ -102,6 +104,8 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   editable={!loading}
+                  autoComplete="password"
+                  textContentType="password"
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}

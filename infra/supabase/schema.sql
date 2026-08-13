@@ -329,3 +329,22 @@ CREATE POLICY "members_access" ON household_members
 
 CREATE POLICY "households_access" ON households
   FOR ALL USING (id = get_my_household_id());
+-- ─── MODULE 6: TASKS ─────────────────────────────────────────────────────────
+
+CREATE TABLE tasks (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  household_id  UUID REFERENCES households(id) ON DELETE CASCADE,
+  created_by    UUID REFERENCES auth.users(id),
+  title         TEXT NOT NULL,
+  notes         TEXT,
+  due_at        TIMESTAMPTZ,
+  is_completed  BOOLEAN DEFAULT FALSE,
+  completed_at  TIMESTAMPTZ,
+  is_sent       BOOLEAN DEFAULT FALSE,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "household_access" ON tasks
+  FOR ALL USING (household_id = get_my_household_id());

@@ -166,4 +166,12 @@ export const notificationService = {
   send: (data: any) => api.post('/api/notifications/send', data),
 };
 
+export const taskService = {
+  list: () => api.get('/api/tasks/'),
+  create: (title: string, notes?: string, dueAt?: string) =>
+    api.post('/api/tasks/', { title, notes, due_at: dueAt }),
+  complete: (taskId: string) => api.post(`/api/tasks/${taskId}/complete`),
+  delete: (taskId: string) => api.delete(`/api/tasks/${taskId}`),
+};
+
 export default api;

@@ -22,7 +22,10 @@ const DEFAULT_PREFS = {
   household_size: 2,
   dietary_restrictions: [],
   weekly_budget: 150,
-  cuisine_preferences: ['Italian', 'Mexican'],
+  // Was hardcoded to ['Italian', 'Mexican'] — that overrode localization for
+  // every household regardless of country. Left empty so the backend's
+  // household.country lookup drives the default cuisine instead.
+  cuisine_preferences: [],
 }
 
 const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner'] as const

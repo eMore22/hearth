@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl, Animated, StatusBar, Alert, ActivityIndicator,
+  Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { useHealthStore } from '../../src/stores/healthStore';
 import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore';
 import { useAutomationStore, HAEvent, SuggestedAction } from '../../src/stores/automationStore';
 import { useHouseholdStore } from '../../src/stores/householdStore';
+import { useTaskStore } from '../../src/stores/taskStore';
 import { getCurrencySymbol } from '../../src/utils/currency';
 
 const COLORS = {
@@ -36,6 +38,47 @@ const MODULE_INFO: Record<string, { bg: string; accent: string; icon: keyof type
   health:      { bg: '#3A0A1A', accent: '#FF6B6B', icon: 'heart' },
 };
 
+// Quick-pick due options for the Add Task modal — avoids pulling in a native
+// date/time picker dependency that isn't confirmed installed. Upgrade to a
+// real picker later if needed; this is enough to exercise the scheduler.
+const DUE_OPTIONS: { key: string; label: string }[] = [
+  { key: 'none', label: 'No due date' },
+  { key: '1hour', label: 'In 1 hour' },
+  { key: 'tonight', label: 'Tonight, 6 PM' },
+  { key: 'tomorrow', label: 'Tomorrow, 9 AM' },
+];
+
+const getDueDateFromOption = (option: string): string | undefined => {
+  const now = new Date();
+  if (option === '1hour') {
+    return new Date(now.getTime() + 60 * 60 * 1000).toISOString();
+  }
+  if (option === 'tonight') {
+    const d = new Date(now);
+    d.setHours(18, 0, 0, 0);
+    if (d <= now) d.setDate(d.getDate() + 1);
+    return d.toISOString();
+  }
+  if (option === 'tomorrow') {
+    const d = new Date(now);
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    return d.toISOString();
+  }
+  return undefined;
+};
+
+const formatTaskDue = (iso: string) => {
+  const d = new Date(iso);
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  if (d.toDateString() === now.toDateString()) return `Today, ${time}`;
+  if (d.toDateString() === tomorrow.toDateString()) return `Tomorrow, ${time}`;
+  return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${time}`;
+};
+
 export default function DashboardScreen() {
   const { user, signOut } = useAuthStore();
   const household = useHouseholdStore(s => s.household);
@@ -53,10 +96,23 @@ export default function DashboardScreen() {
     executeAction,
   } = useAutomationStore();
 
+  // Household to-dos — separate store/table from the AI-generated
+  // maintenance `tasks` above, so aliased to avoid any name collision.
+  const {
+    tasks: householdTasks = [],
+    fetchTasks: fetchHouseholdTasks,
+    createTask,
+    completeTask: completeHouseholdTask,
+  } = useTaskStore();
+
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const fabAnim   = useRef(new Animated.Value(0)).current;
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDueOption, setNewTaskDueOption] = useState('none');
 
   useEffect(() => {
     loadAll();
@@ -74,6 +130,19 @@ export default function DashboardScreen() {
     fetchInventory(); fetchTasks();
     fetchMedications(); fetchDashboardSummary();
     fetchHAStatus(); fetchHAEvents();
+    fetchHouseholdTasks();
+  };
+
+  const handleAddTask = async () => {
+    if (!newTaskTitle.trim()) { Alert.alert('Error', 'Please enter what needs doing'); return; }
+    try {
+      await createTask(newTaskTitle.trim(), undefined, getDueDateFromOption(newTaskDueOption));
+      setNewTaskTitle('');
+      setNewTaskDueOption('none');
+      setShowAddTaskModal(false);
+    } catch {
+      Alert.alert('Error', 'Could not add task. Please try again.');
+    }
   };
 
   const urgentDocAlerts = alerts.filter(
@@ -84,6 +153,7 @@ export default function DashboardScreen() {
   ).slice(0, 3);
 
   const pendingTasks = tasks.filter((t: any) => !t.completed).length;
+  const pendingHouseholdTasks = householdTasks.filter((t: any) => !t.is_completed);
   const monthlySpend = monthlyReport?.total_spent || 0;
   const hasUrgent    = urgentDocAlerts.length > 0 || urgentHAEvents.length > 0;
 
@@ -270,6 +340,40 @@ export default function DashboardScreen() {
           )}
         </View>
 
+        {/* Tasks */}
+        <View style={styles.section}>
+          <View style={styles.taskSectionHeader}>
+            <Text style={styles.sectionTitle}>Tasks</Text>
+            <TouchableOpacity onPress={() => setShowAddTaskModal(true)}>
+              <Ionicons name="add-circle-outline" size={22} color={COLORS.accent} />
+            </TouchableOpacity>
+          </View>
+
+          {pendingHouseholdTasks.length === 0 ? (
+            <TouchableOpacity style={styles.taskEmptyState} onPress={() => setShowAddTaskModal(true)}>
+              <Ionicons name="checkbox-outline" size={20} color={COLORS.muted} />
+              <Text style={styles.taskEmptyText}>No tasks yet — tap to add one</Text>
+            </TouchableOpacity>
+          ) : (
+            pendingHouseholdTasks.slice(0, 5).map((task: any) => (
+              <View key={task.id} style={styles.taskRow}>
+                <TouchableOpacity
+                  style={styles.taskCheckbox}
+                  onPress={() => completeHouseholdTask(task.id)}
+                >
+                  <Ionicons name="ellipse-outline" size={20} color={COLORS.muted} />
+                </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.taskTitle} numberOfLines={1}>{task.title}</Text>
+                  {!!task.due_at && (
+                    <Text style={styles.taskDue}>{formatTaskDue(task.due_at)}</Text>
+                  )}
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
         {/* Chief CTA */}
         <TouchableOpacity style={styles.chiefCTA} onPress={() => router.push('/(tabs)/chief-of-staff')}>
           <LinearGradient
@@ -338,6 +442,53 @@ export default function DashboardScreen() {
           </LinearGradient>
         </TouchableOpacity>
       </Animated.View>
+
+      {/* Add Task Modal */}
+      <Modal visible={showAddTaskModal} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView
+          style={styles.taskModal}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.taskModalHeader}>
+            <Text style={styles.taskModalTitle}>Add Task</Text>
+            <TouchableOpacity
+              onPress={() => { setShowAddTaskModal(false); setNewTaskTitle(''); setNewTaskDueOption('none'); }}
+              style={styles.taskModalClose}
+            >
+              <Ionicons name="close" size={20} color={COLORS.white} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.taskFieldLabel}>What needs doing?</Text>
+          <TextInput
+            style={styles.taskInput}
+            placeholder="e.g. Pay the electrician"
+            placeholderTextColor={COLORS.muted}
+            value={newTaskTitle}
+            onChangeText={setNewTaskTitle}
+            autoFocus
+          />
+
+          <Text style={styles.taskFieldLabel}>Remind me</Text>
+          <View style={styles.taskDueRow}>
+            {DUE_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.key}
+                style={[styles.taskDueChip, newTaskDueOption === opt.key && styles.taskDueChipActive]}
+                onPress={() => setNewTaskDueOption(opt.key)}
+              >
+                <Text style={[styles.taskDueChipText, newTaskDueOption === opt.key && styles.taskDueChipTextActive]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TouchableOpacity style={styles.taskSaveBtn} onPress={handleAddTask}>
+            <Text style={styles.taskSaveBtnText}>Add Task</Text>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -474,6 +625,36 @@ const styles = StyleSheet.create({
   expiryDot:   { width: 8, height: 8, borderRadius: 4 },
   expiryTitle: { flex: 1, fontSize: 14, color: COLORS.white },
   expiryDays:  { fontSize: 13, fontWeight: '600' },
+
+  // ── Household Tasks ──
+  taskSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  taskEmptyState: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: COLORS.surface, borderRadius: 12, padding: 16,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+  },
+  taskEmptyText: { fontSize: 13, color: COLORS.muted },
+  taskRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: COLORS.surface, borderRadius: 12, padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
+  },
+  taskCheckbox: { padding: 2 },
+  taskTitle: { fontSize: 14, fontWeight: '600', color: COLORS.white },
+  taskDue: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
+  taskModal: { flex: 1, backgroundColor: COLORS.bg, padding: 24 },
+  taskModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 24 },
+  taskModalTitle: { fontSize: 22, fontWeight: '700', color: COLORS.white },
+  taskModalClose: { padding: 6, backgroundColor: COLORS.surface, borderRadius: 10 },
+  taskFieldLabel: { fontSize: 12, fontWeight: '600', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
+  taskInput: { backgroundColor: COLORS.surface, borderRadius: 12, padding: 16, fontSize: 15, color: COLORS.white, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  taskDueRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  taskDueChip: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  taskDueChipActive: { backgroundColor: 'rgba(79,195,247,0.2)', borderColor: COLORS.accent },
+  taskDueChipText: { fontSize: 13, color: COLORS.muted },
+  taskDueChipTextActive: { color: COLORS.accent, fontWeight: '600' },
+  taskSaveBtn: { backgroundColor: COLORS.accent, borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 28 },
+  taskSaveBtnText: { color: COLORS.bg, fontWeight: '700', fontSize: 16 },
 
   // ── Scan FAB ──
   fab: {
