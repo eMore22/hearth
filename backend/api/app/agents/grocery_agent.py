@@ -241,7 +241,7 @@ Return ONLY valid JSON:
                 "household_id": household_id,
                 "weekly_budget": weekly_budget,
                 "currency": currency,
-            }).execute()
+            }, on_conflict="household_id").execute()
             return {"weekly_budget": weekly_budget, "currency": currency, "status": "saved"}
         except Exception as e:
             return {"weekly_budget": weekly_budget, "currency": currency, "status": "error", "detail": str(e)}

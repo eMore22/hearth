@@ -271,7 +271,7 @@ export default function ProfileScreen() {
       <Modal visible={showHAModal} animationType="slide" presentationStyle="pageSheet">
         <KeyboardAvoidingView
           style={styles.modal}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={styles.modalHeader}>
             <View>

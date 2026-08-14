@@ -238,7 +238,7 @@ export default function GroceryScreen() {
       <Modal visible={showCustomMealModal} animationType="slide" presentationStyle="pageSheet">
         <KeyboardAvoidingView
           style={styles.modal}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={styles.modalHeader}>
             <View>
