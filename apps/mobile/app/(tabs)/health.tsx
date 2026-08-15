@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, TextInput, Alert } from 'react-native'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native'
 import { useState } from 'react'
 import { useHealthStore } from '../../src/stores/healthStore'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -40,92 +40,94 @@ export default function HealthScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
-        <Text style={styles.headerLabel}>WELLNESS</Text>
-        <Text style={styles.headerTitle}>Health Triage</Text>
-        <View style={styles.disclaimer}>
-          <Ionicons name="information-circle-outline" size={14} color={MUTED} />
-          <Text style={styles.disclaimerText}>For informational purposes only. Always consult a healthcare professional.</Text>
-        </View>
-      </LinearGradient>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
+          <Text style={styles.headerLabel}>WELLNESS</Text>
+          <Text style={styles.headerTitle}>Health Triage</Text>
+          <View style={styles.disclaimer}>
+            <Ionicons name="information-circle-outline" size={14} color={MUTED} />
+            <Text style={styles.disclaimerText}>For informational purposes only. Always consult a healthcare professional.</Text>
+          </View>
+        </LinearGradient>
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {lastTriage && cfg && (
-          <View style={styles.section}>
-            <View style={[styles.triageCard, { backgroundColor: cfg.bg, borderColor: cfg.color + '33' }]}>
-              <View style={styles.triageHeader}>
-                <View style={[styles.triageIconBox, { backgroundColor: cfg.color + '22' }]}>
-                  <Ionicons name={cfg.icon as any} size={20} color={cfg.color} />
+          {lastTriage && cfg && (
+            <View style={styles.section}>
+              <View style={[styles.triageCard, { backgroundColor: cfg.bg, borderColor: cfg.color + '33' }]}>
+                <View style={styles.triageHeader}>
+                  <View style={[styles.triageIconBox, { backgroundColor: cfg.color + '22' }]}>
+                    <Ionicons name={cfg.icon as any} size={20} color={cfg.color} />
+                  </View>
+                  <Text style={[styles.triageLevel, { color: cfg.color }]}>{cfg.label}</Text>
                 </View>
-                <Text style={[styles.triageLevel, { color: cfg.color }]}>{cfg.label}</Text>
+                <Text style={styles.triageRec}>{lastTriage.recommendation}</Text>
+                {lastTriage.home_care_tips?.length > 0 && (
+                  <View style={styles.tipsBox}>
+                    <Text style={styles.tipsTitle}>Home care / first aid</Text>
+                    {lastTriage.home_care_tips.map((tip: string, i: number) => (
+                      <Text key={i} style={styles.tip}>• {tip}</Text>
+                    ))}
+                  </View>
+                )}
+                {lastTriage.red_flags?.length > 0 && (
+                  <View style={styles.redFlagsBox}>
+                    <Text style={styles.redFlagsTitle}>⚠ Seek immediate care if you notice:</Text>
+                    {lastTriage.red_flags.map((flag: string, i: number) => (
+                      <Text key={i} style={styles.redFlag}>• {flag}</Text>
+                    ))}
+                  </View>
+                )}
+                {lastTriage.suggested_otc && (
+                  <Text style={styles.otcText}>Suggested OTC: {lastTriage.suggested_otc}</Text>
+                )}
+                {lastTriage.disclaimer && <Text style={styles.triageDisclaimer}>{lastTriage.disclaimer}</Text>}
               </View>
-              <Text style={styles.triageRec}>{lastTriage.recommendation}</Text>
-              {lastTriage.home_care_tips?.length > 0 && (
-                <View style={styles.tipsBox}>
-                  <Text style={styles.tipsTitle}>Home care / first aid</Text>
-                  {lastTriage.home_care_tips.map((tip: string, i: number) => (
-                    <Text key={i} style={styles.tip}>• {tip}</Text>
-                  ))}
-                </View>
-              )}
-              {lastTriage.red_flags?.length > 0 && (
-                <View style={styles.redFlagsBox}>
-                  <Text style={styles.redFlagsTitle}>⚠ Seek immediate care if you notice:</Text>
-                  {lastTriage.red_flags.map((flag: string, i: number) => (
-                    <Text key={i} style={styles.redFlag}>• {flag}</Text>
-                  ))}
-                </View>
-              )}
-              {lastTriage.suggested_otc && (
-                <Text style={styles.otcText}>Suggested OTC: {lastTriage.suggested_otc}</Text>
-              )}
-              {lastTriage.disclaimer && <Text style={styles.triageDisclaimer}>{lastTriage.disclaimer}</Text>}
+            </View>
+          )}
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Describe Symptoms</Text>
+            <View style={styles.inputCard}>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., '6-year-old with fever 101°F for 2 days'"
+                placeholderTextColor={MUTED}
+                value={symptoms}
+                onChangeText={setSymptoms}
+                multiline
+              />
+              <TouchableOpacity
+                style={[styles.triageBtn, (!symptoms.trim() || isLoading) && styles.triageBtnDisabled]}
+                onPress={handleTriage}
+                disabled={!symptoms.trim() || isLoading}
+              >
+                <Text style={styles.triageBtnText}>{isLoading ? 'Analyzing...' : 'Get Triage Recommendation'}</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Describe Symptoms</Text>
-          <View style={styles.inputCard}>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., '6-year-old with fever 101°F for 2 days'"
-              placeholderTextColor={MUTED}
-              value={symptoms}
-              onChangeText={setSymptoms}
-              multiline
-            />
-            <TouchableOpacity
-              style={[styles.triageBtn, (!symptoms.trim() || isLoading) && styles.triageBtnDisabled]}
-              onPress={handleTriage}
-              disabled={!symptoms.trim() || isLoading}
-            >
-              <Text style={styles.triageBtnText}>{isLoading ? 'Analyzing...' : 'Get Triage Recommendation'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {triageHistory.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Checks</Text>
-            {triageHistory.slice(0, 5).map((item: any, i: number) => {
-              const itemCfg = TRIAGE_CONFIG[item.result?.triage_level] || TRIAGE_CONFIG.home_care
-              return (
-                <View key={i} style={styles.historyCard}>
-                  <View style={[styles.historyDot, { backgroundColor: itemCfg.color }]} />
-                  <View style={styles.historyInfo}>
-                    <Text style={styles.historyDate}>{new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
-                    <Text style={styles.historySymptoms} numberOfLines={1}>{item.symptoms}</Text>
-                    <Text style={[styles.historyLevel, { color: itemCfg.color }]}>{item.result?.triage_level?.replace('_', ' ')}</Text>
+          {triageHistory.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Recent Checks</Text>
+              {triageHistory.slice(0, 5).map((item: any, i: number) => {
+                const itemCfg = TRIAGE_CONFIG[item.result?.triage_level] || TRIAGE_CONFIG.home_care
+                return (
+                  <View key={i} style={styles.historyCard}>
+                    <View style={[styles.historyDot, { backgroundColor: itemCfg.color }]} />
+                    <View style={styles.historyInfo}>
+                      <Text style={styles.historyDate}>{new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+                      <Text style={styles.historySymptoms} numberOfLines={1}>{item.symptoms}</Text>
+                      <Text style={[styles.historyLevel, { color: itemCfg.color }]}>{item.result?.triage_level?.replace('_', ' ')}</Text>
+                    </View>
                   </View>
-                </View>
-              )
-            })}
-          </View>
-        )}
-        <View style={{ height: 40 }} />
-      </ScrollView>
+                )
+              })}
+            </View>
+          )}
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   )
 }

@@ -60,7 +60,7 @@ export const useMaintenanceStore = create<MaintenanceState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await maintenanceService.generateCalendar(prof);
-      set({ calendar: response.data, tasks: response.data.tasks, isLoading: false });
+      set({ calendar: response.data, tasks: response.data, isLoading: false });
       return response.data;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });

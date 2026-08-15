@@ -5,7 +5,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://hearth-hq.onrender.c
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 30000,
+  timeout: 60000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -145,6 +145,8 @@ export const chiefService = {
     api.post('/api/chief/dashboard-summary', {
       household_data: householdData || {},
     }),
+  getHistory: () => api.get('/api/chief/history'),
+  clearHistory: () => api.delete('/api/chief/history'),
 };
 
 export const automationService = {

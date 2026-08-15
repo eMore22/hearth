@@ -76,6 +76,46 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
     return result
 
 
+@router.get("/history")
+async def get_history(current_user: dict = Depends(get_current_user)):
+    """
+    Returns this household's shared Chief of Staff conversation, oldest
+    first. One thread per household, not per user — every member sees
+    and continues the same conversation.
+    """
+    household_id = current_user.get("household_id")
+    if not household_id:
+        return []
+
+    supabase = get_supabase_admin()
+    result = supabase.table("chat_messages")\
+        .select("*")\
+        .eq("household_id", household_id)\
+        .order("created_at", desc=True)\
+        .limit(200)\
+        .execute()
+
+    messages = result.data or []
+    messages.reverse()  # oldest first for display
+    return messages
+
+
+@router.delete("/history")
+async def clear_history(current_user: dict = Depends(get_current_user)):
+    """
+    Clears the shared household conversation. Deliberately destructive
+    for everyone in the household, not just the caller's device — the
+    frontend is expected to confirm before calling this.
+    """
+    household_id = current_user.get("household_id")
+    if not household_id:
+        return {"status": "no_household"}
+
+    supabase = get_supabase_admin()
+    supabase.table("chat_messages").delete().eq("household_id", household_id).execute()
+    return {"status": "cleared"}
+
+
 @router.post("/dashboard-summary")
 async def dashboard_summary(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()

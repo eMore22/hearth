@@ -1,6 +1,6 @@
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  KeyboardAvoidingView, Platform, StyleSheet, StatusBar, Animated
+  KeyboardAvoidingView, Platform, StyleSheet, StatusBar, Animated, Alert
 } from 'react-native'
 import { useState, useRef, useEffect } from 'react'
 import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore'
@@ -33,7 +33,7 @@ const QUICK_PROMPTS = [
 
 export default function ChiefOfStaffScreen() {
   const router = useRouter()
-  const { messages, isTyping, sendMessage, clearMessages } = useChiefOfStaffStore()
+  const { messages, isTyping, sendMessage, clearMessages, fetchHistory } = useChiefOfStaffStore()
 
   // All data sources — Chief needs the full picture
   const { documents, alerts, fetchDocuments, fetchAlerts } = useDocumentStore()
@@ -50,7 +50,8 @@ export default function ChiefOfStaffScreen() {
   const typingDot   = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
-    // Load all data sources when Chief screen opens
+    // Load shared conversation history, then all other data sources
+    fetchHistory()
     fetchDocuments(); fetchAlerts()
     fetchBills(); fetchMonthlyReport()
     fetchInventory(); fetchTasks()
@@ -182,7 +183,19 @@ export default function ChiefOfStaffScreen() {
                 </Text>
               </View>
             </View>
-            <TouchableOpacity onPress={clearMessages} style={styles.clearBtn}>
+            <TouchableOpacity
+              onPress={() =>
+                Alert.alert(
+                  'Clear conversation?',
+                  "This clears the Chief of Staff history for your entire household, not just this device. This can't be undone.",
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Clear for everyone', style: 'destructive', onPress: () => clearMessages() },
+                  ]
+                )
+              }
+              style={styles.clearBtn}
+            >
               <Ionicons name="trash-outline" size={18} color={MUTED} />
             </TouchableOpacity>
           </LinearGradient>

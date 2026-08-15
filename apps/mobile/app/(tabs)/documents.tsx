@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, TextInput, Modal, ActivityIndicator, RefreshControl, StatusBar
+  Alert, TextInput, Modal, ActivityIndicator, RefreshControl, StatusBar,
+  KeyboardAvoidingView, Platform
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
@@ -225,7 +226,10 @@ export default function DocumentsScreen() {
 
       {/* Ask AI Modal */}
       <Modal visible={showAskModal} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.modal}>
+        <KeyboardAvoidingView
+          style={styles.modal}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalHeader}>
             <View>
               <Text style={styles.modalTitle}>Ask about your documents</Text>
@@ -268,7 +272,7 @@ export default function DocumentsScreen() {
               : <Text style={styles.askSubmitText}>Ask</Text>
             }
           </TouchableOpacity>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   )

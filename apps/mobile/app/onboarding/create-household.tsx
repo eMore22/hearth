@@ -7,6 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { householdService } from '../../src/services/api';
@@ -46,7 +48,7 @@ export default function CreateHouseholdScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={styles.header}>
         <Text style={styles.step}>Step 1 of 3</Text>
         <Text style={styles.title}>Create Your Household</Text>
@@ -101,7 +103,7 @@ export default function CreateHouseholdScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

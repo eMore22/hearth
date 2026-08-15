@@ -8,6 +8,8 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 
@@ -62,7 +64,7 @@ export default function AddMembersScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Text style={styles.title}>Add Family Members</Text>
       <Text style={styles.subtitle}>
         Add people who should have access to this household (optional).
@@ -140,7 +142,7 @@ export default function AddMembersScreen() {
           <Text style={styles.skipText}>Skip for now</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

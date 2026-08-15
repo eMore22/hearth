@@ -17,9 +17,9 @@ Return valid JSON when generating plans or diagnoses."""
     def run(self, input_data: Any) -> Any:
         action = input_data.get("action")
         if action == "generate_calendar":
-            return self.generate_maintenance_calendar(input_data.get("property_profile", {}))
+            return self.generate_maintenance_calendar(input_data.get("home_profile", {}))
         elif action == "diagnose_problem":
-            return self.diagnose_issue(input_data.get("problem_description", ""))
+            return self.diagnose_issue(input_data.get("description", ""))
         elif action == "get_diy_instructions":
             return self.get_diy_instructions(input_data.get("task_name", ""))
         else:

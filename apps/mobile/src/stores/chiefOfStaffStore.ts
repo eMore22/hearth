@@ -7,6 +7,10 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   category?: string;
+  // Whoever sent this message — present on every row once loaded from
+  // history. Not yet used for name/avatar attribution in the UI, but the
+  // data's there for when that's built.
+  user_id?: string;
   proactive_suggestions?: string[];
   // Present when the Chief executed a smart-home command during this reply
   action_result?: { status: 'sent' | 'failed'; entity_id?: string; action?: string; error?: string };
@@ -26,11 +30,13 @@ interface ChiefOfStaffState {
   dashboardSummary: DashboardSummary | null;
   isTyping: boolean;
   isLoading: boolean;
+  historyLoaded: boolean;
   error: string | null;
 
   sendMessage: (message: string, context?: any) => Promise<ChatMessage>;
   fetchDashboardSummary: (householdData?: any) => Promise<DashboardSummary>;
-  clearMessages: () => void;
+  fetchHistory: () => Promise<void>;
+  clearMessages: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -39,6 +45,7 @@ export const useChiefOfStaffStore = create<ChiefOfStaffState>((set, get) => ({
   dashboardSummary: null,
   isTyping: false,
   isLoading: false,
+  historyLoaded: false,
   error: null,
 
   sendMessage: async (message, context = {}) => {
@@ -97,6 +104,39 @@ export const useChiefOfStaffStore = create<ChiefOfStaffState>((set, get) => ({
     }
   },
 
-  clearMessages: () => set({ messages: [] }),
+  fetchHistory: async () => {
+    // Household-shared thread, loaded once per app session rather than
+    // every time the screen mounts — avoids clobbering messages sent
+    // seconds ago by re-fetching mid-conversation.
+    if (get().historyLoaded) return;
+    set({ isLoading: true, error: null });
+    try {
+      const response = await chiefService.getHistory();
+      const loaded: ChatMessage[] = (response.data || []).map((row: any) => ({
+        id: row.id,
+        role: row.role,
+        content: row.content,
+        timestamp: row.created_at,
+        category: row.category,
+        user_id: row.user_id,
+      }));
+      set({ messages: loaded, isLoading: false, historyLoaded: true });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+    }
+  },
+
+  clearMessages: async () => {
+    const previous = get().messages;
+    set({ messages: [] });
+    try {
+      await chiefService.clearHistory();
+    } catch (error: any) {
+      // Server-side clear failed — restore local state rather than show
+      // an empty thread that isn't actually cleared for the household.
+      set({ messages: previous, error: error.message });
+    }
+  },
+
   clearError: () => set({ error: null }),
 }));

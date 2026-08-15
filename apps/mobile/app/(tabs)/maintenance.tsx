@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, TextInput, Alert, RefreshControl } from 'react-native'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, TextInput, Alert, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native'
 import { useEffect, useState } from 'react'
 import { useMaintenanceStore } from '../../src/stores/maintenanceStore'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -57,119 +57,121 @@ export default function MaintenanceScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
-        <Text style={styles.headerLabel}>HOME</Text>
-        <Text style={styles.headerTitle}>Maintenance</Text>
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryPill}>
-            <Text style={styles.summaryValue}>{upcomingTasks.length}</Text>
-            <Text style={styles.summaryLabel}>Upcoming</Text>
-          </View>
-          <View style={styles.summaryPill}>
-            <Text style={styles.summaryValue}>{tasks.filter((t: any) => t.completed).length}</Text>
-            <Text style={styles.summaryLabel}>Done</Text>
-          </View>
-        </View>
-      </LinearGradient>
-
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchTasks} tintColor={ACCENT} />}>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Upcoming Tasks</Text>
-          {upcomingTasks.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="checkmark-circle-outline" size={40} color={SUCCESS} />
-              <Text style={styles.emptyTitle}>All clear!</Text>
-              <Text style={styles.emptySubtitle}>No maintenance tasks due</Text>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
+          <Text style={styles.headerLabel}>HOME</Text>
+          <Text style={styles.headerTitle}>Maintenance</Text>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryPill}>
+              <Text style={styles.summaryValue}>{upcomingTasks.length}</Text>
+              <Text style={styles.summaryLabel}>Upcoming</Text>
             </View>
-          ) : (
-            upcomingTasks.map((task: any, i: number) => (
-              <View key={task.id || i} style={styles.taskCard}>
-                <View style={styles.taskLeft}>
-                  <Text style={styles.taskName}>{task.name || task.title}</Text>
-                  <Text style={styles.taskDue}>Due: {task.due_date || task.next_due_date}</Text>
-                </View>
-                <View style={styles.taskActions}>
-                  {task.diy_friendly && (
-                    <TouchableOpacity style={styles.diyBtn} onPress={() => handleDIY(task.name || task.title)}>
-                      <Text style={styles.diyBtnText}>DIY</Text>
+            <View style={styles.summaryPill}>
+              <Text style={styles.summaryValue}>{tasks.filter((t: any) => t.completed).length}</Text>
+              <Text style={styles.summaryLabel}>Done</Text>
+            </View>
+          </View>
+        </LinearGradient>
+
+        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchTasks} tintColor={ACCENT} />}>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Upcoming Tasks</Text>
+            {upcomingTasks.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="checkmark-circle-outline" size={40} color={SUCCESS} />
+                <Text style={styles.emptyTitle}>All clear!</Text>
+                <Text style={styles.emptySubtitle}>No maintenance tasks due</Text>
+              </View>
+            ) : (
+              upcomingTasks.map((task: any, i: number) => (
+                <View key={task.id || i} style={styles.taskCard}>
+                  <View style={styles.taskLeft}>
+                    <Text style={styles.taskName}>{task.name || task.title}</Text>
+                    <Text style={styles.taskDue}>Due: {task.due_date || task.next_due_date}</Text>
+                  </View>
+                  <View style={styles.taskActions}>
+                    {task.diy_friendly && (
+                      <TouchableOpacity style={styles.diyBtn} onPress={() => handleDIY(task.name || task.title)}>
+                        <Text style={styles.diyBtnText}>DIY</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={styles.doneBtn} onPress={() => completeTask(task.id)}>
+                      <Ionicons name="checkmark" size={16} color={NAVY} />
                     </TouchableOpacity>
-                  )}
-                  <TouchableOpacity style={styles.doneBtn} onPress={() => completeTask(task.id)}>
-                    <Ionicons name="checkmark" size={16} color={NAVY} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Diagnose an Issue</Text>
-          <View style={styles.diagnoseCard}>
-            <TextInput
-              style={styles.diagnoseInput}
-              placeholder="e.g., 'Car AC not working'"
-              placeholderTextColor={MUTED}
-              value={problemDesc}
-              onChangeText={setProblemDesc}
-              multiline
-            />
-            <TouchableOpacity style={styles.diagnoseBtn} onPress={handleDiagnose} disabled={diagnosing}>
-              <Text style={styles.diagnoseBtnText}>{diagnosing ? 'Diagnosing...' : 'Diagnose'}</Text>
-            </TouchableOpacity>
-
-            {diagnosis && (
-              <View style={styles.diagnosisResult}>
-                {urgencyCfg && (
-                  <View style={[styles.urgencyBadge, { backgroundColor: urgencyCfg.bg, borderColor: urgencyCfg.color + '33' }]}>
-                    <Text style={[styles.urgencyText, { color: urgencyCfg.color }]}>{urgencyCfg.label}</Text>
                   </View>
-                )}
-
-                <Text style={styles.diagnosisSubtitle}>Likely causes</Text>
-                {diagnosis.likely_causes?.map((cause: string, i: number) => (
-                  <Text key={i} style={styles.diagnosisCause}>• {cause}</Text>
-                ))}
-
-                {diagnosis.immediate_steps?.length > 0 && (
-                  <>
-                    <Text style={styles.diagnosisSubtitle}>What to do now</Text>
-                    {diagnosis.immediate_steps.map((step: string, i: number) => (
-                      <Text key={i} style={styles.diagnosisCause}>• {step}</Text>
-                    ))}
-                  </>
-                )}
-
-                <View style={styles.metaRow}>
-                  {diagnosis.diy_possible !== undefined && (
-                    <View style={styles.metaChip}>
-                      <Text style={styles.metaChipText}>{diagnosis.diy_possible ? '🔧 DIY possible' : '👷 Pro recommended'}</Text>
-                    </View>
-                  )}
-                  {diagnosis.estimated_repair_cost && (
-                    <View style={styles.metaChip}>
-                      <Text style={styles.metaChipText}>Est. cost: {diagnosis.estimated_repair_cost}</Text>
-                    </View>
-                  )}
                 </View>
-
-                {diagnosis.safety_warning && (
-                  <View style={styles.safetyWarningBox}>
-                    <Text style={styles.safetyWarningText}>⚠ {diagnosis.safety_warning}</Text>
-                  </View>
-                )}
-
-                {diagnosis.disclaimer && (
-                  <Text style={styles.diagnosisDisclaimer}>{diagnosis.disclaimer}</Text>
-                )}
-              </View>
+              ))
             )}
           </View>
-        </View>
-        <View style={{ height: 40 }} />
-      </ScrollView>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Diagnose an Issue</Text>
+            <View style={styles.diagnoseCard}>
+              <TextInput
+                style={styles.diagnoseInput}
+                placeholder="e.g., 'Car AC not working'"
+                placeholderTextColor={MUTED}
+                value={problemDesc}
+                onChangeText={setProblemDesc}
+                multiline
+              />
+              <TouchableOpacity style={styles.diagnoseBtn} onPress={handleDiagnose} disabled={diagnosing}>
+                <Text style={styles.diagnoseBtnText}>{diagnosing ? 'Diagnosing...' : 'Diagnose'}</Text>
+              </TouchableOpacity>
+
+              {diagnosis && (
+                <View style={styles.diagnosisResult}>
+                  {urgencyCfg && (
+                    <View style={[styles.urgencyBadge, { backgroundColor: urgencyCfg.bg, borderColor: urgencyCfg.color + '33' }]}>
+                      <Text style={[styles.urgencyText, { color: urgencyCfg.color }]}>{urgencyCfg.label}</Text>
+                    </View>
+                  )}
+
+                  <Text style={styles.diagnosisSubtitle}>Likely causes</Text>
+                  {diagnosis.likely_causes?.map((cause: string, i: number) => (
+                    <Text key={i} style={styles.diagnosisCause}>• {cause}</Text>
+                  ))}
+
+                  {diagnosis.immediate_steps?.length > 0 && (
+                    <>
+                      <Text style={styles.diagnosisSubtitle}>What to do now</Text>
+                      {diagnosis.immediate_steps.map((step: string, i: number) => (
+                        <Text key={i} style={styles.diagnosisCause}>• {step}</Text>
+                      ))}
+                    </>
+                  )}
+
+                  <View style={styles.metaRow}>
+                    {diagnosis.diy_possible !== undefined && (
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>{diagnosis.diy_possible ? '🔧 DIY possible' : '👷 Pro recommended'}</Text>
+                      </View>
+                    )}
+                    {diagnosis.estimated_repair_cost && (
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>Est. cost: {diagnosis.estimated_repair_cost}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {diagnosis.safety_warning && (
+                    <View style={styles.safetyWarningBox}>
+                      <Text style={styles.safetyWarningText}>⚠ {diagnosis.safety_warning}</Text>
+                    </View>
+                  )}
+
+                  {diagnosis.disclaimer && (
+                    <Text style={styles.diagnosisDisclaimer}>{diagnosis.disclaimer}</Text>
+                  )}
+                </View>
+              )}
+            </View>
+          </View>
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   )
 }
