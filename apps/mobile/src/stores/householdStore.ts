@@ -7,6 +7,7 @@ export interface Household {
   address?: string | null;
   country?: string;
   currency?: string;
+  timezone?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -18,8 +19,8 @@ interface HouseholdState {
   error: string | null;
 
   fetchHousehold: () => Promise<void>;
-  createHousehold: (data: { name: string; address?: string; country?: string; currency?: string }) => Promise<void>;
-  updateHousehold: (data: { name?: string; address?: string; country?: string; currency?: string }) => Promise<void>;
+  createHousehold: (data: { name: string; address?: string; country?: string; currency?: string; timezone?: string }) => Promise<void>;
+  updateHousehold: (data: { name?: string; address?: string; country?: string; currency?: string; timezone?: string }) => Promise<void>;
   clearHousehold: () => void;
   clearError: () => void;
 }

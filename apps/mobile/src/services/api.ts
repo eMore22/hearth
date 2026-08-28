@@ -50,9 +50,9 @@ export const authService = {
 
 export const householdService = {
   get: () => api.get('/api/household/'),
-  create: (data: { name: string; address?: string; country?: string }) =>
+  create: (data: { name: string; address?: string; country?: string; currency?: string; timezone?: string }) =>
     api.post('/api/household/', data),
-  update: (householdId: string, data: { name?: string; address?: string; country?: string }) =>
+  update: (householdId: string, data: { name?: string; address?: string; country?: string; currency?: string; timezone?: string }) =>
     api.patch(`/api/household/${householdId}`, data),
   getMembers: () => api.get('/api/household/members'),
 };
@@ -105,12 +105,17 @@ export const groceryService = {
     api.post('/api/grocery/shopping-list/generate', { meal_plan: mealPlan, weekly_budget: weeklyBudget }),
   getBudget: () =>
     api.get('/api/grocery/budget'),
-  setBudget: (weeklyBudget: number, currency: string = 'NGN') =>
+  setBudget: (weeklyBudget: number, currency?: string) =>
     api.put('/api/grocery/budget', { weekly_budget: weeklyBudget, currency }),
 };
 
 export const maintenanceService = {
   getTasks: () => api.get('/api/maintenance/tasks'),
+  // Backend endpoint exists (POST /api/maintenance/tasks) but nothing in
+  // maintenanceStore.ts calls this yet — no "Add Maintenance Task" UI
+  // exists. Adding the service function now so it's reachable whenever
+  // that UI gets built; not wiring a new screen for it in this pass.
+  createTask: (data: any) => api.post('/api/maintenance/tasks', data),
   generateCalendar: (profile: any) =>
     api.post('/api/maintenance/calendar/generate', { home_profile: profile }),
   diagnose: (description: string, photos?: string[]) =>

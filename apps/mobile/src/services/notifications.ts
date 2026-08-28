@@ -1,11 +1,14 @@
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
+import Constants from 'expo-constants'
 import { notificationService } from './api'
 
 // Configure notification handler
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
@@ -28,7 +31,21 @@ export async function registerForPushNotificationsAsync() {
       return
     }
 
-    token = (await Notifications.getExpoPushTokenAsync()).data
+    // Standalone/production builds on expo-notifications ~0.32 require
+    // projectId to be passed explicitly to getExpoPushTokenAsync(). Without
+    // it, the call throws instead of returning a token — and that throw was
+    // landing silently in the catch block below on every single attempt,
+    // which is why register-token never once reached the backend.
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId
+
+    if (!projectId) {
+      console.error('Missing EAS projectId — cannot get push token')
+      return
+    }
+
+    token = (await Notifications.getExpoPushTokenAsync({ projectId })).data
 
     if (Platform.OS === 'android') {
       Notifications.setNotificationChannelAsync('default', {

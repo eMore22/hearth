@@ -9,6 +9,7 @@ import { useBillStore } from '../../src/stores/billStore'
 import { useGroceryStore } from '../../src/stores/groceryStore'
 import { useMaintenanceStore } from '../../src/stores/maintenanceStore'
 import { useHealthStore } from '../../src/stores/healthStore'
+import { useTaskStore } from '../../src/stores/taskStore'
 import { useAutomationStore } from '../../src/stores/automationStore'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -38,9 +39,13 @@ export default function ChiefOfStaffScreen() {
   // All data sources — Chief needs the full picture
   const { documents, alerts, fetchDocuments, fetchAlerts } = useDocumentStore()
   const { bills, monthlyReport, fetchBills, fetchMonthlyReport } = useBillStore()
-  const { inventory, fetchInventory } = useGroceryStore()
+  const { inventory, mealPlan, budget, fetchInventory, fetchBudget } = useGroceryStore()
   const { tasks, fetchTasks } = useMaintenanceStore()
-  const { medications, fetchMedications } = useHealthStore()
+  const { medications, triageHistory, fetchMedications } = useHealthStore()
+
+  // Household to-dos — separate from the AI-generated maintenance `tasks`
+  // above. Was previously invisible to Chief entirely.
+  const { tasks: householdTasks, fetchTasks: fetchHouseholdTasks } = useTaskStore()
 
   // ── HA events — this is what was missing ──
   const { events: haEvents, devices: haDevices, status: haStatus, fetchEvents: fetchHAEvents, fetchStatus: fetchHAStatus, fetchDevices: fetchHADevices } = useAutomationStore()
@@ -54,8 +59,9 @@ export default function ChiefOfStaffScreen() {
     fetchHistory()
     fetchDocuments(); fetchAlerts()
     fetchBills(); fetchMonthlyReport()
-    fetchInventory(); fetchTasks()
+    fetchInventory(); fetchBudget(); fetchTasks()
     fetchMedications()
+    fetchHouseholdTasks()
     fetchHAEvents(); fetchHAStatus(); fetchHADevices()
   }, [])
 
@@ -84,6 +90,22 @@ export default function ChiefOfStaffScreen() {
         time: e.created_at,
       }))
 
+    // Only pending household to-dos, trimmed to what's actually useful
+    // in a prompt — full row objects would just add noise.
+    const pendingHouseholdTasks = (householdTasks || [])
+      .filter((t: any) => !t.is_completed)
+      .map((t: any) => ({ title: t.title, due_at: t.due_at }))
+
+    // Last few triage checks, so Chief can reference "you checked on a
+    // fever earlier" without needing a separate health-history feature.
+    const recentHealthChecks = (triageHistory || [])
+      .slice(0, 3)
+      .map((t: any) => ({
+        symptoms: t.symptoms,
+        level: t.result?.triage_level,
+        date: t.date,
+      }))
+
     return {
       documents,
       alerts,
@@ -91,7 +113,11 @@ export default function ChiefOfStaffScreen() {
       monthlyReport,
       tasks,
       inventory,
+      meal_plan: mealPlan,
+      grocery_budget: budget,
       medications,
+      household_tasks: pendingHouseholdTasks,
+      recent_health_checks: recentHealthChecks,
       // ── Smart home context ──
       smart_home_connected: haStatus.connected,
       smart_home_device_count: haStatus.device_count || 0,

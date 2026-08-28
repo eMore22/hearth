@@ -10,7 +10,8 @@ class CreateHouseholdRequest(BaseModel):
     name: str
     address: Optional[str] = None
     country: Optional[str] = None
-    currency: Optional[str] = "NGN"
+    currency: Optional[str] = None
+    timezone: Optional[str] = None
 
 
 class UpdateHouseholdRequest(BaseModel):
@@ -18,6 +19,7 @@ class UpdateHouseholdRequest(BaseModel):
     address: Optional[str] = None
     country: Optional[str] = None
     currency: Optional[str] = None
+    timezone: Optional[str] = None
 
 
 class InviteMemberRequest(BaseModel):
@@ -52,6 +54,7 @@ async def create_household(
             "address": payload.address,
             "country": payload.country,
             "currency": payload.currency,
+            "timezone": payload.timezone,
             "created_by": user["id"]
         }).execute()
 
@@ -102,7 +105,7 @@ async def update_household(
     payload: UpdateHouseholdRequest,
     user=Depends(get_current_user),
 ):
-    """Update household name/address/country/currency. Only the household owner can do this."""
+    """Update household name/address/country/currency/timezone. Only the household owner can do this."""
     supabase = get_supabase_admin()
 
     try:

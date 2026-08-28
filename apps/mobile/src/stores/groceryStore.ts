@@ -161,7 +161,7 @@ export const useGroceryStore = create<GroceryState>((set, get) => ({
     } catch {}
   },
 
-  setBudget: async (amount, currency = 'NGN') => {
+  setBudget: async (amount, currency) => {
     try {
       await groceryService.setBudget(amount, currency);
       set({ budget: amount });

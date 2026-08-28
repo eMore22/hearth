@@ -9,12 +9,14 @@ router = APIRouter(tags=["bills"])
 
 
 class CreateBillRequest(BaseModel):
-    provider: str           # bill/service name — written to both name + provider columns
+    provider: str
     amount: float
     category: str = "other"
     billing_cycle: str = "monthly"
-    currency: str = "USD"
-    next_due_date: Optional[str] = None   # ISO date string e.g. "2026-07-01"
+    # No hardcoded fallback — resolved server-side from the household's own
+    # currency if the client doesn't send one explicitly.
+    currency: Optional[str] = None
+    next_due_date: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -45,16 +47,21 @@ async def create_bill(
     if not household_id:
         raise HTTPException(status_code=400, detail="Create a household first")
 
+    resolved_currency = payload.currency
+    if not resolved_currency:
+        agent = BillAgent(household_id=household_id, user_id=str(current_user["id"]))
+        resolved_currency = agent._get_household_currency() or "USD"
+
     supabase = get_supabase_admin()
     try:
         insert_data = {
             "household_id": household_id,
-            "name":         payload.provider,        # table uses 'name' as primary label
-            "provider":     payload.provider,         # also stored in provider for agent queries
+            "name":         payload.provider,
+            "provider":     payload.provider,
             "amount":       payload.amount,
             "category":     payload.category,
             "billing_cycle": payload.billing_cycle,
-            "currency":     payload.currency,
+            "currency":     resolved_currency,
             "notes":        payload.notes,
             "is_active":    True,
         }

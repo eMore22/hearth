@@ -220,9 +220,9 @@ export default function GroceryScreen() {
                   </Text>
                 </View>
               )}
-              {shoppingList.suggestions?.length > 0 && (
+              {(shoppingList.suggestions ?? []).length > 0 && (
                 <View style={styles.suggestionsBox}>
-                  {shoppingList.suggestions.map((s: string, i: number) => (
+                  {(shoppingList.suggestions ?? []).map((s: string, i: number) => (
                     <Text key={i} style={styles.suggestionText}>💡 {s}</Text>
                   ))}
                 </View>
@@ -321,7 +321,7 @@ export default function GroceryScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.budgetSaveBtn} onPress={async () => {
                 const amount = parseFloat(budgetInput) || 0;
-                await setBudget(amount, household?.currency || 'NGN');
+                await setBudget(amount, household?.currency);
                 setShowBudgetModal(false);
               }}>
                 <Text style={styles.budgetSaveText}>Save</Text>

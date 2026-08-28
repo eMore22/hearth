@@ -1,75 +1,97 @@
+Runs hourly. At each household's local target hour/day, analyzes bills,
+flags unused subscriptions weekly, and sends a spending report monthly.
+Queries Supabase directly — app.services.household_service/bill_service
+never existed anywhere in this codebase (confirmed via full-repo search),
+so this import was silently breaking the whole module. Matches the direct-
+query pattern already proven working in expiry_monitor.py/task_reminder.py.
 """
-Weekly task to analyze bills, detect unused subscriptions,
-and generate monthly reports.
-"""
-from celery import shared_task
-from datetime import date, timedelta
+from datetime import date
+import asyncio
+from app.workers.celery_app import celery_app
+from app.dependencies import get_supabase_admin
 from app.agents.bill_agent import BillAgent
-from app.services.bill_service import get_bills_for_household
-from app.services.household_service import get_all_households
-from app.workers.notification_sender import send_notification_to_household
+from app.services.push_service import send_push_to_household
+
+from app.utils.timezone_utils import is_local_target_time
+
+WEEKLY_HOUR = 14
+WEEKLY_WEEKDAY = 0  # Monday
+MONTHLY_HOUR = 12
+MONTHLY_DAY = 1
 
 
-@shared_task(name="bill_monitor.weekly_analysis")
+def _get_households(supabase):
+    result = supabase.table("households").select("id, timezone, currency").execute()
+    return result.data or []
+
+
+def _get_bills(supabase, household_id):
+    result = supabase.table("bills")\
+        .select("*")\
+        .eq("household_id", household_id)\
+        .eq("is_active", True)\
+        .execute()
+    return result.data or []
+
+
+@celery_app.task(name="bill_monitor.weekly_analysis")
 def weekly_bill_analysis():
-    """
-    Runs every Monday. Analyzes bills for all households,
-    flags unused subscriptions, and sends insights.
-    """
-    households = get_all_households()
-    for hh in households:
+    supabase = get_supabase_admin()
+    for hh in _get_households(supabase):
+        if not is_local_target_time(hh.get("timezone"), WEEKLY_HOUR, target_weekday=WEEKLY_WEEKDAY):
+            continue
+        household_id = hh["id"]
         try:
-            bills = get_bills_for_household(hh.id)
-            agent = BillAgent(household_id=hh.id, user_id=hh.owner_id)
-            
-            # Detect unused subscriptions
+            bills = _get_bills(supabase, household_id)
+            if not bills:
+                continue
+            agent = BillAgent(household_id=household_id, user_id="system")
             unused = agent.run({
                 "action": "detect_unused_subscriptions",
-                "bills": [b.dict() for b in bills]
+                "bills": bills,
             })
-            
-            if unused and len(unused) > 0:
+
+            if unused:
+                currency = hh.get("currency") or "USD"
                 savings = sum(u.get("monthly_savings", 0) for u in unused)
-                message = f"We found {len(unused)} subscriptions you might not be using. Potential savings: ${savings:.2f}/month."
-                send_notification_to_household(
-                    household_id=hh.id,
+                message = f"We found {len(unused)} subscriptions you might not be using. Potential savings: {currency} {savings:.2f}/month."
+                asyncio.run(send_push_to_household(
+                    household_id=household_id,
                     title="💰 Potential savings found",
                     body=message,
-                    data={"type": "bill_insight", "unused": unused}
-                )
+                    data={"type": "bill_insight", "unused": unused},
+                    supabase=supabase,
+                ))
         except Exception as e:
-            print(f"Bill monitor failed for household {hh.id}: {e}")
+            print(f"Bill monitor failed for household {household_id}: {e}")
 
 
-@shared_task(name="bill_monitor.monthly_report")
+@celery_app.task(name="bill_monitor.monthly_report")
 def monthly_bill_report():
-    """
-    Runs on the 1st of each month. Generates a monthly cost report.
-    """
-    households = get_all_households()
-    today = date.today()
-    first_of_month = today.replace(day=1)
-    last_month = first_of_month - timedelta(days=1)
-    last_month_first = last_month.replace(day=1)
-
-    for hh in households:
+    supabase = get_supabase_admin()
+    for hh in _get_households(supabase):
+        if not is_local_target_time(hh.get("timezone"), MONTHLY_HOUR, target_day_of_month=MONTHLY_DAY):
+            continue
+        household_id = hh["id"]
         try:
-            current_bills = get_bills_for_household(hh.id)
-            # In production, fetch historical bills from bill_history table
-            previous_bills = []  # Placeholder
-            
-            agent = BillAgent(household_id=hh.id, user_id=hh.owner_id)
+            current_bills = _get_bills(supabase, household_id)
+            agent = BillAgent(household_id=household_id, user_id="system")
             report = agent.run({
                 "action": "monthly_report",
-                "bills": [b.dict() for b in current_bills],
-                "previous_month_bills": previous_bills
+                "bills": current_bills,
+                "previous_month_bills": [],  # bill_history isn't wired up yet — separate follow-up
             })
-            
-            send_notification_to_household(
-                household_id=hh.id,
-                title=f"📊 {today.strftime('%B')} Bill Report",
-                body=report.get("summary", "Your monthly report is ready."),
-                data={"type": "monthly_report", "report": report}
-            )
+
+            currency = hh.get("currency") or "USD"
+            total_spent = report.get("total_spent", 0)
+            today_label = date.today().strftime("%B")
+
+            asyncio.run(send_push_to_household(
+                household_id=household_id,
+                title=f"📊 {today_label} Bill Report",
+                body=f"Total spent this month: {currency} {total_spent:.2f}.",
+                data={"type": "monthly_report", "report": report},
+                supabase=supabase,
+            ))
         except Exception as e:
-            print(f"Monthly report failed for household {hh.id}: {e}")
+            print(f"Monthly report failed for household {household_id}: {e}")

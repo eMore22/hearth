@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from anthropic import Anthropic
 from app.config import settings
+from app.dependencies import get_supabase_admin
 
 
 class BaseHouseholdAgent(ABC):
@@ -44,6 +45,73 @@ class BaseHouseholdAgent(ABC):
         cleaned = text.replace("```json", "").replace("```", "").strip()
         match = re.search(r'(\{.*\}|\[.*\])', cleaned, re.DOTALL)
         return match.group(1) if match else cleaned
+
+    def _get_household_country(self) -> Optional[str]:
+        """
+        Looks up this household's country. Returns None if there's no
+        household_id or no country set — callers should treat that as
+        "no location data," not default to any specific country.
+        Shared across agents (previously duplicated only in GroceryAgent).
+        """
+        if not self.household_id:
+            return None
+        supabase = get_supabase_admin()
+        try:
+            result = supabase.table("households")\
+                .select("country")\
+                .eq("id", self.household_id)\
+                .maybe_single()\
+                .execute()
+            if result.data:
+                country = result.data.get("country")
+                return country.strip() if country else None
+            return None
+        except Exception:
+            return None
+
+    def _get_household_currency(self) -> Optional[str]:
+        """
+        Looks up this household's own currency (set directly, or derived
+        from Country at creation time — see country.ts on the frontend).
+        Returns None rather than assuming any specific currency, so callers
+        can apply their own last-resort fallback deliberately.
+        """
+        if not self.household_id:
+            return None
+        supabase = get_supabase_admin()
+        try:
+            result = supabase.table("households")\
+                .select("currency")\
+                .eq("id", self.household_id)\
+                .maybe_single()\
+                .execute()
+            if result.data:
+                currency = result.data.get("currency")
+                return currency.strip() if currency else None
+            return None
+        except Exception:
+            return None
+
+    def _get_household_timezone(self) -> str:
+        """
+        Looks up this household's IANA timezone. Defaults to UTC for
+        households created before timezone selection existed.
+        """
+        if not self.household_id:
+            return "UTC"
+        supabase = get_supabase_admin()
+        try:
+            result = supabase.table("households")\
+                .select("timezone")\
+                .eq("id", self.household_id)\
+                .maybe_single()\
+                .execute()
+            if result.data:
+                tz = result.data.get("timezone")
+                return tz.strip() if tz else "UTC"
+            return "UTC"
+        except Exception:
+            return "UTC"
 
     def load_household_context(self) -> Dict[str, Any]:
         """Override in subclasses to load relevant household data."""

@@ -9,22 +9,32 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { router } from 'expo-router';
 import { householdService } from '../../src/services/api';
 import { useHouseholdStore } from '../../src/stores/householdStore';
+import { COUNTRIES } from '../../src/utils/country';
 
 export default function CreateHouseholdScreen() {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
-  const [country, setCountry] = useState('Nigeria');
+  const [country, setCountry] = useState('');
+  const [showCountryModal, setShowCountryModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const { fetchHousehold } = useHouseholdStore();
 
+  const selectedCountry = COUNTRIES.find(c => c.value === country);
+
   const handleCreate = async () => {
     if (!name.trim()) {
       Alert.alert('Error', 'Please enter a household name');
+      return;
+    }
+    if (!country) {
+      Alert.alert('Error', 'Please select a country');
       return;
     }
 
@@ -34,11 +44,12 @@ export default function CreateHouseholdScreen() {
       await householdService.create({
         name: name.trim(),
         address: address.trim() || undefined,
-        country: country.trim(),
+        country,
+        currency: selectedCountry?.currency,
+        timezone: selectedCountry?.defaultTimezone,
       });
 
       await fetchHousehold();
-      // Go back to the previous screen – this works both for onboarding and profile edit flows
       router.back();
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to create household');
@@ -79,22 +90,19 @@ export default function CreateHouseholdScreen() {
           autoCapitalize="words"
         />
 
-        <Text style={styles.label}>Country</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Nigeria"
-          placeholderTextColor="#8899AA"
-          value={country}
-          onChangeText={setCountry}
-          autoCapitalize="words"
-        />
+        <Text style={styles.label}>Country *</Text>
+        <TouchableOpacity style={styles.input} onPress={() => setShowCountryModal(true)}>
+          <Text style={{ color: country ? '#F8FAFF' : '#8899AA', fontSize: 16 }}>
+            {selectedCountry ? selectedCountry.label : 'Select country'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.button, (!name.trim() || isLoading) && styles.buttonDisabled]}
+          style={[styles.button, (!name.trim() || !country || isLoading) && styles.buttonDisabled]}
           onPress={handleCreate}
-          disabled={!name.trim() || isLoading}
+          disabled={!name.trim() || !country || isLoading}
         >
           {isLoading ? (
             <ActivityIndicator color="#fff" />
@@ -103,69 +111,76 @@ export default function CreateHouseholdScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      <Modal visible={showCountryModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Select Country</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {COUNTRIES.map(item => (
+                <TouchableOpacity
+                  key={item.value}
+                  style={[
+                    styles.countryOption,
+                    country === item.value && styles.countryOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setCountry(item.value);
+                    setShowCountryModal(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.countryOptionText,
+                    country === item.value && styles.countryOptionTextSelected,
+                  ]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowCountryModal(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0A1628',
-    padding: 24,
-  },
-  header: {
-    marginBottom: 32,
-  },
-  step: {
-    color: '#8899AA',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#F8FAFF',
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 15,
-    color: '#8899AA',
-    lineHeight: 22,
-  },
-  form: {
-    flex: 1,
-  },
-  label: {
-    color: '#F8FAFF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-    marginTop: 16,
-  },
+  container: { flex: 1, backgroundColor: '#0A1628', padding: 24 },
+  header: { marginBottom: 32 },
+  step: { color: '#8899AA', fontSize: 14, marginBottom: 8 },
+  title: { fontSize: 26, fontWeight: '700', color: '#F8FAFF', marginBottom: 8 },
+  description: { fontSize: 15, color: '#8899AA', lineHeight: 22 },
+  form: { flex: 1 },
+  label: { color: '#F8FAFF', fontSize: 14, fontWeight: '600', marginBottom: 8, marginTop: 16 },
   input: {
-    backgroundColor: '#162035',
-    borderRadius: 12,
-    padding: 16,
-    color: '#F8FAFF',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#2A3F5F',
+    backgroundColor: '#162035', borderRadius: 12, padding: 16,
+    color: '#F8FAFF', fontSize: 16, borderWidth: 1, borderColor: '#2A3F5F',
+    justifyContent: 'center',
   },
-  footer: {
-    paddingBottom: 40,
+  footer: { paddingBottom: 40 },
+  button: { backgroundColor: '#C77DFF', paddingVertical: 18, borderRadius: 12, alignItems: 'center' },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
   },
-  button: {
-    backgroundColor: '#C77DFF',
-    paddingVertical: 18,
-    borderRadius: 12,
-    alignItems: 'center',
+  modalCard: {
+    backgroundColor: '#162035', borderRadius: 16, padding: 24, width: '100%',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#F8FAFF', marginBottom: 20 },
+  countryOption: { paddingVertical: 14, paddingHorizontal: 12, borderRadius: 10, marginBottom: 4 },
+  countryOptionSelected: { backgroundColor: 'rgba(79,195,247,0.08)' },
+  countryOptionText: { fontSize: 15, color: '#F8FAFF' },
+  countryOptionTextSelected: { color: '#4FC3F7', fontWeight: '600' },
+  modalCancelBtn: {
+    marginTop: 20, paddingVertical: 12, alignItems: 'center',
+    borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '700',
-  },
+  modalCancelText: { color: '#8899AA', fontSize: 15 },
 });

@@ -37,34 +37,13 @@ Be practical and realistic with your suggestions."""
             return self.set_budget(
                 input_data.get("household_id"),
                 input_data.get("weekly_budget", 0),
-                input_data.get("currency", "NGN")
+                input_data.get("currency")
             )
         else:
             raise ValueError(f"Unknown action: {action}")
 
-    def _get_household_country(self) -> Optional[str]:
-        """
-        Looks up the household's country so meal suggestions can be localized.
-        Returns None if there's no household_id or no country set — callers
-        should treat that as "no location data, stay generic," not default
-        to any specific cuisine.
-        """
-        household_id = getattr(self, "household_id", None)
-        if not household_id:
-            return None
-        supabase = get_supabase_admin()
-        try:
-            result = supabase.table("households")\
-                .select("country")\
-                .eq("id", household_id)\
-                .maybe_single()\
-                .execute()
-            if result.data:
-                country = result.data.get("country")
-                return country.strip() if country else None
-            return None
-        except Exception:
-            return None
+    # _get_household_country() and _get_household_currency() live on
+    # BaseHouseholdAgent — inherited automatically here.
 
     def generate_meal_plan(self, preferences: Dict) -> Dict:
         country = self._get_household_country()
@@ -162,11 +141,18 @@ Return ONLY a JSON array:
     def save_custom_meal_plan(self, meal_plan: Dict, household_id: str) -> Dict:
         supabase = get_supabase_admin()
         try:
-            result = supabase.table("meal_plans").upsert({
+            # Real meal_plans columns are week_start/plan_data (confirmed
+            # against schema.sql) — week_of/days/estimated_cost were never
+            # real columns, so every call here was failing every time. No
+            # unique constraint exists on household_id for this table (each
+            # generation is its own history row), so this is a plain insert,
+            # not an upsert. The full meal_plan dict is preserved as-is in
+            # plan_data (JSONB) — nothing about its shape is lost.
+            week_of = meal_plan.get("week_of") or None
+            result = supabase.table("meal_plans").insert({
                 "household_id": household_id,
-                "week_of": meal_plan.get("week_of"),
-                "days": meal_plan.get("days", []),
-                "estimated_cost": meal_plan.get("estimated_weekly_cost", 0),
+                "week_start": week_of,
+                "plan_data": meal_plan,
             }).execute()
             return {"status": "saved", "data": result.data[0] if result.data else {}}
         except Exception as e:
@@ -182,8 +168,20 @@ Return ONLY a JSON array:
 
         unique_items = list(set(all_items))
 
-        prompt = f"""Create a shopping list from these meal plan ingredients, estimate costs in NGN,
-and compare to the user's weekly budget of ₦{weekly_budget:,.0f}.
+        currency = self._get_household_currency()
+        if currency:
+            budget_instruction = (
+                f"estimate costs in {currency}, and compare to the user's weekly "
+                f"budget of {weekly_budget:,.2f} {currency}."
+            )
+        else:
+            budget_instruction = (
+                f"estimate costs using generic numeric values (do not assume any "
+                f"specific currency), and compare to the user's weekly budget of "
+                f"{weekly_budget:,.2f}."
+            )
+
+        prompt = f"""Create a shopping list from these meal plan ingredients, {budget_instruction}
 
 Ingredients: {json.dumps(unique_items)}
 
@@ -219,6 +217,7 @@ Return ONLY valid JSON:
 
     def get_budget(self, household_id: str) -> Dict:
         supabase = get_supabase_admin()
+        fallback_currency = self._get_household_currency()
         try:
             result = supabase.table("household_preferences")\
                 .select("weekly_budget, currency")\
@@ -228,20 +227,21 @@ Return ONLY valid JSON:
             if result.data:
                 return {
                     "weekly_budget": result.data.get("weekly_budget", 0),
-                    "currency": result.data.get("currency", "NGN")
+                    "currency": result.data.get("currency") or fallback_currency
                 }
-            return {"weekly_budget": 0, "currency": "NGN"}
+            return {"weekly_budget": 0, "currency": fallback_currency}
         except:
-            return {"weekly_budget": 0, "currency": "NGN"}
+            return {"weekly_budget": 0, "currency": fallback_currency}
 
-    def set_budget(self, household_id: str, weekly_budget: float, currency: str = "NGN") -> Dict:
+    def set_budget(self, household_id: str, weekly_budget: float, currency: Optional[str] = None) -> Dict:
         supabase = get_supabase_admin()
+        resolved_currency = currency or self._get_household_currency() or "USD"
         try:
             supabase.table("household_preferences").upsert({
                 "household_id": household_id,
                 "weekly_budget": weekly_budget,
-                "currency": currency,
+                "currency": resolved_currency,
             }, on_conflict="household_id").execute()
-            return {"weekly_budget": weekly_budget, "currency": currency, "status": "saved"}
+            return {"weekly_budget": weekly_budget, "currency": resolved_currency, "status": "saved"}
         except Exception as e:
-            return {"weekly_budget": weekly_budget, "currency": currency, "status": "error", "detail": str(e)}
+            return {"weekly_budget": weekly_budget, "currency": resolved_currency, "status": "error", "detail": str(e)}

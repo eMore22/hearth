@@ -127,7 +127,7 @@ IMPORTANT RULES:
             total = sum(b.get("amount", 0) for b in context["bills"])
             context_parts.append(f"{len(context['bills'])} active bills (${total:,.0f}/month)")
 
-        # Tasks
+        # Maintenance tasks (AI-generated recurring upkeep, not household to-dos)
         tasks = context.get("tasks") or []
         if tasks:
             pending = [t for t in tasks if not t.get("completed")]
@@ -137,9 +137,40 @@ IMPORTANT RULES:
         if context.get("inventory"):
             context_parts.append(f"{len(context['inventory'])} grocery items")
 
+        # Meal plan
+        meal_plan = context.get("meal_plan")
+        if meal_plan and meal_plan.get("days"):
+            context_parts.append(f"This week's meal plan is already set ({len(meal_plan['days'])} days planned)")
+
+        # Grocery budget
+        grocery_budget = context.get("grocery_budget")
+        if grocery_budget:
+            context_parts.append(f"Weekly grocery budget: {grocery_budget}")
+
         # Medications
         if context.get("medications"):
             context_parts.append(f"{len(context['medications'])} medications tracked")
+
+        # Household to-dos (manually created tasks — distinct from the
+        # AI-generated maintenance tasks above)
+        household_tasks = context.get("household_tasks") or []
+        if household_tasks:
+            task_lines = "; ".join(
+                t.get("title", "") + (f" (due {t['due_at']})" if t.get("due_at") else "")
+                for t in household_tasks[:5] if t.get("title")
+            )
+            if task_lines:
+                context_parts.append(f"{len(household_tasks)} household to-do(s) pending: {task_lines}")
+
+        # Recent health checks
+        recent_health_checks = context.get("recent_health_checks") or []
+        if recent_health_checks:
+            check_lines = "; ".join(
+                f"{c.get('symptoms', '')} ({c.get('level', 'unspecified')})"
+                for c in recent_health_checks if c.get("symptoms")
+            )
+            if check_lines:
+                context_parts.append(f"Recent health checks: {check_lines}")
 
         # ── Smart home context — highest priority ──
         smart_home_alerts = context.get("smart_home_alerts") or []
@@ -173,7 +204,8 @@ Respond as Hearth Chief of Staff. Rules:
 3. Cross-reference smart home events with documents when relevant (e.g. leak detected → check insurance policy in vault).
 4. Give a warm, concise, plain text response — no markdown, no asterisks, no bullet points.
 5. Never repeat information unnecessarily.
-6. Build naturally on the conversation."""
+6. Build naturally on the conversation.
+7. Household to-dos and AI-generated maintenance tasks are different lists — don't conflate them if the user asks about "tasks.\""""
 
         return self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=500)
 

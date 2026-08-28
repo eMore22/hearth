@@ -10,6 +10,8 @@ import { useAuthStore } from '../../src/stores/authStore';
 import { useHouseholdStore } from '../../src/stores/householdStore';
 import { useAutomationStore } from '../../src/stores/automationStore';
 import { CURRENCIES } from '../../src/utils/currency';
+import { COUNTRIES, getCurrencyForCountry, getTimezoneForCountry } from '../../src/utils/country';
+import { TIMEZONES, getTimezoneLabel } from '../../src/utils/timezone';
 
 const NAVY    = '#0A1628';
 const SURFACE = '#162035';
@@ -46,6 +48,10 @@ export default function ProfileScreen() {
 
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
   const [savingCurrency, setSavingCurrency] = useState(false);
+  const [showCountryModal, setShowCountryModal] = useState(false);
+
+  const [showTimezoneModal, setShowTimezoneModal] = useState(false);
+  const [savingTimezone, setSavingTimezone] = useState(false);
 
   useEffect(() => {
     try { fetchHousehold(); } catch {}
@@ -63,14 +69,29 @@ export default function ProfileScreen() {
   const handleSave = async () => {
     if (!editName.trim()) { Alert.alert('Error', 'Name cannot be empty'); return; }
     setSaving(true);
+
+    // Only re-derive currency/timezone if the country actually changed in
+    // this edit — otherwise saving a name/address tweak would silently
+    // overwrite values the user deliberately set below in Preferences.
+    const countryChanged = editCountry !== (household?.country || '');
+    const derivedCurrency = countryChanged ? getCurrencyForCountry(editCountry) : undefined;
+    const derivedTimezone = countryChanged ? getTimezoneForCountry(editCountry) : undefined;
+
     try {
       await updateHousehold({
         name:    editName.trim(),
         address: editAddress.trim() || undefined,
-        country: editCountry.trim() || undefined,
+        country: editCountry || undefined,
+        ...(derivedCurrency ? { currency: derivedCurrency } : {}),
+        ...(derivedTimezone ? { timezone: derivedTimezone } : {}),
       });
       setIsEditing(false);
-      Alert.alert('Saved', 'Household updated.');
+      Alert.alert(
+        'Saved',
+        derivedCurrency
+          ? `Household updated. Currency and timezone set to match ${editCountry}.`
+          : 'Household updated.'
+      );
     } catch (err: any) {
       Alert.alert('Note', err?.message || 'Saved locally.');
       setIsEditing(false);
@@ -109,11 +130,22 @@ export default function ProfileScreen() {
     try {
       await updateHousehold({ currency: newCurrency });
     } catch {
-      // updateHousehold already falls back to an optimistic local update,
-      // so the UI still reflects the change even if the request failed.
+      // updateHousehold already falls back to an optimistic local update.
     } finally {
       setSavingCurrency(false);
       setShowCurrencyModal(false);
+    }
+  };
+
+  const handleTimezoneSelect = async (newTimezone: string) => {
+    setSavingTimezone(true);
+    try {
+      await updateHousehold({ timezone: newTimezone });
+    } catch {
+      // updateHousehold already falls back to an optimistic local update.
+    } finally {
+      setSavingTimezone(false);
+      setShowTimezoneModal(false);
     }
   };
 
@@ -173,9 +205,13 @@ export default function ProfileScreen() {
               <TextInput style={styles.input} value={editAddress}
                 onChangeText={setEditAddress} placeholder="Address (optional)"
                 placeholderTextColor={MUTED} />
-              <TextInput style={styles.input} value={editCountry}
-                onChangeText={setEditCountry} placeholder="Country"
-                placeholderTextColor={MUTED} />
+              <TouchableOpacity style={styles.input} onPress={() => setShowCountryModal(true)}>
+                <Text style={{ color: editCountry ? WHITE : MUTED, fontSize: 15 }}>
+                  {editCountry
+                    ? (COUNTRIES.find(c => c.value === editCountry)?.label || editCountry)
+                    : 'Select country'}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]}
                 onPress={handleSave} disabled={saving}>
                 {saving
@@ -186,7 +222,10 @@ export default function ProfileScreen() {
           ) : (
             <>
               <InfoRow label="Name"    value={household?.name    || '—'} />
-              <InfoRow label="Country" value={household?.country || '—'} />
+              <InfoRow
+                label="Country"
+                value={COUNTRIES.find(c => c.value === household?.country)?.label || household?.country || '—'}
+              />
               <InfoRow label="Address" value={household?.address || '—'} />
             </>
           )}
@@ -209,6 +248,28 @@ export default function ProfileScreen() {
                 <>
                   <Text style={{ color: ACCENT, fontSize: 15, fontWeight: '600' }}>
                     {CURRENCIES.find(c => c.value === currency)?.label || currency}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={MUTED} />
+                </>
+              )}
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.currencyRow} onPress={() => setShowTimezoneModal(true)} disabled={savingTimezone}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="time-outline" size={20} color={ACCENT} />
+              <View>
+                <Text style={{ color: WHITE, fontSize: 15, fontWeight: '600' }}>Timezone</Text>
+                <Text style={{ color: MUTED, fontSize: 13 }}>Controls when reminders arrive</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              {savingTimezone ? (
+                <ActivityIndicator size="small" color={ACCENT} />
+              ) : (
+                <>
+                  <Text style={{ color: ACCENT, fontSize: 15, fontWeight: '600' }}>
+                    {getTimezoneLabel(household?.timezone)}
                   </Text>
                   <Ionicons name="chevron-forward" size={16} color={MUTED} />
                 </>
@@ -351,6 +412,81 @@ export default function ProfileScreen() {
             <TouchableOpacity
               style={styles.currencyCancelBtn}
               onPress={() => setShowCurrencyModal(false)}
+            >
+              <Text style={styles.currencyCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showCountryModal} transparent animationType="fade">
+        <View style={styles.currencyModalOverlay}>
+          <View style={styles.currencyModalCard}>
+            <Text style={styles.currencyModalTitle}>Select Country</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {COUNTRIES.map(item => (
+                <TouchableOpacity
+                  key={item.value}
+                  style={[
+                    styles.currencyOption,
+                    editCountry === item.value && styles.currencyOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setEditCountry(item.value);
+                    setShowCountryModal(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.currencyOptionText,
+                    editCountry === item.value && styles.currencyOptionTextSelected,
+                  ]}>
+                    {item.label}
+                  </Text>
+                  {editCountry === item.value && (
+                    <Ionicons name="checkmark-circle" size={20} color={ACCENT} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.currencyCancelBtn}
+              onPress={() => setShowCountryModal(false)}
+            >
+              <Text style={styles.currencyCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showTimezoneModal} transparent animationType="fade">
+        <View style={styles.currencyModalOverlay}>
+          <View style={styles.currencyModalCard}>
+            <Text style={styles.currencyModalTitle}>Select Timezone</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {TIMEZONES.map(item => (
+                <TouchableOpacity
+                  key={item.value}
+                  style={[
+                    styles.currencyOption,
+                    household?.timezone === item.value && styles.currencyOptionSelected,
+                  ]}
+                  onPress={() => handleTimezoneSelect(item.value)}
+                >
+                  <Text style={[
+                    styles.currencyOptionText,
+                    household?.timezone === item.value && styles.currencyOptionTextSelected,
+                  ]}>
+                    {item.label}
+                  </Text>
+                  {household?.timezone === item.value && (
+                    <Ionicons name="checkmark-circle" size={20} color={ACCENT} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.currencyCancelBtn}
+              onPress={() => setShowTimezoneModal(false)}
             >
               <Text style={styles.currencyCancelText}>Cancel</Text>
             </TouchableOpacity>
