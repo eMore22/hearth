@@ -1,3 +1,4 @@
+"""
 Runs hourly. For each household, at their local 9am, scans documents for
 upcoming expiries and sends a push. Previously never sent any push at all —
 the notification line was a commented-out TODO — and the task name never

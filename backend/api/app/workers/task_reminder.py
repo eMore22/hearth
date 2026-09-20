@@ -1,15 +1,14 @@
+"""
 Checks for household tasks that have become due and sends a push
-notification once per task when that happens. Runs every 15 minutes —
-unlike the daily/weekly agent-driven reminders, a task's due_at can be
-any time of day, so a daily check would be too coarse.
+notification once per task when that happens. Runs every 15 minutes,
+unlike the daily/weekly agent-driven reminders, since a task's due_at can
+be any time of day, so a daily check would be too coarse.
 
-Now calls push_service.send_push_to_household() directly instead of
+Calls push_service.send_push_to_household() directly instead of
 notification_sender.send_notification_to_household(). That import chain
 depends on app.services.user_service, which doesn't exist anywhere in this
-codebase (confirmed via full-repo search) — same problem that broke
-bill_monitor/meal_planner/maintenance_scheduler/health_reminder. Routing
-through push_service.py instead, which is proven working (it's what sent
-the successful test push earlier).
+codebase — routing through push_service.py instead, which is proven
+working (it's what sent the successful test push earlier this session).
 """
 from celery import shared_task
 from datetime import datetime, timezone

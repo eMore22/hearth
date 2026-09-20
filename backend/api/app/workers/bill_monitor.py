@@ -1,3 +1,4 @@
+"""
 Runs hourly. At each household's local target hour/day, analyzes bills,
 flags unused subscriptions weekly, and sends a spending report monthly.
 Queries Supabase directly — app.services.household_service/bill_service
@@ -79,7 +80,7 @@ def monthly_bill_report():
             report = agent.run({
                 "action": "monthly_report",
                 "bills": current_bills,
-                "previous_month_bills": [],  # bill_history isn't wired up yet — separate follow-up
+                "previous_month_bills": [],
             })
 
             currency = hh.get("currency") or "USD"

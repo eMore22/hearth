@@ -1,3 +1,4 @@
+"""
 Runs hourly. At each household's local Friday-evening target hour,
 generates next week's meal plan and shopping list — for households that
 have grocery preferences set. Queries Supabase directly (see bill_monitor.py
@@ -32,7 +33,7 @@ def generate_weekly_meal_plans():
                 .execute()
             prefs = prefs_res.data
             if not prefs:
-                continue  # No grocery setup for this household yet
+                continue
 
             agent = GroceryAgent(household_id=household_id, user_id="system")
 
@@ -46,10 +47,6 @@ def generate_weekly_meal_plans():
                 "meal_plan": meal_plan,
             })
 
-            # Real meal_plans columns are week_start/plan_data (confirmed
-            # against schema.sql) — no unique constraint on household_id,
-            # so this is an insert, matching save_custom_meal_plan() in
-            # grocery_agent.py.
             try:
                 supabase.table("meal_plans").insert({
                     "household_id": household_id,

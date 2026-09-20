@@ -1,3 +1,4 @@
+"""
 Runs hourly. At each household's local 8am, reminds about all active
 medications. The medications table tracks frequency as free text (e.g.
 "twice daily"), not structured dose times, so this sends one daily summary

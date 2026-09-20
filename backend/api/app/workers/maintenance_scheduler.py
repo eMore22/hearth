@@ -1,3 +1,4 @@
+"""
 Runs hourly. At each household's local 10am, checks maintenance_tasks due
 within 7 days and sends a reminder. Queries Supabase directly.
 """
