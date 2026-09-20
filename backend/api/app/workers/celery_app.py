@@ -1,3 +1,4 @@
+"""
 Celery app configuration for Hearth background workers.
 """
 from celery import Celery
