@@ -38,7 +38,7 @@ async def upload_document(
     _=Depends(require_module("documents"))
 ):
     try:
-        print(f"📤 Upload started — user: {user.get('id')}, file: {file.filename}")
+        print(f"📤 Upload started — user: {user.get('id')}, file: {file.filename}, type: {file.content_type}")
 
         household_id = get_household_id(user)
         print(f"🏠 Household ID: {household_id}")
@@ -47,19 +47,24 @@ async def upload_document(
             raise HTTPException(status_code=400, detail="Create a household first")
 
         supabase = get_supabase_admin()
-        image_bytes = await file.read()
-        print(f"📁 File read — size: {len(image_bytes)} bytes")
+        file_bytes = await file.read()
+        print(f"📁 File read — size: {len(file_bytes)} bytes")
+
+        # Real content type from the upload, not assumed — this is what
+        # lets DocumentAgent route PDFs to its native document path instead
+        # of forcing everything through image extraction.
+        mime_type = file.content_type or "image/jpeg"
 
         agent = DocumentAgent(household_id=household_id, user_id=user["id"])
-        print("🤖 Running document extraction...")
-        extracted = agent.extract_document(image_bytes)
+        print(f"🤖 Running document extraction (mime_type={mime_type})...")
+        extracted = agent.extract_document(file_bytes, mime_type)
         print(f"✅ Extracted: {extracted}")
 
         # Upload to Supabase Storage
         file_path = f"{household_id}/{uuid.uuid4()}/{file.filename}"
         file_url = None
         try:
-            supabase.storage.from_("documents").upload(file_path, image_bytes)
+            supabase.storage.from_("documents").upload(file_path, file_bytes)
             file_url = supabase.storage.from_("documents").get_public_url(file_path)
             print(f"☁️ Storage upload OK: {file_url}")
         except Exception as storage_error:

@@ -62,7 +62,6 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       const res = await documentService.getExpiring();
       set({ alerts: res.data || [] });
     } catch (error: any) {
-      // Non-fatal — alerts can fail silently
       set({ alerts: [] });
     }
   },
@@ -71,10 +70,13 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     set({ loading: true, isLoading: true, error: null });
     try {
       const formData = new FormData();
+      // file.fileName is ImagePicker's field name; file.name is
+      // DocumentPicker's — supporting both since documents.tsx now uses
+      // either source depending on which button the user taps.
       formData.append('file', {
         uri: file.uri,
         type: file.mimeType || 'image/jpeg',
-        name: file.fileName || 'document.jpg',
+        name: file.fileName || file.name || 'document',
       } as any);
       if (memberName) formData.append('member_name', memberName);
 

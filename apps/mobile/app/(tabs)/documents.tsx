@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView, Platform
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
+import * as DocumentPicker from 'expo-document-picker'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useDocumentStore } from '../../src/stores/documentStore'
@@ -42,6 +43,25 @@ export default function DocumentsScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
       quality: 0.8
+    })
+    if (result.canceled) return
+    setUploadLoading(true)
+    try {
+      await uploadDocument(result.assets[0])
+      Alert.alert('✅ Document saved', 'Expiry dates and key fields extracted automatically.')
+      fetchDocuments()
+      fetchAlerts()
+    } catch (err: any) {
+      Alert.alert('Upload failed', err.message || 'Please try again.')
+    } finally {
+      setUploadLoading(false)
+    }
+  }
+
+  const handleDocumentPick = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'image/*'],
+      copyToCacheDirectory: true,
     })
     if (result.canceled) return
     setUploadLoading(true)
@@ -170,7 +190,7 @@ export default function DocumentsScreen() {
               </View>
               <Text style={styles.emptyTitle}>No documents yet</Text>
               <Text style={styles.emptySubtitle}>
-                Photograph your passport, insurance, warranty — Hearth extracts expiry dates automatically.
+                Photograph or upload your passport, insurance, warranty — Hearth extracts expiry dates automatically.
               </Text>
             </View>
           )}
@@ -213,12 +233,16 @@ export default function DocumentsScreen() {
           <Ionicons name="image-outline" size={20} color={ACCENT} />
           <Text style={styles.galleryBtnText}>Gallery</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.galleryBtn} onPress={handleDocumentPick} disabled={uploadLoading}>
+          <Ionicons name="document-outline" size={20} color={ACCENT} />
+          <Text style={styles.galleryBtnText}>Files</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.scanBtn} onPress={handleCamera} disabled={uploadLoading}>
           {uploadLoading
             ? <ActivityIndicator color={WHITE} size="small" />
             : <>
                 <Ionicons name="camera-outline" size={20} color={WHITE} />
-                <Text style={styles.scanBtnText}>Scan Document</Text>
+                <Text style={styles.scanBtnText}>Scan</Text>
               </>
           }
         </TouchableOpacity>
@@ -390,23 +414,23 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     flexDirection: 'row',
-    gap: 10
+    gap: 8
   },
   galleryBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     padding: 14,
     borderRadius: 14,
     backgroundColor: SURFACE,
     borderWidth: 1,
     borderColor: 'rgba(79,195,247,0.3)'
   },
-  galleryBtnText: { color: ACCENT, fontWeight: '600', fontSize: 14 },
+  galleryBtnText: { color: ACCENT, fontWeight: '600', fontSize: 13 },
   scanBtn: {
-    flex: 2,
+    flex: 1.4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

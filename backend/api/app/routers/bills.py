@@ -13,8 +13,6 @@ class CreateBillRequest(BaseModel):
     amount: float
     category: str = "other"
     billing_cycle: str = "monthly"
-    # No hardcoded fallback — resolved server-side from the household's own
-    # currency if the client doesn't send one explicitly.
     currency: Optional[str] = None
     next_due_date: Optional[str] = None
     notes: Optional[str] = None
@@ -82,6 +80,33 @@ async def create_bill(
         )
 
         return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/{bill_id}")
+async def delete_bill(
+    bill_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    household_id = current_user.get("household_id")
+    if not household_id:
+        raise HTTPException(status_code=400, detail="No household found")
+    supabase = get_supabase_admin()
+    try:
+        # Soft delete via is_active, matching the flag every other bills
+        # query already filters on — not a hard row delete, so historical
+        # references (monthly reports, future bill_history) stay intact.
+        result = supabase.table("bills")\
+            .update({"is_active": False})\
+            .eq("id", bill_id)\
+            .eq("household_id", household_id)\
+            .execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Bill not found")
+        return {"message": "Bill deleted"}
     except HTTPException:
         raise
     except Exception as e:

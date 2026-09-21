@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, ActivityIndicator, StatusBar,
-  Modal, KeyboardAvoidingView, Platform,
+  Modal, KeyboardAvoidingView, Platform, Switch,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { useAutomationStore } from '../../src/stores/automationStore';
 import { CURRENCIES } from '../../src/utils/currency';
 import { COUNTRIES, getCurrencyForCountry, getTimezoneForCountry } from '../../src/utils/country';
 import { TIMEZONES, getTimezoneLabel } from '../../src/utils/timezone';
+import { useTheme } from '../../src/theme/ThemeContext';
 
 const NAVY    = '#0A1628';
 const SURFACE = '#162035';
@@ -32,6 +33,7 @@ export default function ProfileScreen() {
   const haStatus         = useAutomationStore(s => s.status);
   const connectHA        = useAutomationStore(s => s.connectHA);
   const fetchHAStatus    = useAutomationStore(s => s.fetchStatus);
+  const { mode, toggleTheme } = useTheme();
 
   const currency = household?.currency || 'NGN';
 
@@ -70,9 +72,6 @@ export default function ProfileScreen() {
     if (!editName.trim()) { Alert.alert('Error', 'Name cannot be empty'); return; }
     setSaving(true);
 
-    // Only re-derive currency/timezone if the country actually changed in
-    // this edit — otherwise saving a name/address tweak would silently
-    // overwrite values the user deliberately set below in Preferences.
     const countryChanged = editCountry !== (household?.country || '');
     const derivedCurrency = countryChanged ? getCurrencyForCountry(editCountry) : undefined;
     const derivedTimezone = countryChanged ? getTimezoneForCountry(editCountry) : undefined;
@@ -276,6 +275,22 @@ export default function ProfileScreen() {
               )}
             </View>
           </TouchableOpacity>
+
+          <View style={styles.currencyRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name={mode === 'dark' ? 'moon' : 'sunny'} size={20} color={mode === 'dark' ? ACCENT : WARNING} />
+              <View>
+                <Text style={{ color: WHITE, fontSize: 15, fontWeight: '600' }}>Dark Mode</Text>
+                <Text style={{ color: MUTED, fontSize: 13 }}>{mode === 'dark' ? 'Enabled' : 'Disabled'}</Text>
+              </View>
+            </View>
+            <Switch
+              value={mode === 'dark'}
+              onValueChange={toggleTheme}
+              trackColor={{ false: 'rgba(255,255,255,0.15)', true: 'rgba(79,195,247,0.4)' }}
+              thumbColor={mode === 'dark' ? ACCENT : '#f4f3f4'}
+            />
+          </View>
         </View>
 
         <View style={styles.card}>

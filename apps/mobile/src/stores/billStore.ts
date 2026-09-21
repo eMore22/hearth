@@ -40,6 +40,7 @@ interface BillState {
 
   fetchBills: () => Promise<void>;
   createBill: (data: Partial<Bill>) => Promise<Bill>;
+  deleteBill: (id: string) => Promise<void>;
   analyzeBill: (billData: Partial<Bill>) => Promise<any>;
   detectUnused: (bills?: Bill[]) => Promise<UnusedSubscription[]>;
   generateNegotiationScript: (provider: string, currentPlan: string, accountAgeMonths?: number) => Promise<any>;
@@ -72,6 +73,17 @@ export const useBillStore = create<BillState>((set, get) => ({
       const newBill = response.data;
       set({ bills: [...get().bills, newBill], isLoading: false });
       return newBill;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  deleteBill: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await billService.delete(id);
+      set({ bills: get().bills.filter((b) => b.id !== id), isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;

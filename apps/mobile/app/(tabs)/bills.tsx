@@ -16,12 +16,13 @@ const ACCENT = '#C77DFF'
 const WHITE = '#F8FAFF'
 const MUTED = '#8899AA'
 const SUCCESS = '#06D6A0'
+const DANGER = '#FF6B6B'
 
 const CATEGORIES = ['utilities', 'subscription', 'insurance', 'rent', 'loan', 'internet', 'phone', 'streaming', 'other']
 const BILLING_CYCLES = ['monthly', 'weekly', 'quarterly', 'annually']
 
 export default function BillsScreen() {
-  const { bills, monthlyReport, unusedSubscriptions, isLoading, fetchBills, fetchMonthlyReport, detectUnused, generateNegotiationScript, createBill } = useBillStore()
+  const { bills, monthlyReport, unusedSubscriptions, isLoading, fetchBills, fetchMonthlyReport, detectUnused, generateNegotiationScript, createBill, deleteBill } = useBillStore()
   const household = useHouseholdStore(s => s.household)
   const fetchHousehold = useHouseholdStore(s => s.fetchHousehold)
   const currencySymbol = getCurrencySymbol(household?.currency)
@@ -70,6 +71,27 @@ export default function BillsScreen() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleDeleteBill = (bill: any) => {
+    Alert.alert(
+      'Delete bill?',
+      `Remove ${bill.provider || bill.name} from your bills? This can't be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteBill(bill.id)
+            } catch (err: any) {
+              Alert.alert('Error', err.response?.data?.detail || 'Could not delete bill. Please try again.')
+            }
+          },
+        },
+      ]
+    )
   }
 
   const handleDetectUnused = async () => {
@@ -178,6 +200,13 @@ export default function BillsScreen() {
                     <Text style={styles.billMeta}>{bill.category} · {bill.billing_cycle}</Text>
                   </View>
                   <Text style={styles.billAmount}>{currencySymbol}{bill.amount}</Text>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteBill(bill)}
+                    style={styles.deleteBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="trash-outline" size={18} color={DANGER} />
+                  </TouchableOpacity>
                 </View>
               ))}
               <TouchableOpacity style={styles.addBillBtnSecondary} onPress={() => setShowAddModal(true)}>
@@ -334,6 +363,7 @@ const styles = StyleSheet.create({
   billProvider: { fontSize: 15, fontWeight: '600', color: WHITE, marginBottom: 2 },
   billMeta: { fontSize: 12, color: MUTED },
   billAmount: { fontSize: 16, fontWeight: '700', color: WHITE },
+  deleteBtn: { padding: 4, marginLeft: 6 },
   modal: { flex: 1, backgroundColor: NAVY, padding: 24 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 24 },
   modalTitle: { fontSize: 24, fontWeight: '700', color: WHITE, marginBottom: 4 },

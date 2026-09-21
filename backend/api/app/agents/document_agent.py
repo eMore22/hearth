@@ -7,17 +7,21 @@ from app.agents.base_agent import BaseHouseholdAgent
 class DocumentAgent(BaseHouseholdAgent):
     """
     Document Vault & Expiry Agent.
-    Extraction order:
+    Extraction order for images:
       1. Claude Vision  (claude-3-5-sonnet-20241022 → claude-3-haiku-20240307 fallback)
       2. NVIDIA Vision  (phi-3-vision via NvidiaClient)
       3. Safe fallback  (stores doc with placeholder data, never crashes)
+    Extraction order for PDFs:
+      1. Claude native document support (no NVIDIA equivalent — phi-3-vision
+         only accepts images, so PDFs skip straight to Claude, then fallback)
+      2. Safe fallback
     """
 
     SYSTEM_PROMPT = """You are Hearth's Document Agent.
 You extract structured information from document images.
 Always respond in valid JSON only — no markdown fences, no extra text."""
 
-    EXTRACTION_PROMPT = """Extract structured information from this document image.
+    EXTRACTION_PROMPT = """Extract structured information from this document.
 
 Return ONLY valid JSON with exactly these fields:
 {
@@ -32,7 +36,6 @@ Return ONLY valid JSON with exactly these fields:
   "summary": "one sentence plain English summary"
 }"""
 
-    # Models to try in order — newest reliable → older fallback
     CLAUDE_MODELS = [
         "claude-opus-4-5",
         "claude-3-5-sonnet-20241022",
@@ -42,7 +45,10 @@ Return ONLY valid JSON with exactly these fields:
     def run(self, input_data: Any) -> Any:
         action = input_data.get("action")
         if action == "extract":
-            return self.extract_document(input_data["image_bytes"])
+            return self.extract_document(
+                input_data["image_bytes"],
+                input_data.get("mime_type", "image/jpeg"),
+            )
         elif action == "answer":
             return self.answer_question(
                 input_data["question"], input_data.get("documents", [])
@@ -51,29 +57,77 @@ Return ONLY valid JSON with exactly these fields:
             return self.check_expiries(input_data["documents"])
         raise ValueError(f"Unknown action: {action}")
 
-    def extract_document(self, image_bytes: bytes) -> Dict:
+    def extract_document(self, file_bytes: bytes, mime_type: str = "image/jpeg") -> Dict:
         """
-        Try extraction methods in order until one succeeds.
+        Routes to the PDF-native path or the image path based on mime_type.
         Never raises — always returns a valid dict.
         """
         import base64
-        img_b64 = base64.b64encode(image_bytes).decode()
+        file_b64 = base64.b64encode(file_bytes).decode()
 
-        # ── 1. Try Claude Vision ──────────────────────────────────────────────
-        result = self._try_claude_vision(img_b64)
+        if mime_type == "application/pdf":
+            result = self._try_claude_pdf(file_b64)
+            if result:
+                print(f"✅ Claude PDF extracted: {result.get('title')}")
+                return result
+            print("⚠️ PDF extraction failed — using safe fallback")
+            return self._safe_fallback()
+
+        # ── 1. Try Claude Vision (images only) ────────────────────────────
+        result = self._try_claude_vision(file_b64)
         if result:
             print(f"✅ Claude Vision extracted: {result.get('title')}")
             return result
 
-        # ── 2. Try NVIDIA Vision ──────────────────────────────────────────────
-        result = self._try_nvidia_vision(image_bytes)
+        # ── 2. Try NVIDIA Vision ────────────────────────────────────────────
+        result = self._try_nvidia_vision(file_bytes)
         if result:
             print(f"✅ NVIDIA Vision extracted: {result.get('title')}")
             return result
 
-        # ── 3. Safe fallback ──────────────────────────────────────────────────
+        # ── 3. Safe fallback ────────────────────────────────────────────────
         print("⚠️ All vision methods failed — using safe fallback")
         return self._safe_fallback()
+
+    def _try_claude_pdf(self, pdf_b64: str) -> Optional[Dict]:
+        """Try each Claude model using native PDF document support."""
+        for model in self.CLAUDE_MODELS:
+            try:
+                print(f"🤖 Trying Claude PDF extraction: {model}")
+                response = self.client.messages.create(
+                    model=model,
+                    max_tokens=1024,
+                    system=self.SYSTEM_PROMPT,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "document",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "application/pdf",
+                                    "data": pdf_b64,
+                                },
+                            },
+                            {"type": "text", "text": self.EXTRACTION_PROMPT},
+                        ],
+                    }],
+                )
+                raw = response.content[0].text
+                clean = raw.replace("```json", "").replace("```", "").strip()
+                parsed = json.loads(clean)
+                if isinstance(parsed, dict) and "document_type" in parsed:
+                    return parsed
+            except json.JSONDecodeError as e:
+                print(f"⚠️ {model} returned invalid JSON: {e}")
+            except Exception as e:
+                err = str(e).lower()
+                if "not_found" in err or "invalid_model" in err or "model" in err:
+                    print(f"⚠️ Model {model} not available: {e}")
+                    continue
+                print(f"⚠️ Claude PDF extraction error ({model}): {e}")
+                break
+        return None
 
     def _try_claude_vision(self, img_b64: str) -> Optional[Dict]:
         """Try each Claude model in CLAUDE_MODELS until one works."""
@@ -102,7 +156,6 @@ Return ONLY valid JSON with exactly these fields:
                 raw  = response.content[0].text
                 clean = raw.replace("```json", "").replace("```", "").strip()
                 parsed = json.loads(clean)
-                # Sanity check — must have at least document_type
                 if isinstance(parsed, dict) and "document_type" in parsed:
                     return parsed
             except json.JSONDecodeError as e:
@@ -111,9 +164,9 @@ Return ONLY valid JSON with exactly these fields:
                 err = str(e).lower()
                 if "not_found" in err or "invalid_model" in err or "model" in err:
                     print(f"⚠️ Model {model} not available: {e}")
-                    continue  # try next model
+                    continue
                 print(f"⚠️ Claude Vision error ({model}): {e}")
-                break  # non-model error — don't retry other models
+                break
         return None
 
     def _try_nvidia_vision(self, image_bytes: bytes) -> Optional[Dict]:
@@ -128,7 +181,6 @@ Return ONLY valid JSON with exactly these fields:
                 print("⚠️ NVIDIA OCR returned too little text")
                 return None
 
-            # Use Claude text (cheaper, no image) to parse the OCR output
             parse_prompt = f"""Extract structured document information from this OCR text.
 
 OCR Text:

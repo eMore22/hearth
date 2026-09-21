@@ -74,6 +74,7 @@ export const billService = {
   create: (data: any) => api.post('/api/bills/', data),
   analyze: (billData: any) => api.post('/api/bills/analyze', billData),
   detectUnused: (bills: any[]) => api.post('/api/bills/detect-unused', { bills }),
+  delete: (id: string) => api.delete(`/api/bills/${id}`),
   negotiationScript: (provider: string, currentPlan: string, accountAgeMonths = 12) =>
     api.post('/api/bills/negotiation-script', {
       provider,
