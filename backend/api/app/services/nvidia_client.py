@@ -21,14 +21,23 @@ class NvidiaClient:
             api_key=api_key
         )
 
-        # Verified working model IDs on NVIDIA NIM as of 2026
+        # meta/llama-3.1-8b-instruct reached end-of-life on NVIDIA NIM on
+        # 2026-08-26 (confirmed absent from the live model catalog) and was
+        # returning HTTP 410 on every call — silently forcing every "light"
+        # call onto full-price Claude for weeks. Replaced with
+        # mistralai/mistral-nemotron, confirmed live on the current catalog
+        # and NVIDIA-post-trained specifically for instruction following and
+        # function calling — a good fit for classify_intent()'s single-word
+        # output requirement.
         self.models = {
-            "simple_chat":    "meta/llama-3.1-8b-instruct",
-            "intent":         "meta/llama-3.1-8b-instruct",
+            "simple_chat":    "mistralai/mistral-nemotron",
+            "intent":         "mistralai/mistral-nemotron",
             "reasoning":      "nvidia/llama-3.1-nemotron-70b-instruct",
             "vision":         "microsoft/phi-3-vision-128k-instruct",
             "ocr":            "microsoft/phi-3-vision-128k-instruct",
             "embed":          "nvidia/nv-embedqa-e5-v5",
+            # Not found in the current live catalog either — unconfirmed,
+            # not yet hit in logs. Watch for the same 410 pattern here next.
             "content_safety": "meta/llama-guard-3-8b",
         }
 
@@ -129,7 +138,6 @@ class NvidiaClient:
         )
         try:
             content = response.choices[0].message.content
-            # Strip markdown fences if present
             content = content.replace("```json", "").replace("```", "").strip()
             return json.loads(content)
         except Exception:
