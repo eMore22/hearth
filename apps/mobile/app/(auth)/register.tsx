@@ -3,7 +3,8 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform, Alert, ScrollView, StatusBar, Image
 } from 'react-native'
-import { Link, router } from 'expo-router'
+import { Link, useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../src/stores/authStore'
 
 const NAVY = '#0A1628'
@@ -16,8 +17,11 @@ export default function RegisterScreen() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const { signUp } = useAuthStore()
+  const router = useRouter()
 
   const handleRegister = async () => {
     if (!fullName || !email || !password) {
@@ -28,14 +32,29 @@ export default function RegisterScreen() {
       Alert.alert('Weak password', 'Password must be at least 8 characters.')
       return
     }
+    if (password !== confirmPassword) {
+      Alert.alert('Passwords don\'t match', 'Please make sure both password fields match.')
+      return
+    }
     setLoading(true)
     try {
-      await signUp(email, password, fullName)
-      Alert.alert(
-        'Account created!',
-        'Check your email to verify your account, then sign in.',
-        [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
-      )
+      const result = await signUp(email, password, fullName)
+      if (result.already_registered) {
+        Alert.alert(
+          'Account already exists',
+          'An account with this email already exists. Try signing in, or use Forgot Password if you don\'t remember your password.',
+          [
+            { text: 'Sign In', onPress: () => router.replace('/(auth)/login') },
+            { text: 'Forgot Password', onPress: () => router.push('/(auth)/forgot-password') },
+          ]
+        )
+      } else {
+        Alert.alert(
+          'Account created!',
+          'Check your email to verify your account, then sign in.',
+          [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
+        )
+      }
     } catch (err: any) {
       Alert.alert('Sign up failed', err.message || 'Please try again.')
     } finally {
@@ -85,13 +104,29 @@ export default function RegisterScreen() {
           />
 
           <Text style={styles.fieldLabel}>Password</Text>
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Min 8 characters"
+              placeholderTextColor={MUTED}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              editable={!loading}
+            />
+            <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={MUTED} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.fieldLabel}>Confirm Password</Text>
           <TextInput
             style={styles.input}
-            placeholder="Min 8 characters"
+            placeholder="Re-enter password"
             placeholderTextColor={MUTED}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry={!showPassword}
             editable={!loading}
           />
 
@@ -149,6 +184,25 @@ const styles = StyleSheet.create({
     color: WHITE,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: SURFACE,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: WHITE,
+  },
+  eyeButton: {
+    paddingHorizontal: 14,
   },
   button: {
     backgroundColor: ACCENT,

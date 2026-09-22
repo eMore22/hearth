@@ -46,6 +46,10 @@ export const authService = {
   signUp: (email: string, password: string, fullName?: string) =>
     api.post('/api/auth/signup', { email, password, full_name: fullName }),
   signOut: () => api.post('/api/auth/signout'),
+  forgotPassword: (email: string) =>
+    api.post('/api/auth/forgot-password', { email }),
+  resetPassword: (email: string, token: string, newPassword: string) =>
+    api.post('/api/auth/reset-password', { email, token, new_password: newPassword }),
 };
 
 export const householdService = {
@@ -72,9 +76,9 @@ export const documentService = {
 export const billService = {
   list: () => api.get('/api/bills/'),
   create: (data: any) => api.post('/api/bills/', data),
+  delete: (id: string) => api.delete(`/api/bills/${id}`),
   analyze: (billData: any) => api.post('/api/bills/analyze', billData),
   detectUnused: (bills: any[]) => api.post('/api/bills/detect-unused', { bills }),
-  delete: (id: string) => api.delete(`/api/bills/${id}`),
   negotiationScript: (provider: string, currentPlan: string, accountAgeMonths = 12) =>
     api.post('/api/bills/negotiation-script', {
       provider,
@@ -84,7 +88,6 @@ export const billService = {
   monthlyReport: () => api.get('/api/bills/monthly-report'),
 };
 
-// ==================== GROCERY (with currency support) ====================
 export const groceryService = {
   getInventory: () => api.get('/api/grocery/inventory'),
   addInventory: (item: any) => api.post('/api/grocery/inventory', item),
@@ -112,10 +115,6 @@ export const groceryService = {
 
 export const maintenanceService = {
   getTasks: () => api.get('/api/maintenance/tasks'),
-  // Backend endpoint exists (POST /api/maintenance/tasks) but nothing in
-  // maintenanceStore.ts calls this yet — no "Add Maintenance Task" UI
-  // exists. Adding the service function now so it's reachable whenever
-  // that UI gets built; not wiring a new screen for it in this pass.
   createTask: (data: any) => api.post('/api/maintenance/tasks', data),
   generateCalendar: (profile: any) =>
     api.post('/api/maintenance/calendar/generate', { home_profile: profile }),
