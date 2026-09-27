@@ -21,6 +21,7 @@ interface AuthState {
   signOut: () => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (email: string, token: string, newPassword: string) => Promise<void>;
+  updateProfile: (fullName: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -108,6 +109,32 @@ export const useAuthStore = create<AuthState>((set) => ({
       await authService.resetPassword(email, token, newPassword);
     } catch (err: any) {
       const message = err.response?.data?.detail || 'Could not reset password';
+      set({ error: message });
+      throw err;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+
+  updateProfile: async (fullName) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await authService.updateProfile(fullName);
+      const currentUser = (await getUser()) || {};
+      const nextUser = {
+        ...currentUser,
+        ...res.data,
+        user_metadata: {
+          ...(currentUser.user_metadata || {}),
+          ...(res.data?.user_metadata || {}),
+          full_name: fullName.trim(),
+        },
+      };
+      await setUser(nextUser);
+      set({ user: nextUser });
+    } catch (err: any) {
+      const message = err.response?.data?.detail || 'Could not update profile';
       set({ error: message });
       throw err;
     } finally {

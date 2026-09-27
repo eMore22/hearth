@@ -10,20 +10,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
-  Image,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Link, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../src/stores/authStore'
 import { householdService } from '../../src/services/api'
-
-const NAVY = '#0A1628'
-const NAVY_LIGHT = '#112240'
-const SURFACE = '#162035'
-const ACCENT = '#4FC3F7'
-const WHITE = '#F8FAFF'
-const MUTED = '#8899AA'
+import { H, HearthDesign } from '../../src/theme/hearthDesign'
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
@@ -35,7 +28,7 @@ export default function LoginScreen() {
 
   const handleSignIn = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter email and password')
+      Alert.alert('Missing details', 'Please enter your email and password.')
       return
     }
 
@@ -50,11 +43,11 @@ export default function LoginScreen() {
         } else {
           router.replace('/onboarding/welcome')
         }
-      } catch (householdError) {
+      } catch {
         router.replace('/onboarding/welcome')
       }
     } catch (error: any) {
-      Alert.alert('Sign In Failed', error.response?.data?.detail || error.message || 'An error occurred')
+      Alert.alert('Sign in failed', error.response?.data?.detail || error.message || 'Please try again.')
     } finally {
       setLoading(false)
     }
@@ -62,44 +55,51 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           style={styles.keyboardView}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={styles.content}>
-            <View style={styles.logoBox}>
-              <Image
-                source={require('../../assets/icon.png')}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
+            <View style={styles.brandRow}>
+              <View style={styles.brandMark}>
+                <Ionicons name="home-outline" size={23} color={H.navy} />
+              </View>
+              <Text style={styles.brandName}>Hearth</Text>
             </View>
-            <Text style={styles.title}>Hearth</Text>
-            <Text style={styles.subtitle}>Your household's AI chief of staff</Text>
 
-            <View style={styles.form}>
+            <View style={styles.intro}>
+              <Text style={styles.eyebrow}>WELCOME BACK</Text>
+              <Text style={styles.title}>Your household,{"\n"}already organised.</Text>
+              <Text style={styles.subtitle}>Sign in to pick up exactly where Hearth left off.</Text>
+            </View>
+
+            <View style={styles.formCard}>
               <Text style={styles.fieldLabel}>Email</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="you@example.com"
-                placeholderTextColor={MUTED}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                editable={!loading}
-                autoComplete="username"
-                textContentType="username"
-              />
+              <View style={styles.inputWrap}>
+                <Ionicons name="mail-outline" size={19} color={H.muted2} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="you@example.com"
+                  placeholderTextColor={H.muted2}
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!loading}
+                  autoComplete="username"
+                  textContentType="username"
+                />
+              </View>
 
               <Text style={styles.fieldLabel}>Password</Text>
-              <View style={styles.passwordContainer}>
+              <View style={styles.inputWrap}>
+                <Ionicons name="lock-closed-outline" size={19} color={H.muted2} />
                 <TextInput
-                  style={styles.passwordInput}
-                  placeholder="••••••••"
-                  placeholderTextColor={MUTED}
+                  style={styles.input}
+                  placeholder="Your password"
+                  placeholderTextColor={H.muted2}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
@@ -107,15 +107,8 @@ export default function LoginScreen() {
                   autoComplete="password"
                   textContentType="password"
                 />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() => setShowPassword(!showPassword)}
-                >
-                  <Ionicons
-                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color={MUTED}
-                  />
+                <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={H.muted} />
                 </TouchableOpacity>
               </View>
 
@@ -129,22 +122,19 @@ export default function LoginScreen() {
                 style={[styles.button, loading && styles.buttonDisabled]}
                 onPress={handleSignIn}
                 disabled={loading}
+                activeOpacity={0.86}
               >
-                {loading ? (
-                  <ActivityIndicator color={NAVY} />
-                ) : (
-                  <Text style={styles.buttonText}>Sign In</Text>
-                )}
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in</Text>}
               </TouchableOpacity>
-
-              <Link href="/(auth)/register" asChild>
-                <TouchableOpacity style={styles.linkButton} disabled={loading}>
-                  <Text style={styles.linkText}>
-                    Don't have an account? <Text style={styles.linkTextBold}>Create one</Text>
-                  </Text>
-                </TouchableOpacity>
-              </Link>
             </View>
+
+            <Link href="/(auth)/register" asChild>
+              <TouchableOpacity style={styles.linkButton} disabled={loading}>
+                <Text style={styles.linkText}>
+                  New to Hearth? <Text style={styles.linkTextBold}>Create an account</Text>
+                </Text>
+              </TouchableOpacity>
+            </Link>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -153,110 +143,38 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: NAVY },
+  container: { flex: 1, backgroundColor: H.paper },
   safeArea: { flex: 1 },
   keyboardView: { flex: 1 },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 28,
+  content: { flex: 1, paddingHorizontal: 24, paddingTop: 18, paddingBottom: 24 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandMark: {
+    width: 42, height: 42, borderRadius: 14,
+    backgroundColor: H.white, borderWidth: 1, borderColor: H.line,
+    alignItems: 'center', justifyContent: 'center', ...HearthDesign.shadow.card,
   },
-  logoBox: {
-    width: 64, height: 64, borderRadius: 20,
-    backgroundColor: 'rgba(79,195,247,0.12)',
-    alignItems: 'center', justifyContent: 'center',
-    alignSelf: 'center', marginBottom: 20,
-    borderWidth: 1, borderColor: 'rgba(79,195,247,0.25)',
-    overflow: 'hidden',
+  brandName: { color: H.navy, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  intro: { marginTop: 52, marginBottom: 26 },
+  eyebrow: { color: H.purple, fontSize: 12, fontWeight: '800', letterSpacing: 1.4, marginBottom: 10 },
+  title: { color: H.navy, fontSize: 36, lineHeight: 40, fontWeight: '800', letterSpacing: -1.2 },
+  subtitle: { color: H.muted, fontSize: 15, lineHeight: 22, marginTop: 12, maxWidth: 330 },
+  formCard: {
+    backgroundColor: H.white, borderRadius: 24, borderWidth: 1, borderColor: H.lineSoft,
+    padding: 18, ...HearthDesign.shadow.card,
   },
-  logoImage: {
-    width: 44, height: 44,
+  fieldLabel: { fontSize: 12, fontWeight: '800', color: H.navy, marginBottom: 8, marginTop: 4 },
+  inputWrap: {
+    minHeight: 54, borderRadius: 16, backgroundColor: '#F8F7FA', borderWidth: 1, borderColor: H.line,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, marginBottom: 16,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: WHITE,
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: MUTED,
-    textAlign: 'center',
-    marginBottom: 36,
-  },
-  form: {
-    width: '100%',
-  },
-  fieldLabel: {
-    fontSize: 12, fontWeight: '600', color: MUTED,
-    textTransform: 'uppercase', letterSpacing: 0.8,
-    marginBottom: 8, marginTop: 4,
-  },
-  input: {
-    backgroundColor: SURFACE,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 16,
-    fontSize: 15,
-    color: WHITE,
-  },
-  passwordContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: SURFACE,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  passwordInput: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: WHITE,
-  },
-  eyeButton: {
-    paddingHorizontal: 14,
-  },
-  forgotLink: {
-    alignSelf: 'flex-end',
-    marginBottom: 16,
-  },
-  forgotLinkText: {
-    fontSize: 13,
-    color: ACCENT,
-    fontWeight: '600',
-  },
-  button: {
-    backgroundColor: ACCENT,
-    borderRadius: 12,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    fontSize: 15,
-    color: NAVY,
-    fontWeight: '700',
-  },
-  linkButton: {
-    marginTop: 22,
-    alignItems: 'center',
-  },
-  linkText: {
-    fontSize: 14,
-    color: MUTED,
-  },
-  linkTextBold: {
-    color: ACCENT,
-    fontWeight: '600',
-  },
+  input: { flex: 1, color: H.navy, fontSize: 16, paddingHorizontal: 11, paddingVertical: 14 },
+  eyeButton: { padding: 6 },
+  forgotLink: { alignSelf: 'flex-end', marginBottom: 18, marginTop: -4 },
+  forgotLinkText: { fontSize: 13, color: H.purple, fontWeight: '700' },
+  button: { backgroundColor: H.navy, borderRadius: 16, minHeight: 54, alignItems: 'center', justifyContent: 'center' },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  linkButton: { marginTop: 22, alignItems: 'center' },
+  linkText: { color: H.muted, fontSize: 14 },
+  linkTextBold: { color: H.purple, fontWeight: '800' },
 })

@@ -160,7 +160,20 @@ async def get_members(
             .eq("household_id", member_row.data[0]["household_id"])\
             .execute()
 
-        return members.data or []
+        enriched = []
+        for item in members.data or []:
+            email = None
+            full_name = None
+            try:
+                auth_user = supabase.auth.admin.get_user_by_id(item["user_id"])
+                if auth_user and auth_user.user:
+                    email = auth_user.user.email
+                    full_name = (auth_user.user.user_metadata or {}).get("full_name")
+            except Exception:
+                pass
+            enriched.append({**item, "email": email, "full_name": full_name})
+
+        return enriched
 
     except HTTPException:
         raise

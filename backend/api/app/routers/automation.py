@@ -266,6 +266,23 @@ async def get_ha_status(current_user: dict = Depends(get_current_user)):
         return {"connected": False}
 
 
+@router.delete("/disconnect")
+async def disconnect_ha(current_user: dict = Depends(get_current_user)):
+    household_id = current_user.get("household_id")
+    if not household_id:
+        raise HTTPException(status_code=400, detail="No household found")
+
+    supabase = get_supabase_admin()
+    try:
+        supabase.table("ha_connections")\
+            .update({"is_active": False})\
+            .eq("household_id", household_id)\
+            .execute()
+        return {"status": "disconnected"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not disconnect Home Assistant: {e}")
+
+
 # ── Devices ───────────────────────────────────────────────────────────────────
 
 @router.get("/devices")

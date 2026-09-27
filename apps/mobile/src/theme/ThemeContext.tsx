@@ -30,16 +30,16 @@ const darkColors: ThemeColors = {
 };
 
 const lightColors: ThemeColors = {
-  bg: '#F5F7FA',
+  bg: '#FBFAF7',
   bgLight: '#FFFFFF',
   surface: '#FFFFFF',
   accent: '#0284C7',
-  text: '#0A1628',
-  muted: '#64748B',
+  text: '#0B1533',
+  muted: '#667085',
   danger: '#DC2626',
   success: '#059669',
   warning: '#D97706',
-  purple: '#7C3AED',
+  purple: '#6C43FF',
   border: 'rgba(10,22,40,0.08)',
 };
 
@@ -54,9 +54,9 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const STORAGE_KEY = 'hearth_theme_mode';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // Defaults to dark — the app's current look — so nobody's theme changes
-  // out from under them until they actively opt into light mode.
-  const [mode, setMode] = useState<'light' | 'dark'>('dark');
+  // Hearth's redesigned consumer experience defaults to the warm light theme.
+  // A saved user preference still wins after SecureStore loads.
+  const [mode, setMode] = useState<'light' | 'dark'>('light');
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           setMode(saved);
         }
       } catch {
-        // Fall back to dark if storage read fails for any reason
+        // Keep the warm light default if storage read fails for any reason
       } finally {
         setIsLoaded(true);
       }

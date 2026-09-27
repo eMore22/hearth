@@ -1,401 +1,114 @@
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, FlatList,
-  KeyboardAvoidingView, Platform, StyleSheet, StatusBar, Animated, Alert
-} from 'react-native'
-import { useState, useRef, useEffect } from 'react'
-import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore'
-import { useDocumentStore } from '../../src/stores/documentStore'
-import { useBillStore } from '../../src/stores/billStore'
-import { useGroceryStore } from '../../src/stores/groceryStore'
-import { useMaintenanceStore } from '../../src/stores/maintenanceStore'
-import { useHealthStore } from '../../src/stores/healthStore'
-import { useTaskStore } from '../../src/stores/taskStore'
-import { useAutomationStore } from '../../src/stores/automationStore'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore';
+import { H, HearthDesign } from '../../src/theme/hearthDesign';
 
-const NAVY      = '#0A1628'
-const NAVY_LIGHT = '#112240'
-const SURFACE   = '#162035'
-const ACCENT    = '#4FC3F7'
-const WHITE     = '#F8FAFF'
-const MUTED     = '#8899AA'
-const USER_BUBBLE = '#1A3A5C'
-const AI_BUBBLE   = '#162035'
+const starters = [
+  'What needs my attention?',
+  'Which bills are due soon?',
+  'Am I covered for the kitchen leak?',
+  'Plan meals for this week',
+];
 
-const QUICK_PROMPTS = [
-  'What needs attention today?',
-  'Check my document expiries',
-  'How are my finances this month?',
-  'Any smart home alerts?',
-]
+export default function ChiefScreen() {
+  const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView>(null);
+  const { messages, isTyping, fetchHistory, sendMessage, clearMessages } = useChiefOfStaffStore();
+  const [text, setText] = useState('');
 
-export default function ChiefOfStaffScreen() {
-  const router = useRouter()
-  const { messages, isTyping, sendMessage, clearMessages, fetchHistory } = useChiefOfStaffStore()
+  useEffect(() => { fetchHistory(); }, []);
+  useEffect(() => { const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60); return () => clearTimeout(t); }, [messages.length, isTyping]);
 
-  // All data sources — Chief needs the full picture
-  const { documents, alerts, fetchDocuments, fetchAlerts } = useDocumentStore()
-  const { bills, monthlyReport, fetchBills, fetchMonthlyReport } = useBillStore()
-  const { inventory, mealPlan, budget, fetchInventory, fetchBudget } = useGroceryStore()
-  const { tasks, fetchTasks } = useMaintenanceStore()
-  const { medications, triageHistory, fetchMedications } = useHealthStore()
+  const send = async (value = text) => {
+    const message = value.trim();
+    if (!message || isTyping) return;
+    setText('');
+    try { await sendMessage(message); }
+    catch (e: any) { Alert.alert('Hearth could not reply', e?.message || 'Please try again.'); }
+  };
 
-  // Household to-dos — separate from the AI-generated maintenance `tasks`
-  // above. Was previously invisible to Chief entirely.
-  const { tasks: householdTasks, fetchTasks: fetchHouseholdTasks } = useTaskStore()
+  const clear = () => Alert.alert('Clear conversation?', 'This removes the current Chief of Staff history for this household.', [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Clear', style: 'destructive', onPress: () => clearMessages() },
+  ]);
 
-  // ── HA events — this is what was missing ──
-  const { events: haEvents, devices: haDevices, status: haStatus, fetchEvents: fetchHAEvents, fetchStatus: fetchHAStatus, fetchDevices: fetchHADevices } = useAutomationStore()
+  return (
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
+        <View style={styles.brandWrap}>
+          <LinearGradient colors={['#7360FF', '#5B39F0']} style={styles.brandIcon}><Ionicons name="sparkles" size={20} color="#fff" /></LinearGradient>
+          <View><Text style={styles.brandTitle}>Chief of Staff</Text><Text style={styles.brandSub}>Hearth household AI</Text></View>
+        </View>
+        <TouchableOpacity onPress={clear} style={styles.clearButton}><Ionicons name="trash-outline" size={18} color={H.muted} /></TouchableOpacity>
+      </View>
 
-  const [inputText, setInputText] = useState('')
-  const flatListRef = useRef<FlatList>(null)
-  const typingDot   = useRef(new Animated.Value(0)).current
-
-  useEffect(() => {
-    // Load shared conversation history, then all other data sources
-    fetchHistory()
-    fetchDocuments(); fetchAlerts()
-    fetchBills(); fetchMonthlyReport()
-    fetchInventory(); fetchBudget(); fetchTasks()
-    fetchMedications()
-    fetchHouseholdTasks()
-    fetchHAEvents(); fetchHAStatus(); fetchHADevices()
-  }, [])
-
-  useEffect(() => {
-    if (isTyping) {
-      Animated.loop(Animated.sequence([
-        Animated.timing(typingDot, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(typingDot, { toValue: 0, duration: 400, useNativeDriver: true }),
-      ])).start()
-    } else {
-      typingDot.stopAnimation()
-    }
-  }, [isTyping])
-
-  const buildContext = () => {
-    // Extract only the unprocessed/alert HA events so Chief
-    // knows exactly what smart home issues are active right now
-    const activeHAAlerts = haEvents
-      .filter(e => e.alert_sent && e.attributes?.chief_message)
-      .slice(0, 5)
-      .map(e => ({
-        entity: e.attributes?.friendly_name || e.entity_id,
-        message: e.attributes?.chief_message,
-        new_state: e.new_state,
-        device_class: e.attributes?.device_class,
-        time: e.created_at,
-      }))
-
-    // Only pending household to-dos, trimmed to what's actually useful
-    // in a prompt — full row objects would just add noise.
-    const pendingHouseholdTasks = (householdTasks || [])
-      .filter((t: any) => !t.is_completed)
-      .map((t: any) => ({ title: t.title, due_at: t.due_at }))
-
-    // Last few triage checks, so Chief can reference "you checked on a
-    // fever earlier" without needing a separate health-history feature.
-    const recentHealthChecks = (triageHistory || [])
-      .slice(0, 3)
-      .map((t: any) => ({
-        symptoms: t.symptoms,
-        level: t.result?.triage_level,
-        date: t.date,
-      }))
-
-    return {
-      documents,
-      alerts,
-      bills,
-      monthlyReport,
-      tasks,
-      inventory,
-      meal_plan: mealPlan,
-      grocery_budget: budget,
-      medications,
-      household_tasks: pendingHouseholdTasks,
-      recent_health_checks: recentHealthChecks,
-      // ── Smart home context ──
-      smart_home_connected: haStatus.connected,
-      smart_home_device_count: haStatus.device_count || 0,
-      smart_home_alerts: activeHAAlerts,
-      ha_devices: haDevices,
-    }
-  }
-
-  const handleSend = async (text?: string) => {
-    const msg = text || inputText
-    if (!msg.trim() || isTyping) return
-    setInputText('')
-    await sendMessage(msg, buildContext())
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 150)
-  }
-
-  const formatTime = (iso: string) => {
-    const d = new Date(iso)
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-  }
-
-  const renderMessage = ({ item }: { item: any }) => {
-    const isUser = item.role === 'user'
-    return (
-      <View style={[styles.messageRow, isUser ? styles.messageRowUser : styles.messageRowAI]}>
-        {!isUser && (
-          <View style={styles.aiAvatar}>
-            <Text style={styles.aiAvatarText}>✦</Text>
-          </View>
-        )}
-        <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAI]}>
-          <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAI]}>
-            {item.content}
-          </Text>
-          {item.action_result && (
-            <View style={[
-              styles.actionResultBadge,
-              item.action_result.status === 'sent' ? styles.actionResultSuccess : styles.actionResultFailed
-            ]}>
-              <Ionicons
-                name={item.action_result.status === 'sent' ? 'checkmark-circle' : 'alert-circle'}
-                size={13}
-                color={item.action_result.status === 'sent' ? '#06D6A0' : '#FF6B6B'}
-              />
-              <Text style={[
-                styles.actionResultText,
-                { color: item.action_result.status === 'sent' ? '#06D6A0' : '#FF6B6B' }
-              ]}>
-                {item.action_result.status === 'sent' ? 'Action completed' : 'Action failed'}
-              </Text>
-            </View>
-          )}
-          {item.proactive_suggestions?.length > 0 && (
-            <View style={styles.suggestionsBox}>
-              {item.proactive_suggestions.map((s: string, i: number) => (
-                <TouchableOpacity key={i} style={styles.suggestionChip} onPress={() => handleSend(s)}>
-                  <Text style={styles.suggestionText}>→ {s}</Text>
+      <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {messages.length === 0 ? (
+          <View style={styles.hero}>
+            <LinearGradient colors={['#EEE9FF', '#E6F0FF']} style={styles.orb}><Ionicons name="sparkles" size={32} color={H.purple} /></LinearGradient>
+            <Text style={styles.hello}>What can Hearth handle for you?</Text>
+            <Text style={styles.sub}>Ask about bills, documents, meals, home alerts, household tasks or connected devices.</Text>
+            <View style={styles.starters}>
+              {starters.map(item => (
+                <TouchableOpacity key={item} style={styles.starter} onPress={() => send(item)} activeOpacity={0.75}>
+                  <Text style={styles.starterText}>{item}</Text>
+                  <Ionicons name="arrow-forward" size={14} color={H.muted2} />
                 </TouchableOpacity>
               ))}
             </View>
-          )}
-          <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
-        </View>
-      </View>
-    )
-  }
-
-  // Show active HA alert count in header if any exist
-  const activeAlertCount = haEvents.filter(e => e.alert_sent).length
-
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <SafeAreaView style={styles.safeArea}>
-        <KeyboardAvoidingView
-          style={styles.keyboardView}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-              <Ionicons name="arrow-back" size={20} color={WHITE} />
-            </TouchableOpacity>
-            <View style={styles.headerCenter}>
-              <Text style={styles.headerTitle}>Chief of Staff</Text>
-              <View style={styles.headerStatus}>
-                <View style={styles.statusDot} />
-                <Text style={styles.statusText}>
-                  Active{activeAlertCount > 0 ? ` · ${activeAlertCount} alert${activeAlertCount > 1 ? 's' : ''}` : ''}
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={() =>
-                Alert.alert(
-                  'Clear conversation?',
-                  "This clears the Chief of Staff history for your entire household, not just this device. This can't be undone.",
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Clear for everyone', style: 'destructive', onPress: () => clearMessages() },
-                  ]
-                )
-              }
-              style={styles.clearBtn}
-            >
-              <Ionicons name="trash-outline" size={18} color={MUTED} />
-            </TouchableOpacity>
-          </LinearGradient>
-
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMessage}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.messageList}
-            showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIcon}>
-                  <Text style={styles.emptyIconText}>✦</Text>
+          </View>
+        ) : (
+          <View style={styles.thread}>
+            {messages.map(msg => (
+              <View key={msg.id} style={[styles.messageWrap, msg.role === 'user' ? styles.userWrap : styles.assistantWrap]}>
+                {msg.role !== 'user' && <View style={styles.assistantAvatar}><Ionicons name="sparkles" size={14} color={H.purple} /></View>}
+                <View style={[styles.message, msg.role === 'user' ? styles.userMessage : styles.assistantMessage]}>
+                  <Text style={[styles.messageText, msg.role === 'user' ? styles.userText : styles.assistantText]}>{msg.content}</Text>
                 </View>
-                <Text style={styles.emptyTitle}>Your household's AI</Text>
-                <Text style={styles.emptySubtitle}>
-                  Ask me anything about your documents, bills, groceries, maintenance,
-                  family health{haStatus.connected ? ', or smart home' : ''}.
-                </Text>
-                {activeAlertCount > 0 && (
-                  <View style={styles.alertBanner}>
-                    <Ionicons name="warning-outline" size={14} color="#FFD166" />
-                    <Text style={styles.alertBannerText}>
-                      {activeAlertCount} smart home alert{activeAlertCount > 1 ? 's' : ''} need attention
-                    </Text>
+                {!!msg.proactive_suggestions?.length && (
+                  <View style={styles.suggestionList}>
+                    {msg.proactive_suggestions.slice(0, 3).map(s => <TouchableOpacity key={s} onPress={() => send(s)} style={styles.suggestion}><Text style={styles.suggestionText}>{s}</Text></TouchableOpacity>)}
                   </View>
                 )}
-                <View style={styles.quickPromptsGrid}>
-                  {QUICK_PROMPTS.map((prompt, i) => (
-                    <TouchableOpacity
-                      key={i}
-                      style={styles.quickPromptChip}
-                      onPress={() => handleSend(prompt)}
-                    >
-                      <Text style={styles.quickPromptText}>{prompt}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
               </View>
-            }
-          />
-
-          {isTyping && (
-            <View style={styles.typingRow}>
-              <View style={styles.aiAvatar}>
-                <Text style={styles.aiAvatarText}>✦</Text>
-              </View>
-              <View style={styles.typingBubble}>
-                <Animated.View style={[styles.typingDot, { opacity: typingDot }]} />
-                <Animated.View style={[styles.typingDot, { opacity: typingDot }]} />
-                <Animated.View style={[styles.typingDot, { opacity: typingDot }]} />
-              </View>
-            </View>
-          )}
-
-          <View style={styles.inputContainer}>
-            <View style={styles.inputRow}>
-              <TextInput
-                style={styles.input}
-                placeholder="Ask me anything..."
-                placeholderTextColor={MUTED}
-                value={inputText}
-                onChangeText={setInputText}
-                editable={!isTyping}
-                multiline
-                maxLength={500}
-              />
-              <TouchableOpacity
-                style={[styles.sendBtn, (!inputText.trim() || isTyping) && styles.sendBtnDisabled]}
-                onPress={() => handleSend()}
-                disabled={!inputText.trim() || isTyping}
-              >
-                <Ionicons name="arrow-up" size={18} color={WHITE} />
-              </TouchableOpacity>
-            </View>
+            ))}
+            {isTyping && <View style={styles.typingRow}><View style={styles.assistantAvatar}><Ionicons name="sparkles" size={14} color={H.purple} /></View><View style={[styles.message, styles.assistantMessage]}><Text style={styles.typing}>Hearth is thinking…</Text></View></View>}
           </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </View>
-  )
+        )}
+      </ScrollView>
+
+      <View style={[styles.composerWrap, { paddingBottom: Math.max(insets.bottom, 8) + 3 }]}>
+        <View style={styles.composer}>
+          <TextInput value={text} onChangeText={setText} onSubmitEditing={() => send()} placeholder="Ask about your household..." placeholderTextColor={H.muted2} style={styles.input} multiline returnKeyType="send" blurOnSubmit />
+          <TouchableOpacity style={[styles.send, (!text.trim() || isTyping) && styles.sendDisabled]} onPress={() => send()} disabled={!text.trim() || isTyping} activeOpacity={0.8}><Ionicons name="arrow-up" size={20} color="#fff" /></TouchableOpacity>
+        </View>
+      </View>
+    </KeyboardAvoidingView>
+  );
 }
 
 const styles = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: NAVY },
-  safeArea:     { flex: 1 },
-  keyboardView: { flex: 1 },
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
-  backBtn:      { padding: 6, marginRight: 4 },
-  headerCenter: { flex: 1, alignItems: 'center' },
-  headerTitle:  { fontSize: 16, fontWeight: '700', color: WHITE },
-  headerStatus: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  statusDot:    { width: 6, height: 6, borderRadius: 3, backgroundColor: '#06D6A0' },
-  statusText:   { fontSize: 11, color: '#06D6A0' },
-  clearBtn:     { padding: 6 },
-  messageList:  { padding: 16, paddingBottom: 8 },
-  messageRow:   { marginBottom: 16, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  messageRowUser: { justifyContent: 'flex-end' },
-  messageRowAI:   { justifyContent: 'flex-start' },
-  aiAvatar: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: 'rgba(79,195,247,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'rgba(79,195,247,0.3)',
-  },
-  aiAvatarText: { fontSize: 14, color: ACCENT },
-  bubble:       { maxWidth: '78%', borderRadius: 18, padding: 14 },
-  bubbleUser:   { backgroundColor: USER_BUBBLE, borderBottomRightRadius: 4, borderWidth: 1, borderColor: 'rgba(79,195,247,0.2)' },
-  bubbleAI:     { backgroundColor: AI_BUBBLE, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-  bubbleText:   { fontSize: 14, lineHeight: 21 },
-  bubbleTextUser: { color: WHITE },
-  bubbleTextAI:   { color: '#D0E8F5' },
-  messageTime:  { fontSize: 10, color: MUTED, marginTop: 6, textAlign: 'right' },
-  actionResultBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5,
-    marginTop: 10,
-  },
-  actionResultSuccess: { backgroundColor: 'rgba(6,214,160,0.1)' },
-  actionResultFailed:  { backgroundColor: 'rgba(255,107,107,0.1)' },
-  actionResultText:    { fontSize: 11, fontWeight: '600' },
-  suggestionsBox: { marginTop: 10, gap: 6 },
-  suggestionChip: {
-    backgroundColor: 'rgba(79,195,247,0.08)', borderRadius: 8, padding: 8,
-    borderWidth: 1, borderColor: 'rgba(79,195,247,0.2)',
-  },
-  suggestionText: { fontSize: 12, color: ACCENT },
-  typingRow:    { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, marginBottom: 8 },
-  typingBubble: {
-    flexDirection: 'row', backgroundColor: AI_BUBBLE, borderRadius: 16,
-    padding: 12, gap: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
-  },
-  typingDot:    { width: 6, height: 6, borderRadius: 3, backgroundColor: MUTED },
-  inputContainer: {
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)',
-    backgroundColor: NAVY,
-  },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  input: {
-    flex: 1, backgroundColor: SURFACE, borderRadius: 22,
-    paddingHorizontal: 18, paddingVertical: 12, fontSize: 14, color: WHITE,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', maxHeight: 100,
-  },
-  sendBtn:         { width: 42, height: 42, borderRadius: 21, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center' },
-  sendBtnDisabled: { backgroundColor: 'rgba(79,195,247,0.2)' },
-  emptyState:      { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24 },
-  emptyIcon: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: 'rgba(79,195,247,0.1)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 16, borderWidth: 1, borderColor: 'rgba(79,195,247,0.2)',
-  },
-  emptyIconText: { fontSize: 24, color: ACCENT },
-  emptyTitle:    { fontSize: 20, fontWeight: '700', color: WHITE, marginBottom: 8 },
-  emptySubtitle: { fontSize: 14, color: MUTED, textAlign: 'center', lineHeight: 21, marginBottom: 16 },
-  alertBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(255,209,102,0.1)', borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 1, borderColor: 'rgba(255,209,102,0.25)',
-    marginBottom: 16,
-  },
-  alertBannerText: { fontSize: 13, color: '#FFD166', fontWeight: '600' },
-  quickPromptsGrid: { width: '100%', gap: 8 },
-  quickPromptChip: {
-    backgroundColor: SURFACE, borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
-  },
-  quickPromptText: { fontSize: 13, color: '#B8D4E8' },
-})
+  root: { flex: 1, backgroundColor: H.paper },
+  header: { minHeight: 76, paddingHorizontal: 18, paddingBottom: 12, backgroundColor: H.paper, borderBottomWidth: 1, borderBottomColor: H.lineSoft, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  brandWrap: { flexDirection: 'row', alignItems: 'center', gap: 10 }, brandIcon: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, brandTitle: { color: H.navy, fontSize: 16, fontWeight: '900' }, brandSub: { color: H.muted, fontSize: 10.5, marginTop: 2 }, clearButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F2F1F0', alignItems: 'center', justifyContent: 'center' },
+  scroll: { flex: 1 }, content: { flexGrow: 1, paddingHorizontal: 16, paddingBottom: 20 },
+  hero: { flex: 1, minHeight: 560, alignItems: 'center', justifyContent: 'center', paddingVertical: 30 }, orb: { width: 84, height: 84, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 22, ...HearthDesign.shadow.floating }, hello: { color: H.navy, fontSize: 24, fontWeight: '900', textAlign: 'center', letterSpacing: -0.4 }, sub: { color: H.muted, fontSize: 12.5, lineHeight: 19, textAlign: 'center', maxWidth: 300, marginTop: 8 }, starters: { width: '100%', marginTop: 24, gap: 8 }, starter: { minHeight: 48, borderRadius: 17, borderWidth: 1, borderColor: H.lineSoft, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, ...HearthDesign.shadow.card }, starterText: { color: H.navy, fontSize: 12.5, fontWeight: '700' },
+  thread: { paddingTop: 16 }, messageWrap: { marginBottom: 14 }, userWrap: { alignItems: 'flex-end' }, assistantWrap: { alignItems: 'flex-start' }, assistantAvatar: { width: 28, height: 28, borderRadius: 10, backgroundColor: H.violetBg, alignItems: 'center', justifyContent: 'center', marginBottom: 5 }, message: { maxWidth: '88%', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 11 }, userMessage: { backgroundColor: H.purple, borderBottomRightRadius: 7 }, assistantMessage: { backgroundColor: '#fff', borderWidth: 1, borderColor: H.lineSoft, borderBottomLeftRadius: 7, ...HearthDesign.shadow.card }, messageText: { fontSize: 13.5, lineHeight: 20 }, userText: { color: '#fff' }, assistantText: { color: H.navy }, typingRow: { alignItems: 'flex-start' }, typing: { color: H.muted, fontSize: 12.5 },
+  suggestionList: { marginTop: 7, gap: 6, alignItems: 'flex-start' }, suggestion: { borderRadius: 999, borderWidth: 1, borderColor: '#E3DEFF', backgroundColor: H.violetBg, paddingHorizontal: 12, paddingVertical: 7 }, suggestionText: { color: H.purple, fontSize: 11, fontWeight: '700' },
+  composerWrap: { paddingHorizontal: 12, paddingTop: 8, backgroundColor: H.paper, borderTopWidth: 1, borderTopColor: H.lineSoft }, composer: { minHeight: 57, borderRadius: 28, backgroundColor: '#fff', borderWidth: 1, borderColor: H.line, flexDirection: 'row', alignItems: 'flex-end', paddingLeft: 17, paddingRight: 6, paddingVertical: 5, ...HearthDesign.shadow.card }, input: { flex: 1, maxHeight: 110, minHeight: 43, color: H.navy, fontSize: 14, paddingTop: 11, paddingBottom: 8 }, send: { width: 44, height: 44, borderRadius: 22, backgroundColor: H.purple, alignItems: 'center', justifyContent: 'center' }, sendDisabled: { opacity: 0.38 },
+});

@@ -1,385 +1,190 @@
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar,
-  Alert, RefreshControl, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform
-} from 'react-native'
-import { useEffect, useState } from 'react'
-import { useBillStore } from '../../src/stores/billStore'
-import { useHouseholdStore } from '../../src/stores/householdStore'
-import { getCurrencySymbol } from '../../src/utils/currency'
-import { LinearGradient } from 'expo-linear-gradient'
-import { Ionicons } from '@expo/vector-icons'
+  Alert,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBillStore } from '../../src/stores/billStore';
+import { useHouseholdStore } from '../../src/stores/householdStore';
+import { getCurrencySymbol } from '../../src/utils/currency';
+import { H, HearthDesign } from '../../src/theme/hearthDesign';
+import { EmptyMessage, IconBadge, ScreenHeader } from '../../src/components/ui/PremiumKit';
 
-const NAVY = '#0A1628'
-const NAVY_LIGHT = '#112240'
-const SURFACE = '#162035'
-const ACCENT = '#C77DFF'
-const WHITE = '#F8FAFF'
-const MUTED = '#8899AA'
-const SUCCESS = '#06D6A0'
-const DANGER = '#FF6B6B'
+const filters = ['All', 'Bills', 'Subscriptions', 'Housing', 'Other'];
 
-const CATEGORIES = ['utilities', 'subscription', 'insurance', 'rent', 'loan', 'internet', 'phone', 'streaming', 'other']
-const BILLING_CYCLES = ['monthly', 'weekly', 'quarterly', 'annually']
+const categoryFor = (category = '', provider = '') => {
+  const text = `${category} ${provider}`.toLowerCase();
+  if (text.includes('rent') || text.includes('mortgage') || text.includes('housing')) return 'Housing';
+  if (text.includes('subscription') || ['spotify', 'netflix', 'youtube', 'apple', 'prime'].some(x => text.includes(x))) return 'Subscriptions';
+  if (text.includes('utility') || text.includes('electric') || text.includes('internet') || text.includes('water')) return 'Bills';
+  return 'Other';
+};
+
+const metaFor = (category = '', provider = '') => {
+  const c = categoryFor(category, provider);
+  if (c === 'Subscriptions') return { icon: 'play-circle-outline' as const, bg: H.greenBg, fg: H.green };
+  if (c === 'Housing') return { icon: 'home-outline' as const, bg: H.amberBg, fg: H.amber };
+  if (c === 'Bills') return { icon: 'flash-outline' as const, bg: H.violetBg, fg: H.violet };
+  return { icon: 'card-outline' as const, bg: H.blueBg, fg: H.blue };
+};
 
 export default function BillsScreen() {
-  const { bills, monthlyReport, unusedSubscriptions, isLoading, fetchBills, fetchMonthlyReport, detectUnused, generateNegotiationScript, createBill, deleteBill } = useBillStore()
-  const household = useHouseholdStore(s => s.household)
-  const fetchHousehold = useHouseholdStore(s => s.fetchHousehold)
-  const currencySymbol = getCurrencySymbol(household?.currency)
-
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [showUnused, setShowUnused] = useState(false)
-  const [detectLoading, setDetectLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  const [billName, setBillName] = useState('')
-  const [billAmount, setBillAmount] = useState('')
-  const [billCategory, setBillCategory] = useState('other')
-  const [billingCycle, setBillingCycle] = useState('monthly')
-  const [billNotes, setBillNotes] = useState('')
+  const insets = useSafeAreaInsets();
+  const { bills, monthlyReport, fetchBills, fetchMonthlyReport, createBill, detectUnused } = useBillStore();
+  const household = useHouseholdStore(s => s.household);
+  const fetchHousehold = useHouseholdStore(s => s.fetchHousehold);
+  const [filter, setFilter] = useState('All');
+  const [showAdd, setShowAdd] = useState(false);
+  const [provider, setProvider] = useState('');
+  const [amount, setAmount] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetchBills()
-    fetchMonthlyReport()
-    if (!household) fetchHousehold()
-  }, [])
+    if (!household) fetchHousehold();
+    fetchBills();
+    fetchMonthlyReport().catch(() => undefined);
+  }, []);
 
-  const resetForm = () => {
-    setBillName(''); setBillAmount(''); setBillCategory('other')
-    setBillingCycle('monthly'); setBillNotes('')
-  }
+  const currency = getCurrencySymbol(household?.currency);
+  const total = monthlyReport?.total_spent ?? bills.reduce((sum, b) => sum + Number(b.amount || 0), 0);
+  const visible = useMemo(() => filter === 'All' ? bills : bills.filter(b => categoryFor(b.category, b.provider) === filter), [bills, filter]);
+  const upcoming = bills.find(b => Number(b.amount || 0) > 0);
 
-  const handleAddBill = async () => {
-    if (!billName.trim()) { Alert.alert('Error', 'Please enter a bill name'); return }
-    const amount = parseFloat(billAmount)
-    if (!billAmount || isNaN(amount) || amount <= 0) { Alert.alert('Error', 'Please enter a valid amount'); return }
-
-    setSaving(true)
-    try {
-      await createBill({
-        provider: billName.trim(),
-        amount,
-        category: billCategory,
-        billing_cycle: billingCycle,
-        notes: billNotes.trim() || undefined,
-      })
-      setShowAddModal(false)
-      resetForm()
-      Alert.alert('✅ Bill added', `${billName} tracked successfully.`)
-    } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.detail || 'Could not save bill. Please try again.')
-    } finally {
-      setSaving(false)
+  const add = async () => {
+    if (!provider.trim() || !amount.trim()) {
+      Alert.alert('Missing details', 'Add a provider and amount.');
+      return;
     }
-  }
-
-  const handleDeleteBill = (bill: any) => {
-    Alert.alert(
-      'Delete bill?',
-      `Remove ${bill.provider || bill.name} from your bills? This can't be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteBill(bill.id)
-            } catch (err: any) {
-              Alert.alert('Error', err.response?.data?.detail || 'Could not delete bill. Please try again.')
-            }
-          },
-        },
-      ]
-    )
-  }
-
-  const handleDetectUnused = async () => {
-    setDetectLoading(true)
-    await detectUnused()
-    setShowUnused(true)
-    setDetectLoading(false)
-  }
-
-  const handleNegotiation = async (provider: string, plan: string) => {
+    const n = Number(amount.replace(/,/g, ''));
+    if (!Number.isFinite(n) || n < 0) {
+      Alert.alert('Invalid amount', 'Enter a valid bill amount.');
+      return;
+    }
+    setSaving(true);
     try {
-      const script = await generateNegotiationScript(provider, plan)
-      Alert.alert('Negotiation Script', script.script || script.opening_line || JSON.stringify(script))
-    } catch { Alert.alert('Error', 'Could not generate script') }
-  }
+      await createBill({ provider: provider.trim(), amount: n, billing_cycle: 'monthly', category: 'utility' });
+      setProvider(''); setAmount(''); setShowAdd(false);
+    } catch (e: any) {
+      Alert.alert('Could not add bill', e?.message || 'Please try again.');
+    } finally { setSaving(false); }
+  };
 
-  const totalMonthly = bills.reduce((sum: number, b: any) => sum + (b.amount || 0), 0)
+  const findUnused = async () => {
+    const result = await detectUnused();
+    Alert.alert('Subscription check', result.length ? `${result.length} possible unused subscription${result.length === 1 ? '' : 's'} found.` : 'No obvious unused subscriptions found.');
+  };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-
-      <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
-        <Text style={styles.headerLabel}>FINANCE</Text>
-        <Text style={styles.headerTitle}>Bills & Subscriptions</Text>
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryPill}>
-            <Text style={styles.summaryValue}>{currencySymbol}{totalMonthly.toFixed(0)}</Text>
-            <Text style={styles.summaryLabel}>Monthly</Text>
-          </View>
-          <View style={styles.summaryPill}>
-            <Text style={styles.summaryValue}>{bills.length}</Text>
-            <Text style={styles.summaryLabel}>Active</Text>
-          </View>
-        </View>
-      </LinearGradient>
-
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isLoading}
-            onRefresh={() => { fetchBills(); fetchMonthlyReport() }}
-            tintColor={ACCENT}
-          />
-        }
-      >
-        {monthlyReport && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Monthly Summary</Text>
-            <View style={styles.reportCard}>
-              <Text style={styles.reportAmount}>{currencySymbol}{monthlyReport.total_spent?.toFixed(2) || '0.00'}</Text>
-              <Text style={styles.reportSummary}>{monthlyReport.summary}</Text>
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
+        <ScreenHeader title="Bills & Subscriptions" subtitle="Track and never miss a payment." right={<TouchableOpacity style={styles.plus} onPress={() => setShowAdd(true)}><Ionicons name="add" size={22} color={H.navy} /></TouchableOpacity>} />
+        <View style={styles.body}>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Monthly total</Text>
+              <Text style={styles.summaryAmount}>{currency}{Number(total || 0).toLocaleString()}</Text>
+              <Text style={styles.summarySub}>{bills.length} active</Text>
             </View>
+            <TouchableOpacity style={styles.scanCard} onPress={findUnused} activeOpacity={0.82}>
+              <View style={styles.scanIcon}><Ionicons name="sparkles-outline" size={20} color={H.purple} /></View>
+              <Text style={styles.scanTitle}>Find unused</Text>
+              <Text style={styles.scanSub}>subscriptions</Text>
+            </TouchableOpacity>
           </View>
-        )}
 
-        <View style={styles.section}>
-          <TouchableOpacity style={styles.detectBtn} onPress={handleDetectUnused} disabled={detectLoading}>
-            <Ionicons name="search-outline" size={18} color={ACCENT} />
-            <Text style={styles.detectBtnText}>{detectLoading ? 'Scanning...' : 'Find Unused Subscriptions'}</Text>
-          </TouchableOpacity>
-        </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+            {filters.map(f => <TouchableOpacity key={f} onPress={() => setFilter(f)} style={[styles.filterChip, filter === f && styles.filterChipActive]} activeOpacity={0.75}><Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f}</Text></TouchableOpacity>)}
+          </ScrollView>
 
-        {showUnused && unusedSubscriptions.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Potential Savings</Text>
-            {unusedSubscriptions.map((sub: any, i: number) => (
-              <View key={i} style={styles.unusedCard}>
-                <View style={styles.unusedTop}>
-                  <Text style={styles.unusedProvider}>{sub.provider}</Text>
-                  <Text style={styles.unusedSaving}>-{currencySymbol}{sub.monthly_savings}/mo</Text>
-                </View>
-                <Text style={styles.unusedReason}>{sub.reason}</Text>
-                <TouchableOpacity onPress={() => handleNegotiation(sub.provider, 'current plan')}>
-                  <Text style={styles.scriptBtnText}>Get negotiation script →</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Bills</Text>
-
-          {bills.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="card-outline" size={40} color={MUTED} />
-              <Text style={styles.emptyTitle}>No bills added yet</Text>
-              <Text style={styles.emptySubtitle}>Add your recurring bills to track spending</Text>
-              <TouchableOpacity style={styles.addBillBtnPrimary} onPress={() => setShowAddModal(true)}>
-                <Ionicons name="add-circle-outline" size={20} color={WHITE} />
-                <Text style={styles.addBillBtnPrimaryText}>➕ Add Manual Bill</Text>
-              </TouchableOpacity>
+          {upcoming && (
+            <View style={styles.upcomingCard}>
+              <IconBadge icon="flash-outline" bg={H.violetBg} color={H.violet} size={48} />
+              <View style={styles.flex}><Text style={styles.eyebrow}>UPCOMING PAYMENT</Text><Text style={styles.upcomingTitle}>{upcoming.provider}</Text><Text style={styles.upcomingSub}>{upcoming.billing_cycle} · {currency}{Number(upcoming.amount || 0).toLocaleString()}</Text></View>
+              <View style={styles.pay}><Text style={styles.payText}>View</Text></View>
             </View>
-          ) : (
-            <>
-              {bills.map((bill: any, i: number) => (
-                <View key={bill.id || i} style={styles.billCard}>
-                  <View style={styles.billIconBox}>
-                    <Ionicons name="card" size={20} color={ACCENT} />
-                  </View>
-                  <View style={styles.billInfo}>
-                    <Text style={styles.billProvider}>{bill.provider || bill.name}</Text>
-                    <Text style={styles.billMeta}>{bill.category} · {bill.billing_cycle}</Text>
-                  </View>
-                  <Text style={styles.billAmount}>{currencySymbol}{bill.amount}</Text>
-                  <TouchableOpacity
-                    onPress={() => handleDeleteBill(bill)}
-                    style={styles.deleteBtn}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="trash-outline" size={18} color={DANGER} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-              <TouchableOpacity style={styles.addBillBtnSecondary} onPress={() => setShowAddModal(true)}>
-                <Ionicons name="add-outline" size={18} color={ACCENT} />
-                <Text style={styles.addBillBtnSecondaryText}>Add Another Bill</Text>
-              </TouchableOpacity>
-            </>
           )}
-        </View>
 
-        <View style={{ height: 40 }} />
+          <View style={styles.sectionHead}><Text style={styles.sectionTitle}>All bills</Text><TouchableOpacity style={styles.plus} onPress={() => setShowAdd(true)}><Ionicons name="add" size={22} color={H.navy} /></TouchableOpacity></View>
+
+          {visible.length === 0 ? <EmptyMessage icon="card-outline" title="No bills yet" subtitle="Add recurring bills and subscriptions so Hearth can keep an eye on them." /> : visible.map(bill => {
+            const m = metaFor(bill.category, bill.provider);
+            return (
+              <View key={bill.id} style={styles.row}>
+                <IconBadge icon={m.icon} bg={m.bg} color={m.fg} size={44} />
+                <View style={styles.flex}>
+                  <Text style={styles.rowTitle}>{bill.provider}</Text>
+                  <Text style={styles.rowMeta}>{currency}{Number(bill.amount || 0).toLocaleString()} · {bill.billing_cycle}</Text>
+                </View>
+                <View style={[styles.status, { backgroundColor: categoryFor(bill.category, bill.provider) === 'Subscriptions' ? H.greenBg : '#F0EBFF' }]}><Text style={[styles.statusText, { color: categoryFor(bill.category, bill.provider) === 'Subscriptions' ? H.green : H.purple }]}>Active</Text></View>
+                <Ionicons name="chevron-forward" size={18} color={H.muted2} />
+              </View>
+            );
+          })}
+        </View>
       </ScrollView>
 
-      <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
-        <KeyboardAvoidingView
-          style={styles.modal}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={styles.modalHeader}>
-            <View>
-              <Text style={styles.modalTitle}>Add Bill</Text>
-              <Text style={styles.modalHint}>Track a recurring payment</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => { setShowAddModal(false); resetForm() }}
-              style={styles.modalClose}
-            >
-              <Ionicons name="close" size={20} color={WHITE} />
-            </TouchableOpacity>
+      <Modal visible={showAdd} transparent animationType="fade" onRequestClose={() => setShowAdd(false)}>
+        <View style={styles.modalRoot}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowAdd(false)} />
+          <View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, 18) + 20 }]}>
+            <Text style={styles.modalTitle}>Add a bill</Text>
+            <Text style={styles.modalSub}>Hearth will add it to your household overview.</Text>
+            <TextInput value={provider} onChangeText={setProvider} placeholder="Provider" placeholderTextColor={H.muted2} style={styles.input} />
+            <TextInput value={amount} onChangeText={setAmount} placeholder="Amount" placeholderTextColor={H.muted2} keyboardType="decimal-pad" style={styles.input} />
+            <TouchableOpacity style={[styles.save, saving && { opacity: 0.6 }]} onPress={add} disabled={saving}><Text style={styles.saveText}>{saving ? 'Adding…' : 'Add bill'}</Text></TouchableOpacity>
           </View>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.fieldLabel}>Bill / Provider Name *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Netflix, Rent, Electricity"
-              placeholderTextColor={MUTED}
-              value={billName}
-              onChangeText={setBillName}
-            />
-
-            <Text style={styles.fieldLabel}>Amount ({currencySymbol}) *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="0.00"
-              placeholderTextColor={MUTED}
-              value={billAmount}
-              onChangeText={setBillAmount}
-              keyboardType="decimal-pad"
-            />
-
-            <Text style={styles.fieldLabel}>Category</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              {CATEGORIES.map(cat => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.chip, billCategory === cat && styles.chipActive]}
-                  onPress={() => setBillCategory(cat)}
-                >
-                  <Text style={[styles.chipText, billCategory === cat && styles.chipTextActive]}>
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.fieldLabel}>Billing Cycle</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              {BILLING_CYCLES.map(cycle => (
-                <TouchableOpacity
-                  key={cycle}
-                  style={[styles.chip, billingCycle === cycle && styles.chipActive]}
-                  onPress={() => setBillingCycle(cycle)}
-                >
-                  <Text style={[styles.chipText, billingCycle === cycle && styles.chipTextActive]}>
-                    {cycle}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.fieldLabel}>Notes (optional)</Text>
-            <TextInput
-              style={[styles.input, { minHeight: 60 }]}
-              placeholder="e.g. shared with partner, auto-renews Jan"
-              placeholderTextColor={MUTED}
-              value={billNotes}
-              onChangeText={setBillNotes}
-              multiline
-            />
-
-            <TouchableOpacity
-              style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-              onPress={handleAddBill}
-              disabled={saving}
-            >
-              {saving
-                ? <ActivityIndicator color={WHITE} />
-                : <Text style={styles.saveBtnText}>Save Bill</Text>
-              }
-            </TouchableOpacity>
-
-            <View style={{ height: 40 }} />
-          </ScrollView>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: NAVY },
-  header: { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 20 },
-  headerLabel: { fontSize: 11, color: MUTED, letterSpacing: 2, marginBottom: 4 },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: WHITE, marginBottom: 16 },
+  root: { flex: 1, backgroundColor: H.paper },
+  body: { paddingHorizontal: 18 },
+  plus: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F2F0EF', alignItems: 'center', justifyContent: 'center' },
   summaryRow: { flexDirection: 'row', gap: 10 },
-  summaryPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
-  summaryValue: { fontSize: 15, fontWeight: '700', color: WHITE },
-  summaryLabel: { fontSize: 12, color: MUTED },
-  scroll: { flex: 1 },
-  section: { paddingHorizontal: 20, marginTop: 24 },
-  sectionTitle: { fontSize: 11, fontWeight: '600', color: MUTED, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12 },
-  reportCard: { backgroundColor: SURFACE, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: 'rgba(199,125,255,0.15)' },
-  reportAmount: { fontSize: 36, fontWeight: '700', color: WHITE, marginBottom: 8 },
-  reportSummary: { fontSize: 13, color: '#B8D4E8', lineHeight: 19 },
-  detectBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(199,125,255,0.1)', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: 'rgba(199,125,255,0.25)' },
-  detectBtnText: { color: ACCENT, fontWeight: '600', fontSize: 15 },
-  unusedCard: { backgroundColor: SURFACE, borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,159,28,0.2)' },
-  unusedTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  unusedProvider: { fontSize: 15, fontWeight: '600', color: WHITE },
-  unusedSaving: { fontSize: 15, fontWeight: '700', color: SUCCESS },
-  unusedReason: { fontSize: 13, color: MUTED, marginBottom: 10 },
-  scriptBtnText: { fontSize: 13, color: ACCENT, fontWeight: '600' },
-  emptyState: { alignItems: 'center', paddingVertical: 40, gap: 10 },
-  emptyTitle: { fontSize: 17, fontWeight: '600', color: WHITE },
-  emptySubtitle: { fontSize: 13, color: MUTED, textAlign: 'center' },
-  addBillBtnPrimary: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    backgroundColor: ACCENT, borderRadius: 14, paddingVertical: 16, paddingHorizontal: 32,
-    marginTop: 8, width: '100%',
-    shadowColor: ACCENT, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 6,
-  },
-  addBillBtnPrimaryText: { color: NAVY, fontWeight: '700', fontSize: 16 },
-  addBillBtnSecondary: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderRadius: 14, paddingVertical: 14, marginTop: 8,
-    borderWidth: 1.5, borderColor: 'rgba(199,125,255,0.35)',
-    backgroundColor: 'rgba(199,125,255,0.06)',
-  },
-  addBillBtnSecondaryText: { color: ACCENT, fontWeight: '600', fontSize: 14 },
-  billCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: SURFACE, borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', gap: 12 },
-  billIconBox: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(199,125,255,0.1)', alignItems: 'center', justifyContent: 'center' },
-  billInfo: { flex: 1 },
-  billProvider: { fontSize: 15, fontWeight: '600', color: WHITE, marginBottom: 2 },
-  billMeta: { fontSize: 12, color: MUTED },
-  billAmount: { fontSize: 16, fontWeight: '700', color: WHITE },
-  deleteBtn: { padding: 4, marginLeft: 6 },
-  modal: { flex: 1, backgroundColor: NAVY, padding: 24 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 24 },
-  modalTitle: { fontSize: 24, fontWeight: '700', color: WHITE, marginBottom: 4 },
-  modalHint: { fontSize: 13, color: MUTED },
-  modalClose: { padding: 6, backgroundColor: SURFACE, borderRadius: 10 },
-  fieldLabel: { fontSize: 12, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
-  input: {
-    backgroundColor: SURFACE, borderRadius: 12, padding: 16,
-    fontSize: 15, color: WHITE, borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)', textAlignVertical: 'top',
-  },
-  chipRow: { flexDirection: 'row', marginBottom: 4 },
-  chip: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, backgroundColor: SURFACE, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  chipActive: { backgroundColor: 'rgba(199,125,255,0.2)', borderColor: ACCENT },
-  chipText: { fontSize: 13, color: MUTED, textTransform: 'capitalize' },
-  chipTextActive: { color: ACCENT, fontWeight: '600' },
-  saveBtn: { backgroundColor: ACCENT, borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 24 },
-  saveBtnText: { color: NAVY, fontWeight: '700', fontSize: 16 },
-})
+  summaryCard: { flex: 1.4, borderRadius: 22, padding: 17, backgroundColor: H.navy, ...HearthDesign.shadow.card },
+  summaryLabel: { color: '#9FA9C8', fontSize: 11.5, fontWeight: '700' },
+  summaryAmount: { color: '#fff', fontSize: 27, fontWeight: '800', marginTop: 5, letterSpacing: -0.5 },
+  summarySub: { color: '#B5BDD6', fontSize: 11.5, marginTop: 3 },
+  scanCard: { flex: 1, borderRadius: 22, borderWidth: 1, borderColor: '#E6E0FF', backgroundColor: '#F7F4FF', padding: 15, justifyContent: 'center', ...HearthDesign.shadow.card },
+  scanIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#EDE6FF', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  scanTitle: { color: H.navy, fontSize: 13.5, fontWeight: '800' },
+  scanSub: { color: H.muted, fontSize: 11.5, marginTop: 2 },
+  filters: { gap: 8, paddingVertical: 16 },
+  filterChip: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 999, backgroundColor: '#F0F0F1' },
+  filterChipActive: { backgroundColor: H.navy },
+  filterText: { color: H.navy, fontSize: 12, fontWeight: '700' },
+  filterTextActive: { color: '#fff' },
+  upcomingCard: { borderRadius: 20, borderWidth: 1, borderColor: '#E8E1FE', backgroundColor: '#F8F5FF', padding: 14, flexDirection: 'row', alignItems: 'center', gap: 11, marginBottom: 24 },
+  flex: { flex: 1, minWidth: 0 },
+  eyebrow: { fontSize: 9.5, fontWeight: '900', letterSpacing: 1.3, color: H.violet },
+  upcomingTitle: { color: H.navy, fontSize: 14.5, fontWeight: '800', marginTop: 3 },
+  upcomingSub: { color: H.muted, fontSize: 11.5, marginTop: 2 },
+  pay: { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 999, backgroundColor: '#EDE7FF' },
+  payText: { color: H.purple, fontSize: 11.5, fontWeight: '800' },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  sectionTitle: { color: H.navy, fontSize: 20, fontWeight: '800' },
+  row: { minHeight: 70, backgroundColor: '#fff', borderWidth: 1, borderColor: H.lineSoft, borderRadius: 18, padding: 12, marginBottom: 9, flexDirection: 'row', alignItems: 'center', gap: 11, ...HearthDesign.shadow.card },
+  rowTitle: { color: H.navy, fontSize: 14, fontWeight: '800' },
+  rowMeta: { color: H.muted, fontSize: 11.5, marginTop: 3 },
+  status: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  statusText: { fontSize: 10.5, fontWeight: '800' },
+  modalRoot: { flex: 1, backgroundColor: 'rgba(8,12,24,0.4)', justifyContent: 'flex-end', paddingHorizontal: 14 },
+  modalCard: { borderRadius: 28, backgroundColor: H.paper, padding: 20 },
+  modalTitle: { color: H.navy, fontSize: 23, fontWeight: '800' },
+  modalSub: { color: H.muted, fontSize: 13, marginTop: 4, marginBottom: 18 },
+  input: { height: 52, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: H.line, paddingHorizontal: 14, color: H.navy, fontSize: 15, marginBottom: 10 },
+  save: { height: 52, borderRadius: 17, backgroundColor: H.purple, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  saveText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+});

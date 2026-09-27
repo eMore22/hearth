@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
-from app.dependencies import get_supabase
+from app.dependencies import get_supabase, get_supabase_admin, get_current_user
 
 router = APIRouter()
 
@@ -30,6 +30,10 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr
     token: str
     new_password: str
+
+
+class UpdateProfileRequest(BaseModel):
+    full_name: str
 
 
 @router.post("/signup")
@@ -105,6 +109,31 @@ async def refresh_token(payload: RefreshRequest, supabase=Depends(get_supabase))
         }
     except Exception as e:
         raise HTTPException(status_code=401, detail="Could not refresh token")
+
+
+@router.patch("/profile")
+async def update_profile(
+    payload: UpdateProfileRequest,
+    user=Depends(get_current_user),
+):
+    """Update the signed-in user's display name in Supabase Auth metadata."""
+    full_name = payload.full_name.strip()
+    if len(full_name) < 2:
+        raise HTTPException(status_code=400, detail="Please enter your full name")
+
+    supabase = get_supabase_admin()
+    try:
+        updated = supabase.auth.admin.update_user_by_id(
+            user["id"],
+            {"user_metadata": {"full_name": full_name}},
+        )
+        return {
+            "id": user["id"],
+            "email": user.get("email"),
+            "user_metadata": {"full_name": full_name},
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not update profile: {e}")
 
 
 @router.post("/forgot-password")

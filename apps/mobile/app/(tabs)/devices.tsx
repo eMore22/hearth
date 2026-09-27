@@ -1,263 +1,74 @@
-import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  StatusBar, RefreshControl, ActivityIndicator, Alert,
-} from 'react-native'
-import { useEffect, useState } from 'react'
-import { useAutomationStore, HADevice } from '../../src/stores/automationStore'
-import { LinearGradient } from 'expo-linear-gradient'
-import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAutomationStore, HADevice } from '../../src/stores/automationStore';
+import { H, HearthDesign } from '../../src/theme/hearthDesign';
+import { ScreenHeader } from '../../src/components/ui/PremiumKit';
 
-const NAVY    = '#0A1628'
-const NAVY_LIGHT = '#112240'
-const SURFACE = '#162035'
-const WARNING = '#FFD166'
-const WHITE   = '#F8FAFF'
-const MUTED   = '#8899AA'
-const SUCCESS = '#06D6A0'
-const DANGER  = '#FF6B6B'
-const ACCENT  = '#4FC3F7'
-
-// Maps HA domain to an icon + friendly category label
 const DOMAIN_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
-  switch:         { icon: 'toggle-outline',     label: 'Switch' },
-  light:          { icon: 'bulb-outline',       label: 'Light' },
-  lock:           { icon: 'lock-closed-outline', label: 'Lock' },
-  cover:          { icon: 'home-outline',       label: 'Cover / Door' },
-  fan:            { icon: 'reorder-three-outline', label: 'Fan' },
-  climate:        { icon: 'thermometer-outline', label: 'Climate' },
-  sensor:         { icon: 'pulse-outline',       label: 'Sensor' },
-  binary_sensor:  { icon: 'radio-button-on-outline', label: 'Sensor' },
-  input_boolean:  { icon: 'toggle-outline',      label: 'Toggle' },
-  water_heater:   { icon: 'water-outline',       label: 'Water Heater' },
+  switch: { icon: 'toggle-outline', label: 'Switch' }, light: { icon: 'bulb-outline', label: 'Light' }, lock: { icon: 'lock-closed-outline', label: 'Lock' },
+  cover: { icon: 'home-outline', label: 'Cover / Door' }, fan: { icon: 'reorder-three-outline', label: 'Fan' }, climate: { icon: 'thermometer-outline', label: 'Climate' },
+  sensor: { icon: 'pulse-outline', label: 'Sensor' }, binary_sensor: { icon: 'radio-button-on-outline', label: 'Sensor' }, input_boolean: { icon: 'toggle-outline', label: 'Toggle' }, water_heater: { icon: 'water-outline', label: 'Water Heater' },
 };
-
-function getDomainConfig(domain: string) {
-  return DOMAIN_CONFIG[domain] || { icon: 'hardware-chip-outline' as const, label: domain };
-}
-
-function isOnState(state: string) {
-  return ['on', 'open', 'unlocked', 'home', 'true'].includes((state || '').toLowerCase());
-}
+const cfg = (domain: string) => DOMAIN_CONFIG[domain] || { icon: 'hardware-chip-outline' as const, label: domain };
+const isOnState = (state: string) => ['on','open','unlocked','home','true'].includes((state || '').toLowerCase());
 
 export default function DevicesScreen() {
+  const insets = useSafeAreaInsets();
   const { devices, status, fetchDevices, fetchStatus, executeAction } = useAutomationStore();
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'actionable' | 'sensors'>('all');
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  const load = async () => {
-    setRefreshing(true);
-    await Promise.all([fetchDevices(), fetchStatus()]);
-    setRefreshing(false);
-  };
+  const load = async () => { setRefreshing(true); await Promise.all([fetchDevices(), fetchStatus()]); setRefreshing(false); };
+  useEffect(() => { load(); }, []);
 
   const handleToggle = async (device: HADevice) => {
-    const isOn = isOnState(device.last_state);
-    const action = isOn ? 'turn_off' : 'turn_on';
-    const key = `${device.entity_id}_${action}`;
-    setActionLoading(key);
-    try {
-      await executeAction(device.entity_id, action);
-    } catch (err: any) {
-      Alert.alert('Action failed', err.message || 'Could not reach Home Assistant.');
-    } finally {
-      setActionLoading(null);
-    }
+    const action = isOnState(device.last_state) ? 'turn_off' : 'turn_on';
+    setActionLoading(device.entity_id);
+    try { await executeAction(device.entity_id, action); }
+    catch (e: any) { Alert.alert('Action failed', e?.message || 'Could not reach Home Assistant.'); }
+    finally { setActionLoading(null); }
   };
 
-  const filteredDevices = devices.filter((d) => {
-    if (filter === 'actionable') return d.is_actionable;
-    if (filter === 'sensors') return !d.is_actionable;
-    return true;
-  });
-
-  // Group by area for readability
-  const grouped = filteredDevices.reduce((acc: Record<string, HADevice[]>, d) => {
-    const area = d.area || 'Unassigned';
-    if (!acc[area]) acc[area] = [];
-    acc[area].push(d);
-    return acc;
-  }, {});
-
-  if (!status.connected) {
-    return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" />
-        <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color={WHITE} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Smart Home Devices</Text>
-          <View style={{ width: 32 }} />
-        </LinearGradient>
-        <View style={styles.emptyState}>
-          <Ionicons name="home-outline" size={48} color={MUTED} />
-          <Text style={styles.emptyTitle}>Not connected yet</Text>
-          <Text style={styles.emptySubtitle}>Connect Home Assistant from your profile to see devices here.</Text>
-          <TouchableOpacity style={styles.connectBtn} onPress={() => router.push('/(tabs)/profile')}>
-            <Text style={styles.connectBtnText}>Go to Profile</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
+  const filtered = devices.filter(d => filter === 'all' ? true : filter === 'actionable' ? d.is_actionable : !d.is_actionable);
+  const grouped = filtered.reduce((acc: Record<string, HADevice[]>, d) => { const area = d.area || 'Unassigned'; (acc[area] ||= []).push(d); return acc; }, {});
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-
-      <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color={WHITE} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Smart Home Devices</Text>
-          <View style={{ width: 32 }} />
-        </View>
-        <Text style={styles.headerSub}>{devices.length} devices · Synced from Home Assistant</Text>
-
-        {/* Filter chips */}
-        <View style={styles.filterRow}>
-          {(['all', 'actionable', 'sensors'] as const).map((f) => (
-            <TouchableOpacity
-              key={f}
-              style={[styles.filterChip, filter === f && styles.filterChipActive]}
-              onPress={() => setFilter(f)}
-            >
-              <Text style={[styles.filterChipText, filter === f && styles.filterChipTextActive]}>
-                {f === 'all' ? 'All' : f === 'actionable' ? 'Controllable' : 'Sensors'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </LinearGradient>
-
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={ACCENT} />}
-      >
-        {Object.keys(grouped).length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="search-outline" size={40} color={MUTED} />
-            <Text style={styles.emptyTitle}>No devices in this filter</Text>
-          </View>
-        ) : (
-          Object.entries(grouped).map(([area, areaDevices]) => (
-            <View key={area} style={styles.section}>
-              <Text style={styles.sectionTitle}>{area}</Text>
-              {areaDevices.map((device) => {
-                const cfg = getDomainConfig(device.domain);
-                const isOn = isOnState(device.last_state);
-                const toggleKey = `${device.entity_id}_${isOn ? 'turn_off' : 'turn_on'}`;
-                const isLoading = actionLoading === toggleKey;
-
-                return (
-                  <View key={device.entity_id} style={styles.deviceCard}>
-                    <View style={[styles.deviceIconBox, isOn && styles.deviceIconBoxActive]}>
-                      <Ionicons name={cfg.icon} size={20} color={isOn ? SUCCESS : MUTED} />
-                    </View>
-                    <View style={styles.deviceInfo}>
-                      <Text style={styles.deviceName} numberOfLines={1}>{device.friendly_name}</Text>
-                      <Text style={styles.deviceMeta}>
-                        {cfg.label} · {device.last_state || 'unknown'}
-                      </Text>
-                    </View>
-
-                    {device.is_actionable ? (
-                      isLoading ? (
-                        <ActivityIndicator size="small" color={ACCENT} />
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.toggleBtn, isOn && styles.toggleBtnActive]}
-                          onPress={() => handleToggle(device)}
-                        >
-                          <View style={[styles.toggleDot, isOn && styles.toggleDotActive]} />
-                        </TouchableOpacity>
-                      )
-                    ) : (
-                      <View style={[styles.stateBadge, isOn && styles.stateBadgeActive]}>
-                        <Text style={[styles.stateBadgeText, isOn && styles.stateBadgeTextActive]}>
-                          {device.last_state || '—'}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
+      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={H.purple} />} contentContainerStyle={{ paddingTop: Math.max(insets.top, 10), paddingBottom: 42 }} showsVerticalScrollIndicator={false}>
+        <ScreenHeader title="Smart home" subtitle="Devices connected through Home Assistant." />
+        <View style={styles.body}>
+          {!status.connected ? (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIcon}><Ionicons name="home-outline" size={29} color={H.blue} /></View>
+              <Text style={styles.emptyTitle}>Connect Home Assistant</Text>
+              <Text style={styles.emptySub}>Connect from Integrations, then Hearth will sync supported devices and sensors here.</Text>
+              <TouchableOpacity style={styles.connect} onPress={() => router.push('/(tabs)/integrations')}><Text style={styles.connectText}>Open integrations</Text></TouchableOpacity>
             </View>
-          ))
-        )}
-        <View style={{ height: 40 }} />
+          ) : (
+            <>
+              <View style={styles.statusCard}><View style={styles.statusIcon}><Ionicons name="checkmark-circle" size={22} color={H.green} /></View><View style={styles.flex}><Text style={styles.statusTitle}>Home Assistant connected</Text><Text style={styles.statusSub}>{devices.length} devices synced</Text></View><TouchableOpacity onPress={() => router.push('/(tabs)/integrations')}><Text style={styles.manage}>Manage</Text></TouchableOpacity></View>
+              <View style={styles.filterRow}>{(['all','actionable','sensors'] as const).map(f => <TouchableOpacity key={f} style={[styles.filter, filter === f && styles.filterActive]} onPress={() => setFilter(f)}><Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f === 'all' ? 'All' : f === 'actionable' ? 'Controllable' : 'Sensors'}</Text></TouchableOpacity>)}</View>
+              {Object.keys(grouped).length === 0 ? <Text style={styles.noResults}>No devices in this filter.</Text> : Object.entries(grouped).map(([area, areaDevices]) => (
+                <View key={area} style={styles.section}><Text style={styles.sectionTitle}>{area}</Text>{areaDevices.map(device => {
+                  const c = cfg(device.domain); const on = isOnState(device.last_state);
+                  return <View key={device.entity_id} style={styles.deviceCard}><View style={[styles.deviceIcon, { backgroundColor: on ? H.greenBg : '#F4F3F3' }]}><Ionicons name={c.icon} size={20} color={on ? H.green : H.muted} /></View><View style={styles.flex}><Text style={styles.deviceName} numberOfLines={1}>{device.friendly_name}</Text><Text style={styles.deviceMeta}>{c.label} · {device.last_state || 'unknown'}</Text></View>{device.is_actionable ? (actionLoading === device.entity_id ? <ActivityIndicator color={H.purple} /> : <TouchableOpacity style={[styles.toggle, on && styles.toggleOn]} onPress={() => handleToggle(device)}><View style={[styles.dot, on && styles.dotOn]} /></TouchableOpacity>) : <View style={styles.statePill}><Text style={styles.stateText}>{device.last_state || '—'}</Text></View>}</View>;
+                })}</View>
+              ))}
+            </>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: NAVY },
-  header:    { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 18 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backBtn:   { padding: 6 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: WHITE },
-  headerSub:   { fontSize: 12, color: MUTED, marginTop: 8, marginLeft: 4 },
-  filterRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  filterChip: {
-    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-  },
-  filterChipActive: { backgroundColor: 'rgba(255,209,102,0.15)', borderColor: WARNING },
-  filterChipText:   { fontSize: 12, color: MUTED, fontWeight: '600' },
-  filterChipTextActive: { color: WARNING },
-  scroll:  { flex: 1 },
-  section: { paddingHorizontal: 20, marginTop: 20 },
-  sectionTitle: {
-    fontSize: 11, fontWeight: '700', color: MUTED,
-    letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10,
-  },
-  deviceCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: SURFACE, borderRadius: 14, padding: 14,
-    marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', gap: 12,
-  },
-  deviceIconBox: {
-    width: 40, height: 40, borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  deviceIconBoxActive: { backgroundColor: 'rgba(6,214,160,0.12)' },
-  deviceInfo: { flex: 1 },
-  deviceName: { fontSize: 14, fontWeight: '600', color: WHITE, marginBottom: 2 },
-  deviceMeta: { fontSize: 12, color: MUTED, textTransform: 'capitalize' },
-  toggleBtn: {
-    width: 46, height: 26, borderRadius: 13,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center', paddingHorizontal: 3,
-  },
-  toggleBtnActive: { backgroundColor: 'rgba(6,214,160,0.3)' },
-  toggleDot: {
-    width: 20, height: 20, borderRadius: 10, backgroundColor: MUTED,
-  },
-  toggleDotActive: { backgroundColor: SUCCESS, alignSelf: 'flex-end' },
-  stateBadge: {
-    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  stateBadgeActive: { backgroundColor: 'rgba(6,214,160,0.12)' },
-  stateBadgeText: { fontSize: 11, color: MUTED, fontWeight: '600', textTransform: 'capitalize' },
-  stateBadgeTextActive: { color: SUCCESS },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 10 },
-  emptyTitle: { fontSize: 17, fontWeight: '600', color: WHITE, marginTop: 6 },
-  emptySubtitle: { fontSize: 13, color: MUTED, textAlign: 'center', lineHeight: 19 },
-  connectBtn: {
-    backgroundColor: WARNING, borderRadius: 12, paddingHorizontal: 24,
-    paddingVertical: 12, marginTop: 16,
-  },
-  connectBtnText: { color: NAVY, fontWeight: '700', fontSize: 14 },
+  root:{flex:1,backgroundColor:H.paper},body:{paddingHorizontal:18},flex:{flex:1,minWidth:0},emptyCard:{backgroundColor:'#fff',borderWidth:1,borderColor:H.lineSoft,borderRadius:24,padding:24,alignItems:'center',...HearthDesign.shadow.card},emptyIcon:{width:62,height:62,borderRadius:20,backgroundColor:H.blueBg,alignItems:'center',justifyContent:'center'},emptyTitle:{color:H.navy,fontSize:18,fontWeight:'800',marginTop:13},emptySub:{color:H.muted,fontSize:12.5,lineHeight:19,textAlign:'center',marginTop:5,maxWidth:300},connect:{minHeight:48,paddingHorizontal:22,borderRadius:15,backgroundColor:H.navy,alignItems:'center',justifyContent:'center',marginTop:17},connectText:{color:'#fff',fontSize:13,fontWeight:'800'},
+  statusCard:{minHeight:72,borderRadius:20,backgroundColor:H.greenBg,borderWidth:1,borderColor:'#D5EEDC',paddingHorizontal:14,flexDirection:'row',alignItems:'center',gap:11},statusIcon:{width:42,height:42,borderRadius:14,backgroundColor:'#fff',alignItems:'center',justifyContent:'center'},statusTitle:{color:H.navy,fontSize:13.5,fontWeight:'800'},statusSub:{color:H.muted,fontSize:11,marginTop:2},manage:{color:H.green,fontSize:11.5,fontWeight:'800'},
+  filterRow:{flexDirection:'row',gap:8,marginTop:16,marginBottom:4},filter:{paddingHorizontal:13,paddingVertical:8,borderRadius:999,backgroundColor:'#F1F0EF'},filterActive:{backgroundColor:H.navy},filterText:{color:H.muted,fontSize:11.5,fontWeight:'700'},filterTextActive:{color:'#fff'},section:{marginTop:18},sectionTitle:{color:H.muted,fontSize:10.5,fontWeight:'900',letterSpacing:1.1,textTransform:'uppercase',marginBottom:8},deviceCard:{minHeight:72,borderRadius:19,backgroundColor:'#fff',borderWidth:1,borderColor:H.lineSoft,paddingHorizontal:12,marginBottom:8,flexDirection:'row',alignItems:'center',gap:11,...HearthDesign.shadow.card},deviceIcon:{width:43,height:43,borderRadius:14,alignItems:'center',justifyContent:'center'},deviceName:{color:H.navy,fontSize:13.5,fontWeight:'800'},deviceMeta:{color:H.muted,fontSize:10.8,marginTop:2,textTransform:'capitalize'},toggle:{width:44,height:26,borderRadius:13,backgroundColor:'#E6E4E2',paddingHorizontal:3,justifyContent:'center'},toggleOn:{backgroundColor:'#AEE2C5'},dot:{width:20,height:20,borderRadius:10,backgroundColor:'#fff',shadowColor:'#000',shadowOpacity:0.08,shadowRadius:3,elevation:1},dotOn:{alignSelf:'flex-end',backgroundColor:H.green},statePill:{paddingHorizontal:9,paddingVertical:6,borderRadius:999,backgroundColor:'#F2F1F0'},stateText:{color:H.muted,fontSize:10,fontWeight:'800',textTransform:'capitalize'},noResults:{color:H.muted,textAlign:'center',marginTop:30},
 });

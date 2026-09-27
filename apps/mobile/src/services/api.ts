@@ -50,6 +50,8 @@ export const authService = {
     api.post('/api/auth/forgot-password', { email }),
   resetPassword: (email: string, token: string, newPassword: string) =>
     api.post('/api/auth/reset-password', { email, token, new_password: newPassword }),
+  updateProfile: (fullName: string) =>
+    api.patch('/api/auth/profile', { full_name: fullName }),
 };
 
 export const householdService = {
@@ -59,6 +61,7 @@ export const householdService = {
   update: (householdId: string, data: { name?: string; address?: string; country?: string; currency?: string; timezone?: string }) =>
     api.patch(`/api/household/${householdId}`, data),
   getMembers: () => api.get('/api/household/members'),
+  inviteMember: (email: string, role = 'member') => api.post('/api/household/invite', { email, role }),
 };
 
 export const documentService = {
@@ -163,6 +166,7 @@ export const automationService = {
     }),
   getDevices: () => api.get('/api/automation/devices'),
   getEvents: (limit = 20) => api.get(`/api/automation/events?limit=${limit}`),
+  disconnect: () => api.delete('/api/automation/disconnect'),
   executeAction: (entityId: string, action: string, payload: any = {}) =>
     api.post('/api/automation/action', { entity_id: entityId, action, payload }),
 };
