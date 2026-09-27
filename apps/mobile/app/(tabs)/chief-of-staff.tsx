@@ -15,6 +15,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore';
+import { useDocumentStore } from '../../src/stores/documentStore';
+import { useBillStore } from '../../src/stores/billStore';
+import { useGroceryStore } from '../../src/stores/groceryStore';
+import { useMaintenanceStore } from '../../src/stores/maintenanceStore';
+import { useHealthStore } from '../../src/stores/healthStore';
+import { useTaskStore } from '../../src/stores/taskStore';
+import { useAutomationStore } from '../../src/stores/automationStore';
 import { H, HearthDesign } from '../../src/theme/hearthDesign';
 
 const starters = [
@@ -28,16 +35,50 @@ export default function ChiefScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const { messages, isTyping, fetchHistory, sendMessage, clearMessages } = useChiefOfStaffStore();
+  const { documents, alerts, fetchDocuments, fetchAlerts } = useDocumentStore();
+  const { bills, monthlyReport, fetchBills, fetchMonthlyReport } = useBillStore();
+  const { inventory, mealPlan, budget, fetchInventory, fetchBudget } = useGroceryStore();
+  const { tasks: maintenanceTasks, fetchTasks: fetchMaintenanceTasks } = useMaintenanceStore();
+  const { medications, triageHistory, fetchMedications } = useHealthStore();
+  const { tasks: householdTasks, fetchTasks: fetchHouseholdTasks } = useTaskStore();
+  const { events: haEvents, devices: haDevices, status: haStatus, fetchEvents: fetchHAEvents, fetchStatus: fetchHAStatus, fetchDevices: fetchHADevices } = useAutomationStore();
   const [text, setText] = useState('');
 
-  useEffect(() => { fetchHistory(); }, []);
+  useEffect(() => {
+    fetchHistory();
+    fetchDocuments(); fetchAlerts();
+    fetchBills(); fetchMonthlyReport().catch(() => undefined);
+    fetchInventory(); fetchBudget();
+    fetchMaintenanceTasks(); fetchMedications(); fetchHouseholdTasks();
+    fetchHAEvents(); fetchHAStatus(); fetchHADevices();
+  }, []);
   useEffect(() => { const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60); return () => clearTimeout(t); }, [messages.length, isTyping]);
+
+  const buildContext = () => ({
+    documents,
+    alerts,
+    bills,
+    monthlyReport,
+    tasks: maintenanceTasks,
+    inventory,
+    meal_plan: mealPlan,
+    grocery_budget: budget,
+    medications,
+    household_tasks: (householdTasks || []).filter((t: any) => !t.is_completed).map((t: any) => ({ title: t.title, due_at: t.due_at })),
+    recent_health_checks: (triageHistory || []).slice(0, 3).map((t: any) => ({ symptoms: t.symptoms, level: t.result?.triage_level, date: t.date })),
+    smart_home_connected: haStatus.connected,
+    smart_home_device_count: haStatus.device_count || haDevices.length,
+    smart_home_alerts: (haEvents || []).filter((e: any) => e.alert_sent && e.attributes?.chief_message).slice(0, 5).map((e: any) => ({
+      entity: e.attributes?.friendly_name || e.entity_id, message: e.attributes?.chief_message, new_state: e.new_state, device_class: e.attributes?.device_class, time: e.created_at,
+    })),
+    ha_devices: haDevices,
+  });
 
   const send = async (value = text) => {
     const message = value.trim();
     if (!message || isTyping) return;
     setText('');
-    try { await sendMessage(message); }
+    try { await sendMessage(message, buildContext()); }
     catch (e: any) { Alert.alert('Hearth could not reply', e?.message || 'Please try again.'); }
   };
 
@@ -79,6 +120,7 @@ export default function ChiefScreen() {
                 {msg.role !== 'user' && <View style={styles.assistantAvatar}><Ionicons name="sparkles" size={14} color={H.purple} /></View>}
                 <View style={[styles.message, msg.role === 'user' ? styles.userMessage : styles.assistantMessage]}>
                   <Text style={[styles.messageText, msg.role === 'user' ? styles.userText : styles.assistantText]}>{msg.content}</Text>
+                  {!!msg.action_result && <View style={styles.actionResult}><Ionicons name={msg.action_result.status === 'sent' ? 'checkmark-circle' : 'alert-circle'} size={14} color={msg.action_result.status === 'sent' ? H.green : H.red} /><Text style={[styles.actionResultText, { color: msg.action_result.status === 'sent' ? H.green : H.red }]}>{msg.action_result.status === 'sent' ? 'Action completed' : 'Action failed'}</Text></View>}
                 </View>
                 {!!msg.proactive_suggestions?.length && (
                   <View style={styles.suggestionList}>
@@ -109,6 +151,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 }, content: { flexGrow: 1, paddingHorizontal: 16, paddingBottom: 20 },
   hero: { flex: 1, minHeight: 560, alignItems: 'center', justifyContent: 'center', paddingVertical: 30 }, orb: { width: 84, height: 84, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 22, ...HearthDesign.shadow.floating }, hello: { color: H.navy, fontSize: 24, fontWeight: '900', textAlign: 'center', letterSpacing: -0.4 }, sub: { color: H.muted, fontSize: 12.5, lineHeight: 19, textAlign: 'center', maxWidth: 300, marginTop: 8 }, starters: { width: '100%', marginTop: 24, gap: 8 }, starter: { minHeight: 48, borderRadius: 17, borderWidth: 1, borderColor: H.lineSoft, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, ...HearthDesign.shadow.card }, starterText: { color: H.navy, fontSize: 12.5, fontWeight: '700' },
   thread: { paddingTop: 16 }, messageWrap: { marginBottom: 14 }, userWrap: { alignItems: 'flex-end' }, assistantWrap: { alignItems: 'flex-start' }, assistantAvatar: { width: 28, height: 28, borderRadius: 10, backgroundColor: H.violetBg, alignItems: 'center', justifyContent: 'center', marginBottom: 5 }, message: { maxWidth: '88%', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 11 }, userMessage: { backgroundColor: H.purple, borderBottomRightRadius: 7 }, assistantMessage: { backgroundColor: '#fff', borderWidth: 1, borderColor: H.lineSoft, borderBottomLeftRadius: 7, ...HearthDesign.shadow.card }, messageText: { fontSize: 13.5, lineHeight: 20 }, userText: { color: '#fff' }, assistantText: { color: H.navy }, typingRow: { alignItems: 'flex-start' }, typing: { color: H.muted, fontSize: 12.5 },
+  actionResult: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 5 }, actionResultText: { fontSize: 10.5, fontWeight: '800' },
   suggestionList: { marginTop: 7, gap: 6, alignItems: 'flex-start' }, suggestion: { borderRadius: 999, borderWidth: 1, borderColor: '#E3DEFF', backgroundColor: H.violetBg, paddingHorizontal: 12, paddingVertical: 7 }, suggestionText: { color: H.purple, fontSize: 11, fontWeight: '700' },
   composerWrap: { paddingHorizontal: 12, paddingTop: 8, backgroundColor: H.paper, borderTopWidth: 1, borderTopColor: H.lineSoft }, composer: { minHeight: 57, borderRadius: 28, backgroundColor: '#fff', borderWidth: 1, borderColor: H.line, flexDirection: 'row', alignItems: 'flex-end', paddingLeft: 17, paddingRight: 6, paddingVertical: 5, ...HearthDesign.shadow.card }, input: { flex: 1, maxHeight: 110, minHeight: 43, color: H.navy, fontSize: 14, paddingTop: 11, paddingBottom: 8 }, send: { width: 44, height: 44, borderRadius: 22, backgroundColor: H.purple, alignItems: 'center', justifyContent: 'center' }, sendDisabled: { opacity: 0.38 },
 });

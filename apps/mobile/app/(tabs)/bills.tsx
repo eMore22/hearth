@@ -38,7 +38,7 @@ const metaFor = (category = '', provider = '') => {
 
 export default function BillsScreen() {
   const insets = useSafeAreaInsets();
-  const { bills, monthlyReport, fetchBills, fetchMonthlyReport, createBill, detectUnused } = useBillStore();
+  const { bills, monthlyReport, unusedSubscriptions, fetchBills, fetchMonthlyReport, createBill, deleteBill, detectUnused, generateNegotiationScript } = useBillStore();
   const household = useHouseholdStore(s => s.household);
   const fetchHousehold = useHouseholdStore(s => s.fetchHousehold);
   const [filter, setFilter] = useState('All');
@@ -46,6 +46,8 @@ export default function BillsScreen() {
   const [provider, setProvider] = useState('');
   const [amount, setAmount] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showUnused, setShowUnused] = useState(false);
+  const [negotiation, setNegotiation] = useState<any | null>(null);
 
   useEffect(() => {
     if (!household) fetchHousehold();
@@ -79,7 +81,18 @@ export default function BillsScreen() {
 
   const findUnused = async () => {
     const result = await detectUnused();
-    Alert.alert('Subscription check', result.length ? `${result.length} possible unused subscription${result.length === 1 ? '' : 's'} found.` : 'No obvious unused subscriptions found.');
+    setShowUnused(true);
+    if (!result.length) Alert.alert('Subscription check', 'No obvious unused subscriptions found.');
+  };
+
+  const removeBill = (bill: any) => Alert.alert('Delete bill?', `Remove ${bill.provider} from Hearth?`, [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Delete', style: 'destructive', onPress: async () => { try { await deleteBill(bill.id); } catch (e: any) { Alert.alert('Could not delete', e?.message || 'Please try again.'); } } },
+  ]);
+
+  const getScript = async (provider: string) => {
+    try { const result = await generateNegotiationScript(provider, 'current plan'); setNegotiation(result); }
+    catch (e: any) { Alert.alert('Could not generate script', e?.message || 'Please try again.'); }
   };
 
   return (
@@ -100,6 +113,16 @@ export default function BillsScreen() {
               <Text style={styles.scanSub}>subscriptions</Text>
             </TouchableOpacity>
           </View>
+
+          {showUnused && unusedSubscriptions.length > 0 && (
+            <View style={styles.savingsWrap}>
+              <Text style={styles.savingsTitle}>Potential savings</Text>
+              {unusedSubscriptions.map((sub, index) => <View key={`${sub.provider}-${index}`} style={styles.savingCard}>
+                <View style={styles.flex}><Text style={styles.rowTitle}>{sub.provider}</Text><Text style={styles.rowMeta}>{sub.reason}</Text></View>
+                <View style={styles.savingRight}><Text style={styles.savingAmount}>-{currency}{Number(sub.monthly_savings || 0).toLocaleString()}/mo</Text><TouchableOpacity onPress={() => getScript(sub.provider)}><Text style={styles.scriptLink}>Get script</Text></TouchableOpacity></View>
+              </View>)}
+            </View>
+          )}
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
             {filters.map(f => <TouchableOpacity key={f} onPress={() => setFilter(f)} style={[styles.filterChip, filter === f && styles.filterChipActive]} activeOpacity={0.75}><Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f}</Text></TouchableOpacity>)}
@@ -125,12 +148,16 @@ export default function BillsScreen() {
                   <Text style={styles.rowMeta}>{currency}{Number(bill.amount || 0).toLocaleString()} · {bill.billing_cycle}</Text>
                 </View>
                 <View style={[styles.status, { backgroundColor: categoryFor(bill.category, bill.provider) === 'Subscriptions' ? H.greenBg : '#F0EBFF' }]}><Text style={[styles.statusText, { color: categoryFor(bill.category, bill.provider) === 'Subscriptions' ? H.green : H.purple }]}>Active</Text></View>
-                <Ionicons name="chevron-forward" size={18} color={H.muted2} />
+                <TouchableOpacity onPress={() => removeBill(bill)} hitSlop={8}><Ionicons name="trash-outline" size={18} color={H.red} /></TouchableOpacity>
               </View>
             );
           })}
         </View>
       </ScrollView>
+
+      <Modal visible={!!negotiation} transparent animationType="fade" onRequestClose={() => setNegotiation(null)}>
+        <View style={styles.modalRoot}><TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setNegotiation(null)} /><View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, 18) + 20 }]}><Text style={styles.modalTitle}>Negotiation script</Text><Text style={styles.modalSub}>Use this as a starting point when contacting the provider.</Text><ScrollView style={{ maxHeight: 320 }}><Text style={styles.scriptBody}>{negotiation?.script || negotiation?.opening_line || JSON.stringify(negotiation, null, 2)}</Text></ScrollView><TouchableOpacity style={styles.save} onPress={() => setNegotiation(null)}><Text style={styles.saveText}>Done</Text></TouchableOpacity></View></View>
+      </Modal>
 
       <Modal visible={showAdd} transparent animationType="fade" onRequestClose={() => setShowAdd(false)}>
         <View style={styles.modalRoot}>
@@ -161,6 +188,7 @@ const styles = StyleSheet.create({
   scanIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#EDE6FF', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   scanTitle: { color: H.navy, fontSize: 13.5, fontWeight: '800' },
   scanSub: { color: H.muted, fontSize: 11.5, marginTop: 2 },
+  savingsWrap: { marginTop: 16 }, savingsTitle: { color: H.navy, fontSize: 16, fontWeight: '900', marginBottom: 8 }, savingCard: { minHeight: 72, borderRadius: 18, backgroundColor: '#fff', borderWidth: 1, borderColor: H.lineSoft, padding: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 10 }, savingRight: { alignItems: 'flex-end', maxWidth: 115 }, savingAmount: { color: H.green, fontSize: 11.5, fontWeight: '900' }, scriptLink: { color: H.purple, fontSize: 10.5, fontWeight: '800', marginTop: 6 },
   filters: { gap: 8, paddingVertical: 16 },
   filterChip: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 999, backgroundColor: '#F0F0F1' },
   filterChipActive: { backgroundColor: H.navy },
@@ -186,5 +214,6 @@ const styles = StyleSheet.create({
   modalSub: { color: H.muted, fontSize: 13, marginTop: 4, marginBottom: 18 },
   input: { height: 52, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: H.line, paddingHorizontal: 14, color: H.navy, fontSize: 15, marginBottom: 10 },
   save: { height: 52, borderRadius: 17, backgroundColor: H.purple, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  scriptBody: { color: H.navy, fontSize: 13, lineHeight: 20, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: H.lineSoft, padding: 13 },
   saveText: { color: '#fff', fontWeight: '800', fontSize: 14 },
 });

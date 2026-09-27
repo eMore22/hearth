@@ -1,11 +1,14 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   ImageBackground,
+  Modal,
   RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -19,6 +22,8 @@ import { useBillStore } from '../../src/stores/billStore';
 import { useGroceryStore } from '../../src/stores/groceryStore';
 import { useAutomationStore } from '../../src/stores/automationStore';
 import { useTaskStore } from '../../src/stores/taskStore';
+import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore';
+import type { SuggestedAction } from '../../src/stores/automationStore';
 import { useHouseholdStore } from '../../src/stores/householdStore';
 import { getCurrencySymbol } from '../../src/utils/currency';
 import { H, HearthDesign } from '../../src/theme/hearthDesign';
@@ -44,6 +49,21 @@ const dueLabel = (iso?: string) => {
   return d.toLocaleDateString('en-CA', { day: 'numeric', month: 'short' });
 };
 
+const dueOptions = [
+  { key: 'none', label: 'No due date' },
+  { key: '1hour', label: 'In 1 hour' },
+  { key: 'tonight', label: 'Tonight, 6 PM' },
+  { key: 'tomorrow', label: 'Tomorrow, 9 AM' },
+];
+
+const dueFromOption = (option: string) => {
+  const now = new Date();
+  if (option === '1hour') return new Date(now.getTime() + 3600000).toISOString();
+  if (option === 'tonight') { const d = new Date(now); d.setHours(18,0,0,0); if (d <= now) d.setDate(d.getDate()+1); return d.toISOString(); }
+  if (option === 'tomorrow') { const d = new Date(now); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); return d.toISOString(); }
+  return undefined;
+};
+
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
@@ -52,8 +72,13 @@ export default function Dashboard() {
   const { alerts, fetchAlerts } = useDocumentStore();
   const { bills, fetchBills, fetchMonthlyReport } = useBillStore();
   const { shoppingList, inventory, fetchInventory } = useGroceryStore();
-  const { events, fetchEvents, fetchStatus } = useAutomationStore();
-  const { tasks, fetchTasks, completeTask } = useTaskStore();
+  const { events, fetchEvents, fetchStatus, executeAction } = useAutomationStore();
+  const { tasks, fetchTasks, completeTask, createTask } = useTaskStore();
+  const { dashboardSummary, fetchDashboardSummary } = useChiefOfStaffStore();
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [dueOption, setDueOption] = useState('none');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const load = () => {
     if (!household) fetchHousehold();
@@ -64,6 +89,7 @@ export default function Dashboard() {
     fetchEvents();
     fetchStatus();
     fetchTasks();
+    fetchDashboardSummary().catch(() => undefined);
   };
 
   useEffect(() => { load(); }, []);
@@ -76,6 +102,24 @@ export default function Dashboard() {
   const nextBill = bills.find(b => Number(b.amount || 0) > 0);
   const groceryCount = shoppingList?.total_items || inventory.length;
   const attentionCount = (urgentDoc ? 1 : 0) + (homeEvent ? 1 : 0);
+
+  const addTask = async () => {
+    if (!taskTitle.trim()) { Alert.alert('Task needed', 'Enter what needs doing.'); return; }
+    try {
+      await createTask(taskTitle.trim(), undefined, dueFromOption(dueOption));
+      setTaskTitle(''); setDueOption('none'); setShowAddTask(false);
+    } catch (e: any) { Alert.alert('Could not add task', e?.message || 'Please try again.'); }
+  };
+
+  const runHAAction = async (action: SuggestedAction) => {
+    if (action.action === 'draft_claim') { router.push('/(tabs)/documents'); return; }
+    if (action.action === 'call_emergency') { Alert.alert('Emergency', 'Please call your local emergency services immediately.'); return; }
+    if (!action.entity_id) return;
+    const key = `${action.entity_id}_${action.action}`; setActionLoading(key);
+    try { await executeAction(action.entity_id, action.action); Alert.alert('Done', `${action.label} completed.`); }
+    catch (e: any) { Alert.alert('Action failed', e?.message || 'Please try again.'); }
+    finally { setActionLoading(null); }
+  };
 
   const locationLabel = useMemo(() => {
     const address = household?.address?.trim();
@@ -174,10 +218,22 @@ export default function Dashboard() {
                   <Text style={[styles.miniChipText, { color: H.amber }]}>Detected · just now</Text>
                 </View>
               </View>
-              <View style={[styles.secondaryAction, { backgroundColor: '#F8EAD5' }]}><Text style={[styles.secondaryActionText, { color: '#6F4312' }]}>View</Text></View>
+              {(homeEvent as any).attributes?.suggested_actions?.length ? (
+                <TouchableOpacity style={[styles.secondaryAction, { backgroundColor: '#F8EAD5' }]} onPress={(e) => { e.stopPropagation?.(); runHAAction((homeEvent as any).attributes.suggested_actions[0]); }} disabled={!!actionLoading}>
+                  <Text style={[styles.secondaryActionText, { color: '#6F4312' }]}>{actionLoading ? 'Working…' : (homeEvent as any).attributes.suggested_actions[0].label || 'Take action'}</Text>
+                </TouchableOpacity>
+              ) : <View style={[styles.secondaryAction, { backgroundColor: '#F8EAD5' }]}><Text style={[styles.secondaryActionText, { color: '#6F4312' }]}>View</Text></View>}
               <Ionicons name="chevron-forward" size={18} color={H.muted2} />
             </TouchableOpacity>
           ) : null}
+
+          {!!dashboardSummary?.chief_message && (
+            <TouchableOpacity style={styles.briefCard} onPress={() => router.push('/(tabs)/chief-of-staff')} activeOpacity={0.82}>
+              <View style={styles.briefIcon}><Ionicons name="sparkles" size={17} color={H.purple} /></View>
+              <View style={styles.flex}><Text style={styles.briefLabel}>HEARTH BRIEF</Text><Text style={styles.briefText} numberOfLines={3}>{dashboardSummary.chief_message}</Text></View>
+              <Ionicons name="chevron-forward" size={17} color={H.muted2} />
+            </TouchableOpacity>
+          )}
 
           {attentionCount === 0 && (
             <View style={styles.allClear}>
@@ -188,7 +244,7 @@ export default function Dashboard() {
 
           <View style={[styles.sectionHead, { marginTop: 26 }]}>
             <Text style={styles.sectionTitle}>Today</Text>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/activity')} activeOpacity={0.7}><Text style={styles.viewAll}>View schedule  ›</Text></TouchableOpacity>
+            <View style={styles.todayActions}><TouchableOpacity onPress={() => setShowAddTask(true)} style={styles.addTaskMini}><Ionicons name="add" size={16} color={H.purple} /><Text style={styles.addTaskMiniText}>Task</Text></TouchableOpacity><TouchableOpacity onPress={() => router.push('/(tabs)/activity')} activeOpacity={0.7}><Text style={styles.viewAll}>View schedule  ›</Text></TouchableOpacity></View>
           </View>
 
           <View style={styles.timelineWrap}>
@@ -225,24 +281,32 @@ export default function Dashboard() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.ask} activeOpacity={0.9} onPress={() => router.push('/(tabs)/chief-of-staff')}>
-            <LinearGradient colors={['#0B1738', '#171B50', '#3B1D8B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.askGradient}>
-              <View style={styles.askTop}>
-                <View style={styles.spark}><Ionicons name="sparkles" size={22} color="#C8B9FF" /></View>
-                <View style={styles.flex}><Text style={styles.askTitle}>Ask Hearth</Text><Text style={styles.askSub}>Your household AI — ask anything</Text></View>
+          <TouchableOpacity style={styles.scanCta} activeOpacity={0.9} onPress={() => router.push('/(tabs)/scan')}>
+            <LinearGradient colors={['#0B1738', '#171B50', '#3B1D8B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.scanGradient}>
+              <View style={styles.scanIcon}><Ionicons name="scan-outline" size={27} color="#D9D0FF" /></View>
+              <View style={styles.flex}>
+                <Text style={styles.scanTitle}>Scan anything</Text>
+                <Text style={styles.scanSub}>Passport, bill, receipt, insurance or medical record</Text>
+                <Text style={styles.scanMeta}>Hearth reads it and routes it to the right place.</Text>
               </View>
-              <View style={styles.askInput}>
-                <Text style={styles.askPlaceholder}>What do you need help with?</Text>
-                <View style={styles.send}><Ionicons name="arrow-up" size={20} color="#fff" /></View>
-              </View>
-              <View style={styles.promptRow}>
-                <View style={styles.promptChip}><Ionicons name="calendar-outline" size={12} color="#D6CCFF" /><Text style={styles.promptText}>What needs my attention this week?</Text></View>
-                <View style={styles.promptChip}><Ionicons name="card-outline" size={12} color="#D6CCFF" /><Text style={styles.promptText}>Which bills are due soon?</Text></View>
-              </View>
+              <View style={styles.scanArrow}><Ionicons name="arrow-forward" size={20} color="#fff" /></View>
             </LinearGradient>
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <Modal visible={showAddTask} transparent animationType="fade" onRequestClose={() => setShowAddTask(false)}>
+        <View style={styles.taskModalRoot}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowAddTask(false)} />
+          <View style={styles.taskModalCard}>
+            <Text style={styles.taskModalTitle}>Add household task</Text>
+            <TextInput value={taskTitle} onChangeText={setTaskTitle} placeholder="What needs doing?" placeholderTextColor={H.muted2} style={styles.taskInput} />
+            <Text style={styles.taskLabel}>Due</Text>
+            <View style={styles.dueWrap}>{dueOptions.map(opt => <TouchableOpacity key={opt.key} style={[styles.dueChip, dueOption === opt.key && styles.dueChipActive]} onPress={() => setDueOption(opt.key)}><Text style={[styles.dueChipText, dueOption === opt.key && styles.dueChipTextActive]}>{opt.label}</Text></TouchableOpacity>)}</View>
+            <TouchableOpacity style={styles.taskSave} onPress={addTask}><Text style={styles.taskSaveText}>Add task</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -286,10 +350,14 @@ const styles = StyleSheet.create({
   primaryActionText: { color: '#fff', fontSize: 12.5, fontWeight: '800' },
   secondaryAction: { borderRadius: 999, paddingHorizontal: 17, paddingVertical: 10 },
   secondaryActionText: { fontSize: 12.5, fontWeight: '800' },
+  briefCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F7F4FF', borderWidth: 1, borderColor: '#E7E0FF', borderRadius: 18, padding: 13, marginBottom: 12 },
+  briefIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: H.violetBg, alignItems: 'center', justifyContent: 'center' },
+  briefLabel: { color: H.purple, fontSize: 9.5, fontWeight: '900', letterSpacing: 1.2 }, briefText: { color: H.navy, fontSize: 12.2, lineHeight: 17, marginTop: 3 },
   allClear: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: H.lineSoft, padding: 16 },
   allClearIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: H.greenBg, alignItems: 'center', justifyContent: 'center' },
   allClearTitle: { color: H.navy, fontSize: 14.5, fontWeight: '800' },
   allClearSub: { color: H.muted, fontSize: 12.5, marginTop: 2 },
+  todayActions: { flexDirection: 'row', alignItems: 'center', gap: 10 }, addTaskMini: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, backgroundColor: H.violetBg }, addTaskMiniText: { color: H.purple, fontSize: 11, fontWeight: '800' },
   timelineWrap: { position: 'relative' },
   timelineLine: { position: 'absolute', left: 70, top: 27, bottom: 25, width: 1, backgroundColor: '#E4E8EF' },
   todayRow: { minHeight: 88, backgroundColor: '#fff', borderWidth: 1, borderColor: H.lineSoft, borderRadius: 20, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, ...HearthDesign.shadow.card },
@@ -302,16 +370,12 @@ const styles = StyleSheet.create({
   checkCircle: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.8, borderColor: H.navy },
   softAction: { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 999 },
   softActionText: { fontWeight: '800', fontSize: 12 },
-  ask: { borderRadius: 24, overflow: 'hidden', marginTop: 10, marginBottom: 8, ...HearthDesign.shadow.floating },
-  askGradient: { padding: 15, minHeight: 215 },
-  askTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  spark: { width: 49, height: 49, borderRadius: 16, backgroundColor: 'rgba(130,104,255,0.16)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(210,198,255,0.12)' },
-  askTitle: { color: '#fff', fontFamily: 'serif', fontSize: 24, fontWeight: '700' },
-  askSub: { color: '#9FA9DE', fontSize: 12.5, marginTop: 2 },
-  askInput: { marginTop: 17, height: 57, borderRadius: 28, backgroundColor: 'rgba(255,255,255,0.98)', flexDirection: 'row', alignItems: 'center', paddingLeft: 18, paddingRight: 6 },
-  askPlaceholder: { flex: 1, color: '#7D8597', fontSize: 14 },
-  send: { width: 44, height: 44, borderRadius: 22, backgroundColor: H.purple, alignItems: 'center', justifyContent: 'center' },
-  promptRow: { flexDirection: 'row', gap: 7, marginTop: 11 },
-  promptChip: { flex: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 10, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)', flexDirection: 'row', alignItems: 'center', gap: 5 },
-  promptText: { color: '#D7D9EF', fontSize: 9.5, flex: 1 },
+  scanCta: { borderRadius: 24, overflow: 'hidden', marginTop: 10, marginBottom: 8, ...HearthDesign.shadow.floating },
+  scanGradient: { minHeight: 122, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 13 },
+  scanIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: 'rgba(130,104,255,0.18)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(220,212,255,0.14)' },
+  scanTitle: { color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: -0.3 },
+  scanSub: { color: '#C7CBE7', fontSize: 11.8, lineHeight: 17, marginTop: 3 },
+  scanMeta: { color: '#929CCF', fontSize: 10.3, marginTop: 5 },
+  scanArrow: { width: 42, height: 42, borderRadius: 21, backgroundColor: H.purple, alignItems: 'center', justifyContent: 'center' },
+  taskModalRoot: { flex: 1, backgroundColor: 'rgba(8,12,24,0.4)', justifyContent: 'flex-end', paddingHorizontal: 14 }, taskModalCard: { borderRadius: 28, backgroundColor: H.paper, padding: 20, marginBottom: 20 }, taskModalTitle: { color: H.navy, fontSize: 22, fontWeight: '900', marginBottom: 14 }, taskInput: { height: 52, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: H.line, paddingHorizontal: 14, color: H.navy, fontSize: 15 }, taskLabel: { color: H.muted, fontSize: 11, fontWeight: '800', marginTop: 14, marginBottom: 8 }, dueWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, dueChip: { paddingHorizontal: 11, paddingVertical: 8, borderRadius: 999, backgroundColor: '#F0F0F1' }, dueChipActive: { backgroundColor: H.navy }, dueChipText: { color: H.navy, fontSize: 11, fontWeight: '700' }, dueChipTextActive: { color: '#fff' }, taskSave: { height: 50, borderRadius: 16, backgroundColor: H.purple, alignItems: 'center', justifyContent: 'center', marginTop: 16 }, taskSaveText: { color: '#fff', fontSize: 14, fontWeight: '900' },
 });
