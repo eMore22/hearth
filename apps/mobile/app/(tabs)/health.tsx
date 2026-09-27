@@ -1,169 +1,113 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native'
-import { useState } from 'react'
-import { useHealthStore } from '../../src/stores/healthStore'
-import { LinearGradient } from 'expo-linear-gradient'
-import { Ionicons } from '@expo/vector-icons'
-
-const NAVY = '#0A1628'
-const NAVY_LIGHT = '#112240'
-const SURFACE = '#162035'
-const WHITE = '#F8FAFF'
-const MUTED = '#8899AA'
-const SUCCESS = '#06D6A0'
-const WARNING = '#FF9F1C'
-const DANGER = '#FF6B6B'
-
-const TRIAGE_CONFIG: Record<string, { color: string; bg: string; label: string; icon: string }> = {
-  emergency: { color: DANGER, bg: 'rgba(255,107,107,0.12)', label: 'EMERGENCY', icon: 'warning' },
-  urgent_care: { color: WARNING, bg: 'rgba(255,159,28,0.12)', label: 'URGENT CARE', icon: 'medkit' },
-  gp_visit: { color: '#FFD166', bg: 'rgba(255,209,102,0.12)', label: 'GP VISIT', icon: 'person' },
-  pharmacy: { color: '#4EA8DE', bg: 'rgba(78,168,222,0.12)', label: 'PHARMACY', icon: 'medical' },
-  home_care: { color: SUCCESS, bg: 'rgba(6,214,160,0.12)', label: 'HOME CARE', icon: 'home' },
-}
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHealthStore } from '../../src/stores/healthStore';
+import { H, HearthDesign } from '../../src/theme/hearthDesign';
+import { EmptyMessage, IconBadge, ScreenHeader } from '../../src/components/ui/PremiumKit';
 
 export default function HealthScreen() {
-  const { triageHistory = [], isLoading, triageSymptoms } = useHealthStore()
-  const [symptoms, setSymptoms] = useState('')
-  const [lastTriage, setLastTriage] = useState<any>(null)
+  const insets = useSafeAreaInsets();
+  const { medications, triageHistory, fetchMedications, triageSymptoms, isLoading } = useHealthStore();
+  const [showTriage, setShowTriage] = useState(false);
+  const [symptoms, setSymptoms] = useState('');
 
-  const handleTriage = async () => {
-    if (!symptoms.trim()) return
+  useEffect(() => { fetchMedications(); }, []);
+
+  const triage = async () => {
+    if (!symptoms.trim()) return;
     try {
-      const result = await triageSymptoms(symptoms)
-      setLastTriage(result)
-      setSymptoms('')
-    } catch { Alert.alert('Error', 'Could not complete triage. Please try again.') }
-  }
-
-  const cfg = lastTriage ? (TRIAGE_CONFIG[lastTriage.triage_level] || TRIAGE_CONFIG.home_care) : null
+      const result = await triageSymptoms(symptoms.trim());
+      setShowTriage(false);
+      setSymptoms('');
+      Alert.alert('Hearth health guidance', `${result.recommendation}\n\n${result.disclaimer}`);
+    } catch (e: any) {
+      Alert.alert('Could not complete triage', e?.message || 'Please try again.');
+    }
+  };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
-          <Text style={styles.headerLabel}>WELLNESS</Text>
-          <Text style={styles.headerTitle}>Health Triage</Text>
-          <View style={styles.disclaimer}>
-            <Ionicons name="information-circle-outline" size={14} color={MUTED} />
-            <Text style={styles.disclaimerText}>For informational purposes only. Always consult a healthcare professional.</Text>
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
+        <ScreenHeader title="Family Health" subtitle="Your household health in one place." />
+        <View style={styles.body}>
+          <View style={styles.notice}>
+            <Ionicons name="information-circle-outline" size={18} color={H.muted} />
+            <Text style={styles.noticeText}>For informational purposes only. Always consult a healthcare professional.</Text>
           </View>
-        </LinearGradient>
 
-        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-
-          {lastTriage && cfg && (
-            <View style={styles.section}>
-              <View style={[styles.triageCard, { backgroundColor: cfg.bg, borderColor: cfg.color + '33' }]}>
-                <View style={styles.triageHeader}>
-                  <View style={[styles.triageIconBox, { backgroundColor: cfg.color + '22' }]}>
-                    <Ionicons name={cfg.icon as any} size={20} color={cfg.color} />
-                  </View>
-                  <Text style={[styles.triageLevel, { color: cfg.color }]}>{cfg.label}</Text>
-                </View>
-                <Text style={styles.triageRec}>{lastTriage.recommendation}</Text>
-                {lastTriage.home_care_tips?.length > 0 && (
-                  <View style={styles.tipsBox}>
-                    <Text style={styles.tipsTitle}>Home care / first aid</Text>
-                    {lastTriage.home_care_tips.map((tip: string, i: number) => (
-                      <Text key={i} style={styles.tip}>• {tip}</Text>
-                    ))}
-                  </View>
-                )}
-                {lastTriage.red_flags?.length > 0 && (
-                  <View style={styles.redFlagsBox}>
-                    <Text style={styles.redFlagsTitle}>⚠ Seek immediate care if you notice:</Text>
-                    {lastTriage.red_flags.map((flag: string, i: number) => (
-                      <Text key={i} style={styles.redFlag}>• {flag}</Text>
-                    ))}
-                  </View>
-                )}
-                {lastTriage.suggested_otc && (
-                  <Text style={styles.otcText}>Suggested OTC: {lastTriage.suggested_otc}</Text>
-                )}
-                {lastTriage.disclaimer && <Text style={styles.triageDisclaimer}>{lastTriage.disclaimer}</Text>}
-              </View>
+          <TouchableOpacity style={styles.triageCard} onPress={() => setShowTriage(true)} activeOpacity={0.84}>
+            <IconBadge icon="heart-outline" bg={H.redIcon} color={H.red} size={52} />
+            <View style={styles.flex}>
+              <Text style={styles.eyebrow}>HEALTH TRIAGE</Text>
+              <Text style={styles.triageTitle}>Describe symptoms</Text>
+              <Text style={styles.triageSub}>Get a structured recommendation for what to do next.</Text>
             </View>
-          )}
+            <Ionicons name="chevron-forward" size={18} color={H.muted2} />
+          </TouchableOpacity>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Describe Symptoms</Text>
-            <View style={styles.inputCard}>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., '6-year-old with fever 101°F for 2 days'"
-                placeholderTextColor={MUTED}
-                value={symptoms}
-                onChangeText={setSymptoms}
-                multiline
-              />
-              <TouchableOpacity
-                style={[styles.triageBtn, (!symptoms.trim() || isLoading) && styles.triageBtnDisabled]}
-                onPress={handleTriage}
-                disabled={!symptoms.trim() || isLoading}
-              >
-                <Text style={styles.triageBtnText}>{isLoading ? 'Analyzing...' : 'Get Triage Recommendation'}</Text>
-              </TouchableOpacity>
-            </View>
+          <Text style={styles.sectionTitle}>Quick overview</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.stat}><Text style={styles.statValue}>{medications.length}</Text><Text style={styles.statLabel}>Medications</Text></View>
+            <View style={styles.stat}><Text style={styles.statValue}>{triageHistory.length}</Text><Text style={styles.statLabel}>Recent triage</Text></View>
+            <View style={styles.stat}><Text style={[styles.statValue, { color: H.green }]}>✓</Text><Text style={styles.statLabel}>Monitoring</Text></View>
           </View>
+
+          <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Medications</Text><TouchableOpacity><Text style={styles.sectionMeta}>Manage</Text></TouchableOpacity></View>
+          {medications.length === 0 ? <EmptyMessage icon="medical-outline" title="No medications added" subtitle="Health information you add will stay organised here." /> : medications.map((med, index) => (
+            <View key={med.id || `${med.name}-${index}`} style={styles.row}>
+              <IconBadge icon="medical-outline" bg={H.redBg} color={H.red} size={44} />
+              <View style={styles.flex}><Text style={styles.rowTitle}>{med.name}</Text><Text style={styles.rowMeta}>{med.dosage} · {med.frequency}</Text></View>
+              <Ionicons name="chevron-forward" size={18} color={H.muted2} />
+            </View>
+          ))}
 
           {triageHistory.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Recent Checks</Text>
-              {triageHistory.slice(0, 5).map((item: any, i: number) => {
-                const itemCfg = TRIAGE_CONFIG[item.result?.triage_level] || TRIAGE_CONFIG.home_care
-                return (
-                  <View key={i} style={styles.historyCard}>
-                    <View style={[styles.historyDot, { backgroundColor: itemCfg.color }]} />
-                    <View style={styles.historyInfo}>
-                      <Text style={styles.historyDate}>{new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
-                      <Text style={styles.historySymptoms} numberOfLines={1}>{item.symptoms}</Text>
-                      <Text style={[styles.historyLevel, { color: itemCfg.color }]}>{item.result?.triage_level?.replace('_', ' ')}</Text>
-                    </View>
-                  </View>
-                )
-              })}
-            </View>
+            <>
+              <Text style={styles.sectionTitle}>Recent health activity</Text>
+              {triageHistory.slice(0, 3).map((item, index) => (
+                <View key={`${item.date}-${index}`} style={styles.row}>
+                  <IconBadge icon="pulse-outline" bg={H.violetBg} color={H.violet} size={44} />
+                  <View style={styles.flex}><Text style={styles.rowTitle} numberOfLines={1}>{item.symptoms}</Text><Text style={styles.rowMeta}>{item.result.triage_level.replace('_', ' ')} · {new Date(item.date).toLocaleDateString('en-CA', { day: 'numeric', month: 'short' })}</Text></View>
+                  <Ionicons name="chevron-forward" size={18} color={H.muted2} />
+                </View>
+              ))}
+            </>
           )}
-          <View style={{ height: 40 }} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </View>
+      </ScrollView>
+
+      <Modal visible={showTriage} transparent animationType="fade" onRequestClose={() => setShowTriage(false)}>
+        <View style={styles.modalRoot}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowTriage(false)} />
+          <View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, 18) + 20 }]}>
+            <Text style={styles.modalTitle}>Describe symptoms</Text>
+            <Text style={styles.modalSub}>Include age, symptoms, how long they’ve lasted, and anything else that may be relevant.</Text>
+            <TextInput value={symptoms} onChangeText={setSymptoms} placeholder="e.g. 6-year-old with fever for 2 days" placeholderTextColor={H.muted2} multiline style={styles.textarea} />
+            <TouchableOpacity style={[styles.save, isLoading && { opacity: 0.6 }]} onPress={triage} disabled={isLoading}><Text style={styles.saveText}>{isLoading ? 'Checking…' : 'Get triage recommendation'}</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: NAVY },
-  header: { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 20 },
-  headerLabel: { fontSize: 11, color: MUTED, letterSpacing: 2, marginBottom: 4 },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: WHITE, marginBottom: 12 },
-  disclaimer: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 10 },
-  disclaimerText: { flex: 1, fontSize: 12, color: MUTED, lineHeight: 17 },
-  scroll: { flex: 1 },
-  section: { paddingHorizontal: 20, marginTop: 24 },
-  sectionTitle: { fontSize: 11, fontWeight: '600', color: MUTED, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12 },
-  triageCard: { borderRadius: 16, padding: 18, borderWidth: 1 },
-  triageHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
-  triageIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  triageLevel: { fontSize: 14, fontWeight: '800', letterSpacing: 0.5 },
-  triageRec: { fontSize: 14, color: '#D0E8F5', lineHeight: 21, marginBottom: 12 },
-  tipsBox: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 12, gap: 4 },
-  tipsTitle: { fontSize: 12, fontWeight: '600', color: WHITE, marginBottom: 6 },
-  tip: { fontSize: 13, color: '#B8D4E8', lineHeight: 20 },
-  redFlagsBox: { backgroundColor: 'rgba(255,107,107,0.1)', borderRadius: 10, padding: 12, gap: 4, marginTop: 10, borderWidth: 1, borderColor: 'rgba(255,107,107,0.25)' },
-  redFlagsTitle: { fontSize: 12, fontWeight: '700', color: DANGER, marginBottom: 6 },
-  redFlag: { fontSize: 13, color: '#FFD0D0', lineHeight: 20 },
-  otcText: { fontSize: 13, color: '#B8D4E8', marginTop: 10, fontStyle: 'italic' },
-  triageDisclaimer: { fontSize: 11, color: MUTED, marginTop: 10, fontStyle: 'italic' },
-  inputCard: { backgroundColor: SURFACE, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  input: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 14, fontSize: 14, color: WHITE, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', minHeight: 70, textAlignVertical: 'top', marginBottom: 12 },
-  triageBtn: { backgroundColor: DANGER, borderRadius: 12, padding: 14, alignItems: 'center' },
-  triageBtnDisabled: { opacity: 0.4 },
-  triageBtnText: { color: WHITE, fontWeight: '700', fontSize: 14 },
-  historyCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: SURFACE, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)', gap: 12 },
-  historyDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
-  historyInfo: { flex: 1 },
-  historyDate: { fontSize: 11, color: MUTED, marginBottom: 3 },
-  historySymptoms: { fontSize: 14, color: WHITE, marginBottom: 3 },
-  historyLevel: { fontSize: 12, fontWeight: '600', textTransform: 'capitalize' },
-})
+  root: { flex: 1, backgroundColor: H.paper }, body: { paddingHorizontal: 18 }, flex: { flex: 1, minWidth: 0 },
+  notice: { borderRadius: 17, backgroundColor: '#F2F1F0', padding: 13, flexDirection: 'row', gap: 9, alignItems: 'flex-start' }, noticeText: { flex: 1, color: H.muted, fontSize: 11.5, lineHeight: 17 },
+  triageCard: { marginTop: 14, borderRadius: 22, backgroundColor: H.redBg, borderWidth: 1, borderColor: '#F7DCE0', padding: 15, flexDirection: 'row', gap: 12, alignItems: 'center', ...HearthDesign.shadow.card }, eyebrow: { color: H.red, fontSize: 9.5, fontWeight: '900', letterSpacing: 1.4 }, triageTitle: { color: H.navy, fontSize: 15, fontWeight: '800', marginTop: 3 }, triageSub: { color: H.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
+  sectionTitle: { color: H.navy, fontSize: 20, fontWeight: '800', marginTop: 25, marginBottom: 12 }, statsRow: { flexDirection: 'row', gap: 9 }, stat: { flex: 1, borderRadius: 19, borderWidth: 1, borderColor: H.lineSoft, backgroundColor: '#fff', padding: 14, ...HearthDesign.shadow.card }, statValue: { color: H.navy, fontSize: 23, fontWeight: '800' }, statLabel: { color: H.muted, fontSize: 10.5, marginTop: 4 },
+  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }, sectionMeta: { color: H.purple, fontSize: 12, fontWeight: '700' }, row: { minHeight: 70, borderRadius: 18, borderWidth: 1, borderColor: H.lineSoft, backgroundColor: '#fff', padding: 12, marginBottom: 9, flexDirection: 'row', alignItems: 'center', gap: 11, ...HearthDesign.shadow.card }, rowTitle: { color: H.navy, fontSize: 14, fontWeight: '800' }, rowMeta: { color: H.muted, fontSize: 11.5, marginTop: 3 },
+  modalRoot: { flex: 1, backgroundColor: 'rgba(8,12,24,0.4)', justifyContent: 'flex-end', paddingHorizontal: 14 }, modalCard: { borderRadius: 28, backgroundColor: H.paper, padding: 20 }, modalTitle: { color: H.navy, fontSize: 23, fontWeight: '800' }, modalSub: { color: H.muted, fontSize: 13, lineHeight: 18, marginTop: 4, marginBottom: 15 }, textarea: { minHeight: 130, borderRadius: 18, backgroundColor: '#fff', borderWidth: 1, borderColor: H.line, padding: 14, color: H.navy, fontSize: 15, textAlignVertical: 'top' }, save: { height: 52, borderRadius: 17, backgroundColor: H.red, alignItems: 'center', justifyContent: 'center', marginTop: 12 }, saveText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+});

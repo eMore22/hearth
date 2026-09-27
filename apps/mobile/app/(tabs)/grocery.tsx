@@ -1,408 +1,181 @@
+import React, { useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar,
-  RefreshControl, Modal, TextInput, KeyboardAvoidingView, Platform, Alert
-} from 'react-native'
-import { useEffect, useState } from 'react'
-import { useGroceryStore } from '../../src/stores/groceryStore'
-import { useHouseholdStore } from '../../src/stores/householdStore'
-import { getCurrencySymbol } from '../../src/utils/currency'
-import { LinearGradient } from 'expo-linear-gradient'
-import { Ionicons } from '@expo/vector-icons'
-
-const NAVY = '#0A1628'
-const NAVY_LIGHT = '#112240'
-const SURFACE = '#162035'
-const ACCENT = '#06D6A0'
-const WHITE = '#F8FAFF'
-const MUTED = '#8899AA'
-const WARNING = '#FF9F1C'
-const PURPLE = '#C77DFF'
-
-const DEFAULT_PREFS = {
-  household_size: 2,
-  dietary_restrictions: [],
-  weekly_budget: 150,
-  // Was hardcoded to ['Italian', 'Mexican'] — that overrode localization for
-  // every household regardless of country. Left empty so the backend's
-  // household.country lookup drives the default cuisine instead.
-  cuisine_preferences: [],
-}
-
-const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner'] as const
-const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+  Alert,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useGroceryStore } from '../../src/stores/groceryStore';
+import { useHouseholdStore } from '../../src/stores/householdStore';
+import { getCurrencySymbol } from '../../src/utils/currency';
+import { H, HearthDesign } from '../../src/theme/hearthDesign';
+import { EmptyMessage, IconBadge, ScreenHeader } from '../../src/components/ui/PremiumKit';
 
 export default function GroceryScreen() {
+  const insets = useSafeAreaInsets();
+  const household = useHouseholdStore(s => s.household);
+  const fetchHousehold = useHouseholdStore(s => s.fetchHousehold);
   const {
-    mealPlan, shoppingList, inventory, wasteAlerts, isLoading, budget,
-    generateMealPlan, createShoppingList, fetchWasteAlerts, fetchInventory,
-    fetchBudget, setBudget, saveMealPlan, generateBudgetShoppingList,
-  } = useGroceryStore()
-
-  const household = useHouseholdStore(s => s.household)
-  const fetchHousehold = useHouseholdStore(s => s.fetchHousehold)
-  const currencySymbol = getCurrencySymbol(household?.currency)
-
-  const [showList, setShowList] = useState(false)
-  const [showCustomMealModal, setShowCustomMealModal] = useState(false)
-  const [showBudgetModal, setShowBudgetModal] = useState(false)
-  const [budgetInput, setBudgetInput] = useState('')
-
-  const [customDay, setCustomDay] = useState('Monday')
-  const [customSlot, setCustomSlot] = useState<typeof MEAL_SLOTS[number]>('dinner')
-  const [customMealName, setCustomMealName] = useState('')
-  const [localOverrides, setLocalOverrides] = useState<Record<string, Record<string, string>>>({})
+    mealPlan, shoppingList, inventory, wasteAlerts, budget, isLoading,
+    generateMealPlan, createShoppingList, fetchWasteAlerts, fetchInventory, addInventoryItem, fetchBudget, setBudget, saveMealPlan, generateBudgetShoppingList,
+  } = useGroceryStore();
+  const [showAdd, setShowAdd] = useState(false);
+  const [itemName, setItemName] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [showBudget, setShowBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState('');
+  const [showList, setShowList] = useState(false);
 
   useEffect(() => {
-    fetchInventory()
-    fetchBudget()
-    if (!household) fetchHousehold()
-    if (!mealPlan) generateMealPlan(DEFAULT_PREFS)
-  }, [])
+    if (!household) fetchHousehold();
+    fetchInventory(); fetchBudget();
+  }, []);
 
-  useEffect(() => { if (inventory.length > 0) fetchWasteAlerts() }, [inventory])
+  useEffect(() => { if (inventory.length) fetchWasteAlerts(); }, [inventory.length]);
 
-  const handleCreateList = async () => {
-    if (!mealPlan) return
-    await generateBudgetShoppingList(mealPlan, budget)
-    setShowList(true)
-  }
+  const currency = getCurrencySymbol(household?.currency);
+  const planItems = shoppingList?.total_items || 0;
 
-  const handleSaveCustomMeal = () => {
-    if (!customMealName.trim()) { Alert.alert('Error', 'Please enter a meal name'); return }
-    setLocalOverrides(prev => ({
-      ...prev,
-      [customDay]: { ...(prev[customDay] || {}), [customSlot]: customMealName.trim() },
-    }))
-    setCustomMealName('')
-    setShowCustomMealModal(false)
-    Alert.alert('✅ Meal logged', `${customMealName} added to ${customDay} ${customSlot}.`)
-  }
+  const makePlan = async () => {
+    try {
+      await generateMealPlan();
+    } catch (e: any) {
+      Alert.alert('Could not generate plan', e?.message || 'Add preferences first or try again.');
+    }
+  };
 
-  const getMealName = (day: string, slot: string, aiName: string) => {
-    return localOverrides[day]?.[slot] || aiName
-  }
+  const makeList = async () => {
+    if (!mealPlan) { Alert.alert('Meal plan needed', 'Generate a meal plan first.'); return; }
+    try {
+      if (budget > 0) await generateBudgetShoppingList(mealPlan, budget);
+      else await createShoppingList(mealPlan, inventory);
+      setShowList(true);
+    } catch (e: any) { Alert.alert('Could not create list', e?.message || 'Please try again.'); }
+  };
 
-  const slotIcon = (slot: string) => {
-    if (slot === 'breakfast') return '☀️'
-    if (slot === 'lunch') return '🥪'
-    return '🍽️'
-  }
+  const saveBudget = async () => {
+    const n = Number(budgetInput.replace(/,/g, ''));
+    if (!Number.isFinite(n) || n < 0) { Alert.alert('Invalid budget', 'Enter a valid weekly budget.'); return; }
+    await setBudget(n, household?.currency); setShowBudget(false);
+  };
+
+  const persistPlan = async () => {
+    if (!mealPlan) return;
+    await saveMealPlan(mealPlan); Alert.alert('Meal plan saved', 'This week’s plan has been saved to your household.');
+  };
+
+  const addItem = async () => {
+    if (!itemName.trim()) return;
+    await addInventoryItem({ name: itemName.trim(), quantity: quantity.trim() || undefined });
+    setItemName(''); setQuantity(''); setShowAdd(false);
+  };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-
-      <LinearGradient colors={[NAVY, NAVY_LIGHT]} style={styles.header}>
-        <Text style={styles.headerLabel}>NUTRITION</Text>
-        <Text style={styles.headerTitle}>Meal Planner</Text>
-        {mealPlan && (
-          <View style={styles.summaryPill}>
-            <Ionicons name="calendar-outline" size={14} color={ACCENT} />
-            <Text style={styles.summaryText}>
-              Week of {new Date(mealPlan.week_of || Date.now()).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-            </Text>
-          </View>
-        )}
-      </LinearGradient>
-
-      {/* Budget Bar */}
-      <TouchableOpacity style={styles.budgetBar} onPress={() => { setBudgetInput(String(budget)); setShowBudgetModal(true); }}>
-        <Ionicons name="wallet-outline" size={16} color={ACCENT} />
-        <Text style={styles.budgetText}>{currencySymbol}{budget.toLocaleString()} / week</Text>
-        <Ionicons name="chevron-down" size={14} color={MUTED} />
-      </TouchableOpacity>
-
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isLoading}
-            onRefresh={() => generateMealPlan(DEFAULT_PREFS)}
-            tintColor={ACCENT}
-          />
-        }
-      >
-        {wasteAlerts.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Use Soon</Text>
-            {wasteAlerts.slice(0, 2).map((alert: any, i: number) => (
-              <View key={i} style={styles.wasteCard}>
-                <Ionicons name="warning-outline" size={16} color={WARNING} />
-                <View style={styles.wasteInfo}>
-                  <Text style={styles.wasteItem}>{alert.item}</Text>
-                  <Text style={styles.wasteSuggestion}>{alert.suggested_recipe?.recipe_name}</Text>
-                </View>
-                <Text style={styles.wasteDays}>{alert.days_left}d</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.generateBtn}
-            onPress={() => generateMealPlan(DEFAULT_PREFS)}
-            disabled={isLoading}
-          >
-            <Ionicons name="refresh-outline" size={18} color={ACCENT} />
-            <Text style={styles.generateBtnText}>
-              {isLoading ? 'Generating...' : 'Generate New Meal Plan'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.customMealBtn}
-            onPress={() => setShowCustomMealModal(true)}
-          >
-            <Ionicons name="create-outline" size={18} color={PURPLE} />
-            <Text style={styles.customMealBtnText}>🍳 Log Custom Meal</Text>
-          </TouchableOpacity>
-        </View>
-
-        {mealPlan && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>This Week</Text>
-            {(mealPlan.days || []).map((day: any, i: number) => (
-              <View key={i} style={styles.dayCard}>
-                <Text style={styles.dayName}>{day.day || `Day ${i + 1}`}</Text>
-                <View style={styles.mealsCol}>
-                  {day.breakfast && (
-                    <Text style={styles.mealRow}>
-                      {slotIcon('breakfast')} {getMealName(day.day, 'breakfast', day.breakfast.name)}
-                      {localOverrides[day.day]?.breakfast ? ' ✏️' : ''}
-                    </Text>
-                  )}
-                  {day.lunch && (
-                    <Text style={styles.mealRow}>
-                      {slotIcon('lunch')} {getMealName(day.day, 'lunch', day.lunch.name)}
-                      {localOverrides[day.day]?.lunch ? ' ✏️' : ''}
-                    </Text>
-                  )}
-                  {day.dinner && (
-                    <Text style={styles.mealRow}>
-                      {slotIcon('dinner')} {getMealName(day.day, 'dinner', day.dinner.name)}
-                      {localOverrides[day.day]?.dinner ? ' ✏️' : ''}
-                    </Text>
-                  )}
-                </View>
-              </View>
-            ))}
-
-            <TouchableOpacity style={styles.listBtn} onPress={handleCreateList}>
-              <Ionicons name="list-outline" size={18} color={NAVY} />
-              <Text style={styles.listBtnText}>Generate Shopping List</Text>
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
+        <ScreenHeader title="Grocery & Meals" subtitle="Plan, shop and stay stocked." />
+        <View style={styles.body}>
+          <View style={styles.planCard}>
+            <IconBadge icon="basket-outline" bg={H.greenBg} color={H.green} size={50} />
+            <View style={styles.flex}>
+              <Text style={styles.planLabel}>CURRENT PLAN</Text>
+              <Text style={styles.planTitle}>{shoppingList ? `${planItems} items ready` : mealPlan ? 'Meal plan ready' : 'Ready to plan'}</Text>
+              <TouchableOpacity onPress={() => { setBudgetInput(String(budget || '')); setShowBudget(true); }}><Text style={styles.planSub}>{budget ? `${currency}${Number(budget).toLocaleString()} weekly budget · edit` : 'Set a weekly budget'}</Text></TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.viewButton} onPress={shoppingList ? undefined : makePlan} disabled={isLoading} activeOpacity={0.75}>
+              <Text style={styles.viewButtonText}>{shoppingList ? 'Ready' : isLoading ? 'Working…' : 'Plan'}</Text>
             </TouchableOpacity>
           </View>
-        )}
 
-        {shoppingList && showList && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Shopping List</Text>
-            <View style={styles.listCard}>
-              {Object.entries(shoppingList.categories || {}).map(([cat, items]: [string, any]) =>
-                Array.isArray(items) && items.length > 0 && (
-                  <View key={cat} style={styles.listCategory}>
-                    <Text style={styles.listCategoryName}>{cat}</Text>
-                    <Text style={styles.listItems}>{items.join(', ')}</Text>
-                  </View>
-                )
-              )}
-              <View style={styles.listFooter}>
-                <Text style={styles.listTotal}>Total: {shoppingList.total_items} items</Text>
-                <Text style={styles.listCost}>Est. {currencySymbol}{shoppingList.estimated_total?.toLocaleString() || shoppingList.estimated_cost}</Text>
-              </View>
-              {shoppingList.over_budget && (
-                <View style={styles.budgetWarning}>
-                  <Ionicons name="warning-outline" size={14} color={WARNING} />
-                  <Text style={styles.budgetWarningText}>
-                    Over budget by {currencySymbol}{shoppingList.budget_gap?.toLocaleString()}
-                  </Text>
-                </View>
-              )}
-              {(shoppingList.suggestions ?? []).length > 0 && (
-                <View style={styles.suggestionsBox}>
-                  {(shoppingList.suggestions ?? []).map((s: string, i: number) => (
-                    <Text key={i} style={styles.suggestionText}>💡 {s}</Text>
-                  ))}
-                </View>
-              )}
-            </View>
+          <Text style={styles.sectionTitle}>Quick actions</Text>
+          <View style={styles.quickGrid}>
+            <TouchableOpacity style={styles.quick} onPress={() => setShowAdd(true)} activeOpacity={0.8}><View style={[styles.quickIcon, { backgroundColor: H.greenBg }]}><Ionicons name="add" size={20} color={H.green} /></View><Text style={styles.quickText}>New item</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.quick} onPress={makePlan} activeOpacity={0.8}><View style={[styles.quickIcon, { backgroundColor: H.violetBg }]}><Ionicons name="sparkles-outline" size={20} color={H.violet} /></View><Text style={styles.quickText}>Meal plan</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.quick} onPress={makeList} activeOpacity={0.8}><View style={[styles.quickIcon, { backgroundColor: H.blueBg }]}><Ionicons name="list-outline" size={20} color={H.blue} /></View><Text style={styles.quickText}>Shopping list</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.quick} onPress={() => { setBudgetInput(String(budget || '')); setShowBudget(true); }} activeOpacity={0.8}><View style={[styles.quickIcon, { backgroundColor: H.amberBg }]}><Ionicons name="wallet-outline" size={20} color={H.amber} /></View><Text style={styles.quickText}>Budget</Text></TouchableOpacity>
           </View>
-        )}
 
-        <View style={{ height: 40 }} />
+          {wasteAlerts.length > 0 && <View style={styles.wasteWrap}><Text style={styles.sectionTitle}>Use soon</Text>{wasteAlerts.slice(0,3).map((a, i) => <View key={`${a.item}-${i}`} style={styles.wasteCard}><Ionicons name="warning-outline" size={18} color={H.amber} /><View style={styles.flex}><Text style={styles.rowTitle}>{a.item}</Text><Text style={styles.rowMeta}>{a.days_left} days left · {a.suggested_recipe?.recipe_name || 'Use soon'}</Text></View></View>)}</View>}
+
+          <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Pantry</Text><Text style={styles.sectionMeta}>{inventory.length} items</Text></View>
+          {inventory.length === 0 ? <EmptyMessage icon="basket-outline" title="Your pantry is empty" subtitle="Add staples and Hearth can use them when planning meals." /> : inventory.map(item => (
+            <View key={item.id} style={styles.row}>
+              <View style={styles.dot} />
+              <View style={styles.flex}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.rowMeta}>{item.quantity || 'Quantity not set'}{item.days_left != null ? ` · ${item.days_left} days left` : ''}</Text></View>
+              <Ionicons name="chevron-forward" size={18} color={H.muted2} />
+            </View>
+          ))}
+
+          {shoppingList && showList && <View style={styles.shoppingCard}><View style={styles.sectionHead}><Text style={styles.sectionTitle}>Shopping list</Text><Text style={styles.sectionMeta}>{shoppingList.total_items} items</Text></View>{Object.entries(shoppingList.categories || {}).map(([cat, items]: [string, any]) => Array.isArray(items) && items.length ? <View key={cat} style={styles.listGroup}><Text style={styles.listCat}>{cat}</Text><Text style={styles.listItems}>{items.join(', ')}</Text></View> : null)}<Text style={styles.listTotal}>Est. {currency}{Number(shoppingList.estimated_total || shoppingList.estimated_cost || 0).toLocaleString()}</Text>{shoppingList.over_budget && <Text style={styles.overBudget}>Over budget by {currency}{Number(shoppingList.budget_gap || 0).toLocaleString()}</Text>}</View>}
+
+          {mealPlan && (
+            <View style={styles.mealPreview}>
+              <View style={styles.mealTop}><View><Text style={styles.mealLabel}>MEAL PLAN</Text><Text style={styles.mealTitle}>This week</Text></View><Ionicons name="restaurant-outline" size={22} color={H.purple} /></View>
+              <Text style={styles.mealSub}>{mealPlan.days?.length || 0} days planned · Estimated {currency}{Number(mealPlan.estimated_cost || 0).toLocaleString()}</Text>
+              <View style={styles.mealActions}><TouchableOpacity style={styles.mealAction} onPress={persistPlan}><Text style={styles.mealActionText}>Save plan</Text></TouchableOpacity><TouchableOpacity style={styles.mealAction} onPress={makeList}><Text style={styles.mealActionText}>Build list</Text></TouchableOpacity></View>
+              {mealPlan.days?.slice(0,7).map((d: any) => <View key={d.day} style={styles.dayRow}><Text style={styles.dayName}>{d.day}</Text><Text style={styles.dayMeals} numberOfLines={2}>{[d.breakfast?.name,d.lunch?.name,d.dinner?.name].filter(Boolean).join(' · ')}</Text></View>)}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
-      {/* Log Custom Meal Modal */}
-      <Modal visible={showCustomMealModal} animationType="slide" presentationStyle="pageSheet">
-        <KeyboardAvoidingView
-          style={styles.modal}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={styles.modalHeader}>
-            <View>
-              <Text style={styles.modalTitle}>Log Custom Meal</Text>
-              <Text style={styles.modalHint}>Override a slot in your meal plan</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => { setShowCustomMealModal(false); setCustomMealName('') }}
-              style={styles.modalClose}
-            >
-              <Ionicons name="close" size={20} color={WHITE} />
-            </TouchableOpacity>
-          </View>
+      <Modal visible={showBudget} transparent animationType="fade" onRequestClose={() => setShowBudget(false)}><View style={styles.modalRoot}><TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowBudget(false)} /><View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom,18)+20 }]}><Text style={styles.modalTitle}>Weekly grocery budget</Text><TextInput value={budgetInput} onChangeText={setBudgetInput} placeholder="0" keyboardType="decimal-pad" placeholderTextColor={H.muted2} style={styles.input} /><TouchableOpacity style={styles.save} onPress={saveBudget}><Text style={styles.saveText}>Save budget</Text></TouchableOpacity></View></View></Modal>
 
-          <Text style={styles.fieldLabel}>Day</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-            {DAYS_OF_WEEK.map(day => (
-              <TouchableOpacity
-                key={day}
-                style={[styles.chip, customDay === day && styles.chipActive]}
-                onPress={() => setCustomDay(day)}
-              >
-                <Text style={[styles.chipText, customDay === day && styles.chipTextActive]}>
-                  {day.slice(0, 3)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <Text style={styles.fieldLabel}>Meal Slot</Text>
-          <View style={styles.slotRow}>
-            {MEAL_SLOTS.map(slot => (
-              <TouchableOpacity
-                key={slot}
-                style={[styles.slotChip, customSlot === slot && styles.slotChipActive]}
-                onPress={() => setCustomSlot(slot)}
-              >
-                <Text style={styles.slotIcon}>{slotIcon(slot)}</Text>
-                <Text style={[styles.slotText, customSlot === slot && styles.slotTextActive]}>
-                  {slot}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={styles.fieldLabel}>Meal Name *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Jollof Rice, Grilled Chicken"
-            placeholderTextColor={MUTED}
-            value={customMealName}
-            onChangeText={setCustomMealName}
-            autoFocus
-          />
-
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSaveCustomMeal}>
-            <Text style={styles.saveBtnText}>Save Meal</Text>
-          </TouchableOpacity>
-
-          <View style={{ height: 40 }} />
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Budget Modal */}
-      <Modal visible={showBudgetModal} transparent animationType="fade">
-        <View style={styles.budgetModalOverlay}>
-          <View style={styles.budgetModalCard}>
-            <Text style={styles.budgetModalTitle}>Weekly Grocery Budget</Text>
-            <TextInput
-              style={styles.budgetInput}
-              value={budgetInput}
-              onChangeText={setBudgetInput}
-              keyboardType="numeric"
-              placeholder={`${currencySymbol}0`}
-              placeholderTextColor={MUTED}
-            />
-            <View style={styles.budgetModalActions}>
-              <TouchableOpacity onPress={() => setShowBudgetModal(false)}>
-                <Text style={styles.budgetCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.budgetSaveBtn} onPress={async () => {
-                const amount = parseFloat(budgetInput) || 0;
-                await setBudget(amount, household?.currency);
-                setShowBudgetModal(false);
-              }}>
-                <Text style={styles.budgetSaveText}>Save</Text>
-              </TouchableOpacity>
-            </View>
+      <Modal visible={showAdd} transparent animationType="fade" onRequestClose={() => setShowAdd(false)}>
+        <View style={styles.modalRoot}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowAdd(false)} />
+          <View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, 18) + 20 }]}>
+            <Text style={styles.modalTitle}>Add pantry item</Text>
+            <TextInput value={itemName} onChangeText={setItemName} placeholder="Item name" placeholderTextColor={H.muted2} style={styles.input} />
+            <TextInput value={quantity} onChangeText={setQuantity} placeholder="Quantity (optional)" placeholderTextColor={H.muted2} style={styles.input} />
+            <TouchableOpacity style={styles.save} onPress={addItem}><Text style={styles.saveText}>Add item</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: NAVY },
-  header: { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 20 },
-  headerLabel: { fontSize: 11, color: MUTED, letterSpacing: 2, marginBottom: 4 },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: WHITE, marginBottom: 12 },
-  summaryPill: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: 'rgba(6,214,160,0.1)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
-  summaryText: { fontSize: 12, color: ACCENT },
-  budgetBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 20, marginTop: 16, backgroundColor: 'rgba(6,214,160,0.08)', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: 'rgba(6,214,160,0.2)' },
-  budgetText: { flex: 1, fontSize: 14, fontWeight: '600', color: ACCENT },
-  scroll: { flex: 1 },
-  section: { paddingHorizontal: 20, marginTop: 24 },
-  sectionTitle: { fontSize: 11, fontWeight: '600', color: MUTED, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12 },
-  wasteCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,159,28,0.08)', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,159,28,0.2)', gap: 10 },
-  wasteInfo: { flex: 1 },
-  wasteItem: { fontSize: 14, fontWeight: '600', color: WHITE },
-  wasteSuggestion: { fontSize: 12, color: MUTED },
-  wasteDays: { fontSize: 13, fontWeight: '700', color: WARNING },
-  generateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: 'rgba(6,214,160,0.1)', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: 'rgba(6,214,160,0.25)', marginBottom: 10 },
-  generateBtnText: { color: ACCENT, fontWeight: '600', fontSize: 15 },
-  customMealBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    borderRadius: 14, padding: 15,
-    borderWidth: 1.5, borderColor: 'rgba(199,125,255,0.35)',
-    backgroundColor: 'rgba(199,125,255,0.06)',
-  },
-  customMealBtnText: { color: PURPLE, fontWeight: '600', fontSize: 15 },
-  dayCard: { backgroundColor: SURFACE, borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  dayName: { fontSize: 13, fontWeight: '700', color: WHITE, marginBottom: 8 },
-  mealsCol: { gap: 4 },
-  mealRow: { fontSize: 13, color: '#B8D4E8' },
-  listBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: ACCENT, borderRadius: 14, padding: 14, marginTop: 8 },
-  listBtnText: { color: NAVY, fontWeight: '700', fontSize: 14 },
-  listCard: { backgroundColor: SURFACE, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  listCategory: { marginBottom: 12 },
-  listCategoryName: { fontSize: 12, fontWeight: '600', color: ACCENT, textTransform: 'capitalize', marginBottom: 4 },
-  listItems: { fontSize: 13, color: '#B8D4E8', lineHeight: 19 },
-  listFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
-  listTotal: { fontSize: 13, color: MUTED },
-  listCost: { fontSize: 14, fontWeight: '700', color: WHITE },
-  budgetWarning: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: 'rgba(255,159,28,0.08)', borderRadius: 8, padding: 8 },
-  budgetWarningText: { fontSize: 12, color: WARNING, fontWeight: '600' },
-  suggestionsBox: { marginTop: 8, gap: 4 },
-  suggestionText: { fontSize: 12, color: '#B8D4E8', fontStyle: 'italic' },
-  modal: { flex: 1, backgroundColor: NAVY, padding: 24 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 24 },
-  modalTitle: { fontSize: 24, fontWeight: '700', color: WHITE, marginBottom: 4 },
-  modalHint: { fontSize: 13, color: MUTED },
-  modalClose: { padding: 6, backgroundColor: SURFACE, borderRadius: 10 },
-  fieldLabel: { fontSize: 12, fontWeight: '600', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
-  chipRow: { flexDirection: 'row', marginBottom: 4 },
-  chip: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, backgroundColor: SURFACE, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  chipActive: { backgroundColor: 'rgba(6,214,160,0.2)', borderColor: ACCENT },
-  chipText: { fontSize: 13, color: MUTED },
-  chipTextActive: { color: ACCENT, fontWeight: '600' },
-  slotRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
-  slotChip: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12, backgroundColor: SURFACE, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  slotChipActive: { backgroundColor: 'rgba(199,125,255,0.15)', borderColor: PURPLE },
-  slotIcon: { fontSize: 20, marginBottom: 4 },
-  slotText: { fontSize: 12, color: MUTED, textTransform: 'capitalize' },
-  slotTextActive: { color: PURPLE, fontWeight: '600' },
-  input: { backgroundColor: SURFACE, borderRadius: 12, padding: 16, fontSize: 15, color: WHITE, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  saveBtn: { backgroundColor: PURPLE, borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 24 },
-  saveBtnText: { color: WHITE, fontWeight: '700', fontSize: 16 },
-  budgetModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  budgetModalCard: { backgroundColor: SURFACE, borderRadius: 16, padding: 24, width: '100%', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  budgetModalTitle: { fontSize: 18, fontWeight: '700', color: WHITE, marginBottom: 16 },
-  budgetInput: { backgroundColor: NAVY, borderRadius: 12, padding: 16, fontSize: 24, fontWeight: '700', color: WHITE, textAlign: 'center', marginBottom: 20 },
-  budgetModalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 16 },
-  budgetCancelText: { fontSize: 15, color: MUTED },
-  budgetSaveBtn: { backgroundColor: ACCENT, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10 },
-  budgetSaveText: { fontSize: 15, fontWeight: '700', color: NAVY },
-})
+  root: { flex: 1, backgroundColor: H.paper },
+  body: { paddingHorizontal: 18 },
+  flex: { flex: 1, minWidth: 0 },
+  planCard: { backgroundColor: '#F1FBF4', borderWidth: 1, borderColor: '#DDEFE3', borderRadius: 22, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 12, ...HearthDesign.shadow.card },
+  planLabel: { color: H.green, fontSize: 9.5, fontWeight: '900', letterSpacing: 1.3 },
+  planTitle: { color: H.navy, fontSize: 15, fontWeight: '800', marginTop: 3 },
+  planSub: { color: H.muted, fontSize: 11.5, marginTop: 3 },
+  viewButton: { backgroundColor: '#DFF3E6', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9 },
+  viewButtonText: { color: H.green, fontSize: 11.5, fontWeight: '800' },
+  sectionTitle: { color: H.navy, fontSize: 20, fontWeight: '800', marginTop: 25, marginBottom: 12 },
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
+  quick: { width: '48%', minHeight: 92, borderRadius: 19, borderWidth: 1, borderColor: H.lineSoft, backgroundColor: '#fff', padding: 12, justifyContent: 'center', ...HearthDesign.shadow.card },
+  quickIcon: { width: 37, height: 37, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 9 },
+  quickText: { color: H.navy, fontSize: 11.5, fontWeight: '800' },
+  sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  sectionMeta: { color: H.muted, fontSize: 12 },
+  wasteWrap: { marginTop: 4 }, wasteCard: { minHeight: 62, borderRadius: 17, backgroundColor: H.amberBg, borderWidth: 1, borderColor: '#F0DFC3', padding: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  row: { minHeight: 66, borderRadius: 18, borderWidth: 1, borderColor: H.lineSoft, backgroundColor: '#fff', padding: 13, marginBottom: 9, flexDirection: 'row', alignItems: 'center', gap: 11, ...HearthDesign.shadow.card },
+  dot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: H.muted2 },
+  rowTitle: { color: H.navy, fontSize: 14, fontWeight: '800' },
+  rowMeta: { color: H.muted, fontSize: 11.5, marginTop: 3 },
+  mealPreview: { marginTop: 18, borderRadius: 21, backgroundColor: '#F7F4FF', borderWidth: 1, borderColor: '#E7E0FF', padding: 16 },
+  mealTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  mealLabel: { color: H.purple, fontSize: 9.5, fontWeight: '900', letterSpacing: 1.4 },
+  mealTitle: { color: H.navy, fontSize: 16, fontWeight: '800', marginTop: 3 },
+  mealSub: { color: H.muted, fontSize: 12, marginTop: 10 }, mealActions: { flexDirection: 'row', gap: 8, marginTop: 12 }, mealAction: { flex: 1, borderRadius: 999, backgroundColor: '#EDE7FF', paddingVertical: 9, alignItems: 'center' }, mealActionText: { color: H.purple, fontSize: 11, fontWeight: '900' }, dayRow: { borderTopWidth: 1, borderTopColor: '#EAE5FA', paddingTop: 9, marginTop: 9 }, dayName: { color: H.navy, fontSize: 11.5, fontWeight: '900' }, dayMeals: { color: H.muted, fontSize: 10.8, lineHeight: 16, marginTop: 3 },
+  shoppingCard: { marginTop: 18, borderRadius: 21, backgroundColor: '#fff', borderWidth: 1, borderColor: H.lineSoft, padding: 15 }, listGroup: { marginBottom: 9 }, listCat: { color: H.navy, fontSize: 11.5, fontWeight: '900', textTransform: 'capitalize' }, listItems: { color: H.muted, fontSize: 11.5, lineHeight: 17, marginTop: 2 }, listTotal: { color: H.navy, fontSize: 12.5, fontWeight: '900', marginTop: 7 }, overBudget: { color: H.red, fontSize: 11.5, fontWeight: '800', marginTop: 4 },
+  modalRoot: { flex: 1, backgroundColor: 'rgba(8,12,24,0.4)', justifyContent: 'flex-end', paddingHorizontal: 14 },
+  modalCard: { borderRadius: 28, backgroundColor: H.paper, padding: 20 },
+  modalTitle: { color: H.navy, fontSize: 23, fontWeight: '800', marginBottom: 16 },
+  input: { height: 52, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: H.line, paddingHorizontal: 14, color: H.navy, fontSize: 15, marginBottom: 10 },
+  save: { height: 52, borderRadius: 17, backgroundColor: H.green, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  saveText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+});

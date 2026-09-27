@@ -1,668 +1,381 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  RefreshControl, Animated, StatusBar, Alert, ActivityIndicator,
-  Modal, TextInput, KeyboardAvoidingView, Platform,
+  Alert,
+  ImageBackground,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useDocumentStore } from '../../src/stores/documentStore';
 import { useBillStore } from '../../src/stores/billStore';
 import { useGroceryStore } from '../../src/stores/groceryStore';
-import { useMaintenanceStore } from '../../src/stores/maintenanceStore';
-import { useHealthStore } from '../../src/stores/healthStore';
-import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore';
-import { useAutomationStore, HAEvent, SuggestedAction } from '../../src/stores/automationStore';
-import { useHouseholdStore } from '../../src/stores/householdStore';
+import { useAutomationStore } from '../../src/stores/automationStore';
 import { useTaskStore } from '../../src/stores/taskStore';
+import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore';
+import type { SuggestedAction } from '../../src/stores/automationStore';
+import { useHouseholdStore } from '../../src/stores/householdStore';
 import { getCurrencySymbol } from '../../src/utils/currency';
+import { H, HearthDesign } from '../../src/theme/hearthDesign';
 
-const COLORS = {
-  bg:      '#0A1628',
-  surface: '#162035',
-  accent:  '#4FC3F7',
-  white:   '#F8FAFF',
-  muted:   '#8899AA',
-  danger:  '#FF6B6B',
-  success: '#06D6A0',
-  warning: '#FFD166',
+const hero = require('../../assets/hearth-hero.jpg');
+
+const greeting = () => {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 };
 
-const MODULE_INFO: Record<string, { bg: string; accent: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  documents:   { bg: '#1A3A5C', accent: '#4FC3F7', icon: 'document-text' },
-  bills:       { bg: '#2D1B4E', accent: '#C77DFF', icon: 'card' },
-  grocery:     { bg: '#1A3A2A', accent: '#06D6A0', icon: 'basket' },
-  maintenance: { bg: '#3A2A0A', accent: '#FFD166', icon: 'construct' },
-  health:      { bg: '#3A0A1A', accent: '#FF6B6B', icon: 'heart' },
+const dateLabel = () => new Date().toLocaleDateString('en-CA', {
+  weekday: 'short', day: 'numeric', month: 'short',
+});
+
+const dueLabel = (iso?: string) => {
+  if (!iso) return 'Today';
+  const d = new Date(iso);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  return d.toLocaleDateString('en-CA', { day: 'numeric', month: 'short' });
 };
 
-// Quick-pick due options for the Add Task modal — avoids pulling in a native
-// date/time picker dependency that isn't confirmed installed. Upgrade to a
-// real picker later if needed; this is enough to exercise the scheduler.
-const DUE_OPTIONS: { key: string; label: string }[] = [
+const dueOptions = [
   { key: 'none', label: 'No due date' },
   { key: '1hour', label: 'In 1 hour' },
   { key: 'tonight', label: 'Tonight, 6 PM' },
   { key: 'tomorrow', label: 'Tomorrow, 9 AM' },
 ];
 
-const getDueDateFromOption = (option: string): string | undefined => {
+const dueFromOption = (option: string) => {
   const now = new Date();
-  if (option === '1hour') {
-    return new Date(now.getTime() + 60 * 60 * 1000).toISOString();
-  }
-  if (option === 'tonight') {
-    const d = new Date(now);
-    d.setHours(18, 0, 0, 0);
-    if (d <= now) d.setDate(d.getDate() + 1);
-    return d.toISOString();
-  }
-  if (option === 'tomorrow') {
-    const d = new Date(now);
-    d.setDate(d.getDate() + 1);
-    d.setHours(9, 0, 0, 0);
-    return d.toISOString();
-  }
+  if (option === '1hour') return new Date(now.getTime() + 3600000).toISOString();
+  if (option === 'tonight') { const d = new Date(now); d.setHours(18,0,0,0); if (d <= now) d.setDate(d.getDate()+1); return d.toISOString(); }
+  if (option === 'tomorrow') { const d = new Date(now); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); return d.toISOString(); }
   return undefined;
 };
 
-const formatTaskDue = (iso: string) => {
-  const d = new Date(iso);
-  const now = new Date();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(now.getDate() + 1);
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  if (d.toDateString() === now.toDateString()) return `Today, ${time}`;
-  if (d.toDateString() === tomorrow.toDateString()) return `Tomorrow, ${time}`;
-  return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${time}`;
-};
-
-export default function DashboardScreen() {
-  const { user, signOut } = useAuthStore();
+export default function Dashboard() {
+  const insets = useSafeAreaInsets();
+  const { user } = useAuthStore();
   const household = useHouseholdStore(s => s.household);
-  const fetchHouseholdData = useHouseholdStore(s => s.fetchHousehold);
-  const currencySymbol = getCurrencySymbol(household?.currency);
-  const { documents = [], alerts = [], fetchDocuments, fetchAlerts } = useDocumentStore();
-  const { bills = [], monthlyReport, fetchBills, fetchMonthlyReport } = useBillStore();
-  const { inventory = [], fetchInventory } = useGroceryStore();
-  const { tasks = [], fetchTasks } = useMaintenanceStore();
-  const { triageHistory = [], fetchMedications } = useHealthStore();
+  const fetchHousehold = useHouseholdStore(s => s.fetchHousehold);
+  const { alerts, fetchAlerts } = useDocumentStore();
+  const { bills, fetchBills, fetchMonthlyReport } = useBillStore();
+  const { shoppingList, inventory, fetchInventory } = useGroceryStore();
+  const { events, fetchEvents, fetchStatus, executeAction } = useAutomationStore();
+  const { tasks, fetchTasks, completeTask, createTask } = useTaskStore();
   const { dashboardSummary, fetchDashboardSummary } = useChiefOfStaffStore();
-  const {
-    status: haStatus, events: haEvents,
-    fetchStatus: fetchHAStatus, fetchEvents: fetchHAEvents,
-    executeAction,
-  } = useAutomationStore();
-
-  // Household to-dos — separate store/table from the AI-generated
-  // maintenance `tasks` above, so aliased to avoid any name collision.
-  const {
-    tasks: householdTasks = [],
-    fetchTasks: fetchHouseholdTasks,
-    createTask,
-    completeTask: completeHouseholdTask,
-  } = useTaskStore();
-
-  const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  const fabAnim   = useRef(new Animated.Value(0)).current;
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [dueOption, setDueOption] = useState('none');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskDueOption, setNewTaskDueOption] = useState('none');
-
-  useEffect(() => {
-    loadAll();
-    Animated.parallel([
-      Animated.timing(fadeAnim,  { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-      Animated.spring(fabAnim,   { toValue: 1, useNativeDriver: true, friction: 5, tension: 60, delay: 800 }),
-    ]).start();
-  }, []);
-
-  const loadAll = () => {
-    if (!household) fetchHouseholdData();
-    fetchDocuments(); fetchAlerts();
-    fetchBills(); fetchMonthlyReport();
-    fetchInventory(); fetchTasks();
-    fetchMedications(); fetchDashboardSummary();
-    fetchHAStatus(); fetchHAEvents();
-    fetchHouseholdTasks();
+  const load = () => {
+    if (!household) fetchHousehold();
+    fetchAlerts();
+    fetchBills();
+    fetchMonthlyReport().catch(() => undefined);
+    fetchInventory();
+    fetchEvents();
+    fetchStatus();
+    fetchTasks();
+    fetchDashboardSummary().catch(() => undefined);
   };
 
-  const handleAddTask = async () => {
-    if (!newTaskTitle.trim()) { Alert.alert('Error', 'Please enter what needs doing'); return; }
+  useEffect(() => { load(); }, []);
+
+  const firstName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
+  const currency = getCurrencySymbol(household?.currency);
+  const urgentDoc = alerts.find(a => ['expired', 'critical', 'urgent'].includes(a.urgency));
+  const homeEvent = events.find((e: any) => e.alert_sent && e.attributes?.chief_message);
+  const nextTask = tasks.find(t => !t.is_completed);
+  const nextBill = bills.find(b => Number(b.amount || 0) > 0);
+  const groceryCount = shoppingList?.total_items || inventory.length;
+  const attentionCount = (urgentDoc ? 1 : 0) + (homeEvent ? 1 : 0);
+
+  const addTask = async () => {
+    if (!taskTitle.trim()) { Alert.alert('Task needed', 'Enter what needs doing.'); return; }
     try {
-      await createTask(newTaskTitle.trim(), undefined, getDueDateFromOption(newTaskDueOption));
-      setNewTaskTitle('');
-      setNewTaskDueOption('none');
-      setShowAddTaskModal(false);
-    } catch {
-      Alert.alert('Error', 'Could not add task. Please try again.');
-    }
+      await createTask(taskTitle.trim(), undefined, dueFromOption(dueOption));
+      setTaskTitle(''); setDueOption('none'); setShowAddTask(false);
+    } catch (e: any) { Alert.alert('Could not add task', e?.message || 'Please try again.'); }
   };
 
-  const urgentDocAlerts = alerts.filter(
-    (a: any) => a.urgency === 'critical' || a.urgency === 'expired'
-  );
-  const urgentHAEvents = haEvents.filter(
-    (e: HAEvent) => e.alert_sent && e.attributes?.chief_message
-  ).slice(0, 3);
-
-  const pendingTasks = tasks.filter((t: any) => !t.completed).length;
-  const pendingHouseholdTasks = householdTasks.filter((t: any) => !t.is_completed);
-  const monthlySpend = monthlyReport?.total_spent || 0;
-  const hasUrgent    = urgentDocAlerts.length > 0 || urgentHAEvents.length > 0;
-
-  const greeting = () => {
-    const h = new Date().getHours();
-    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  };
-
-  const firstName =
-    user?.user_metadata?.full_name?.split(' ')[0] ||
-    user?.email?.split('@')[0] ||
-    'there';
-
-  const handleHAAction = async (action: SuggestedAction) => {
+  const runHAAction = async (action: SuggestedAction) => {
     if (action.action === 'draft_claim') { router.push('/(tabs)/documents'); return; }
-    if (action.action === 'call_emergency') {
-      Alert.alert('Emergency', 'Please call your local emergency services immediately.');
-      return;
-    }
+    if (action.action === 'call_emergency') { Alert.alert('Emergency', 'Please call your local emergency services immediately.'); return; }
     if (!action.entity_id) return;
-    setActionLoading(`${action.entity_id}_${action.action}`);
-    try {
-      await executeAction(action.entity_id, action.action);
-      Alert.alert('✅ Done', `${action.label} executed successfully.`);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Action failed');
-    } finally {
-      setActionLoading(null);
-    }
+    const key = `${action.entity_id}_${action.action}`; setActionLoading(key);
+    try { await executeAction(action.entity_id, action.action); Alert.alert('Done', `${action.label} completed.`); }
+    catch (e: any) { Alert.alert('Action failed', e?.message || 'Please try again.'); }
+    finally { setActionLoading(null); }
   };
+
+  const locationLabel = useMemo(() => {
+    const address = household?.address?.trim();
+    if (address) {
+      const parts = address.split(',').map(p => p.trim()).filter(Boolean);
+      return parts.slice(-2).join(', ');
+    }
+    if (household?.country === 'CA') return 'Canada';
+    return 'Your household';
+  }, [household?.address, household?.country]);
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
-
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={false} onRefresh={loadAll} tintColor={COLORS.accent} />
-        }
+        refreshControl={<RefreshControl refreshing={false} onRefresh={load} tintColor={H.purple} />}
+        contentContainerStyle={{ paddingBottom: 26 }}
       >
-        {/* Header */}
-        <LinearGradient colors={[COLORS.bg, '#112240']} style={styles.header}>
-          <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-            <View style={styles.headerRow}>
-              <View>
-                <Text style={styles.greeting}>{greeting()},</Text>
-                <Text style={styles.userName}>{firstName} 👋</Text>
-              </View>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <TouchableOpacity
-                  onPress={() => router.push('/(tabs)/profile')}
-                  style={styles.profileBtn}
-                >
-                  <Ionicons name="person-circle-outline" size={28} color={COLORS.muted} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={signOut} style={styles.signOutBtn}>
-                  <Ionicons name="log-out-outline" size={20} color={COLORS.muted} />
-                </TouchableOpacity>
-              </View>
-            </View>
-            {!!dashboardSummary?.chief_message && (
-              <View style={styles.chiefMsg}>
-                <Text style={styles.chiefMsgIcon}>✦</Text>
-                <Text style={styles.chiefMsgText}>{dashboardSummary.chief_message}</Text>
-              </View>
-            )}
-          </Animated.View>
-        </LinearGradient>
-
-        {/* Needs Attention */}
-        {hasUrgent && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>⚠️ Needs Attention</Text>
-            {urgentDocAlerts.map((alert: any, i: number) => (
-              <TouchableOpacity
-                key={`doc-${i}`}
-                style={styles.alertCard}
-                onPress={() => router.push('/(tabs)/documents')}
-              >
-                <Ionicons name="warning-outline" size={16} color={COLORS.danger} />
-                <Text style={styles.alertText} numberOfLines={2}>{alert.message}</Text>
-                <Ionicons name="chevron-forward" size={14} color={COLORS.muted} />
-              </TouchableOpacity>
-            ))}
-            {urgentHAEvents.map((event: HAEvent, i: number) => (
-              <View key={`ha-${i}`} style={styles.haAlertCard}>
-                <View style={styles.haAlertHeader}>
-                  <View style={styles.haAlertIconBox}>
-                    <Ionicons name="home" size={16} color={COLORS.warning} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.haAlertLabel}>SMART HOME</Text>
-                    <Text style={styles.haAlertMessage}>{event.attributes.chief_message}</Text>
-                  </View>
-                </View>
-                {event.attributes.suggested_actions && event.attributes.suggested_actions.length > 0 && (
-                  <View style={styles.haActionRow}>
-                    {event.attributes.suggested_actions.map((action, j) => {
-                      const loadingKey = `${action.entity_id}_${action.action}`;
-                      const isLoading  = actionLoading === loadingKey;
-                      return (
-                        <TouchableOpacity
-                          key={j}
-                          style={[styles.haActionBtn, { borderColor: action.color }]}
-                          onPress={() => handleHAAction(action)}
-                          disabled={!!actionLoading}
-                        >
-                          {isLoading ? (
-                            <ActivityIndicator size="small" color={action.color} />
-                          ) : (
-                            <>
-                              <Ionicons name={action.icon as any} size={14} color={action.color} />
-                              <Text style={[styles.haActionBtnText, { color: action.color }]}>
-                                {action.label}
-                              </Text>
-                            </>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          <StatItem value={documents.length} label="Documents" />
-          <StatItem value={`${currencySymbol}${monthlySpend.toFixed(0)}`} label="Monthly bills" />
-          <StatItem value={pendingTasks} label="Tasks due" />
-        </View>
-
-        {/* Module grid */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Household</Text>
-          <View style={styles.moduleGrid}>
-            <ModuleCard module="documents" title="Documents"
-              subtitle={`${documents.length} stored`}
-              badge={urgentDocAlerts.length || undefined}
-              onPress={() => router.push('/(tabs)/documents')} />
-            <ModuleCard module="bills" title="Bills"
-              subtitle={bills.length ? `${bills.length} active` : 'Add first bill'}
-              onPress={() => router.push('/(tabs)/bills')} />
-            <ModuleCard module="grocery" title="Grocery"
-              subtitle={inventory.length ? `${inventory.length} items` : 'Plan meals'}
-              onPress={() => router.push('/(tabs)/grocery')} />
-            <ModuleCard module="maintenance" title="Maintenance"
-              subtitle={pendingTasks > 0 ? `${pendingTasks} pending` : 'All clear'}
-              onPress={() => router.push('/(tabs)/maintenance')} />
-          </View>
-
-          <TouchableOpacity style={styles.healthRow} onPress={() => router.push('/(tabs)/health')}>
-            <View style={[styles.healthIcon, { backgroundColor: MODULE_INFO.health.bg }]}>
-              <Ionicons name="heart" size={22} color={MODULE_INFO.health.accent} />
-            </View>
-            <View style={styles.healthText}>
-              <Text style={styles.moduleTitle}>Health</Text>
-              <Text style={styles.moduleSubtitle}>
-                {triageHistory.length ? `${triageHistory.length} recent checks` : 'Family health triage'}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
-          </TouchableOpacity>
-
-          {haStatus.connected && (
-            <TouchableOpacity
-              style={styles.smartHomeRow}
-              onPress={() => router.push('/(tabs)/profile')}
-            >
-              <View style={styles.smartHomeIconBox}>
-                <Ionicons name="home" size={22} color={COLORS.warning} />
-              </View>
-              <View style={styles.healthText}>
-                <Text style={styles.moduleTitle}>Smart Home</Text>
-                <Text style={styles.moduleSubtitle}>
-                  {haStatus.device_count} devices · Autopilot active
-                </Text>
-              </View>
-              <View style={styles.connectedDot} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Tasks */}
-        <View style={styles.section}>
-          <View style={styles.taskSectionHeader}>
-            <Text style={styles.sectionTitle}>Tasks</Text>
-            <TouchableOpacity onPress={() => setShowAddTaskModal(true)}>
-              <Ionicons name="add-circle-outline" size={22} color={COLORS.accent} />
-            </TouchableOpacity>
-          </View>
-
-          {pendingHouseholdTasks.length === 0 ? (
-            <TouchableOpacity style={styles.taskEmptyState} onPress={() => setShowAddTaskModal(true)}>
-              <Ionicons name="checkbox-outline" size={20} color={COLORS.muted} />
-              <Text style={styles.taskEmptyText}>No tasks yet — tap to add one</Text>
-            </TouchableOpacity>
-          ) : (
-            pendingHouseholdTasks.slice(0, 5).map((task: any) => (
-              <View key={task.id} style={styles.taskRow}>
-                <TouchableOpacity
-                  style={styles.taskCheckbox}
-                  onPress={() => completeHouseholdTask(task.id)}
-                >
-                  <Ionicons name="ellipse-outline" size={20} color={COLORS.muted} />
-                </TouchableOpacity>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.taskTitle} numberOfLines={1}>{task.title}</Text>
-                  {!!task.due_at && (
-                    <Text style={styles.taskDue}>{formatTaskDue(task.due_at)}</Text>
-                  )}
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-
-        {/* Chief CTA */}
-        <TouchableOpacity style={styles.chiefCTA} onPress={() => router.push('/(tabs)/chief-of-staff')}>
+        <ImageBackground source={hero} style={[styles.hero, { paddingTop: Math.max(insets.top, 18) + 10 }]} imageStyle={styles.heroImage} resizeMode="cover">
           <LinearGradient
-            colors={['#1A3A5C', '#2D1B4E']}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            style={styles.chiefGradient}
-          >
-            <View style={styles.chiefLeft}>
-              <Text style={styles.chiefLeftIcon}>✦</Text>
-              <View>
-                <Text style={styles.chiefTitle}>Ask Chief of Staff</Text>
-                <Text style={styles.chiefSub}>Your household AI — ask anything</Text>
-              </View>
-            </View>
-            <Ionicons name="arrow-forward" size={18} color={COLORS.accent} />
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Upcoming expiries */}
-        {alerts.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Upcoming Expiries</Text>
-            {alerts.slice(0, 3).map((alert: any, i: number) => (
-              <View key={i} style={styles.expiryRow}>
-                <View style={[styles.expiryDot, {
-                  backgroundColor:
-                    alert.urgency === 'expired'  ? COLORS.danger :
-                    alert.urgency === 'critical' ? '#FF9F1C' : COLORS.accent,
-                }]} />
-                <Text style={styles.expiryTitle} numberOfLines={1}>{alert.title}</Text>
-                <Text style={[styles.expiryDays, {
-                  color:
-                    alert.urgency === 'expired'  ? COLORS.danger :
-                    alert.urgency === 'critical' ? '#FF9F1C' : COLORS.muted,
-                }]}>
-                  {alert.days_until_expiry < 0 ? 'Expired' : `${alert.days_until_expiry}d`}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
-
-      {/* ── Scan Anything FAB ── */}
-      <Animated.View style={[
-        styles.fab,
-        {
-          opacity: fabAnim,
-          transform: [{ scale: fabAnim }],
-        }
-      ]}>
-        <TouchableOpacity
-          style={styles.fabBtn}
-          onPress={() => router.push('/(tabs)/scan')}
-          activeOpacity={0.85}
-        >
+            colors={['rgba(252,250,247,0.98)', 'rgba(252,250,247,0.82)', 'rgba(252,250,247,0.06)']}
+            locations={[0, 0.52, 1]}
+            start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
           <LinearGradient
-            colors={['#4FC3F7', '#C77DFF']}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={styles.fabGradient}
-          >
-            <Ionicons name="scan-outline" size={22} color={COLORS.bg} />
-            <Text style={styles.fabText}>Scan</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* Add Task Modal */}
-      <Modal visible={showAddTaskModal} animationType="slide" presentationStyle="pageSheet">
-        <KeyboardAvoidingView
-          style={styles.taskModal}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={styles.taskModalHeader}>
-            <Text style={styles.taskModalTitle}>Add Task</Text>
-            <TouchableOpacity
-              onPress={() => { setShowAddTaskModal(false); setNewTaskTitle(''); setNewTaskDueOption('none'); }}
-              style={styles.taskModalClose}
-            >
-              <Ionicons name="close" size={20} color={COLORS.white} />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.taskFieldLabel}>What needs doing?</Text>
-          <TextInput
-            style={styles.taskInput}
-            placeholder="e.g. Pay the electrician"
-            placeholderTextColor={COLORS.muted}
-            value={newTaskTitle}
-            onChangeText={setNewTaskTitle}
-            autoFocus
+            colors={['rgba(251,250,247,0)', H.paper]}
+            locations={[0.62, 1]}
+            style={StyleSheet.absoluteFill}
           />
 
-          <Text style={styles.taskFieldLabel}>Remind me</Text>
-          <View style={styles.taskDueRow}>
-            {DUE_OPTIONS.map(opt => (
-              <TouchableOpacity
-                key={opt.key}
-                style={[styles.taskDueChip, newTaskDueOption === opt.key && styles.taskDueChipActive]}
-                onPress={() => setNewTaskDueOption(opt.key)}
-              >
-                <Text style={[styles.taskDueChipText, newTaskDueOption === opt.key && styles.taskDueChipTextActive]}>
-                  {opt.label}
-                </Text>
+          <View style={styles.topbar}>
+            <View style={styles.brand}>
+              <Ionicons name="home-outline" size={21} color={H.navy} />
+              <Text style={styles.brandText}>Hearth</Text>
+            </View>
+            <View style={styles.topActions}>
+              <TouchableOpacity style={styles.roundButton} activeOpacity={0.75}>
+                <Ionicons name="notifications-outline" size={20} color={H.navy} />
+                {attentionCount > 0 && <View style={styles.notificationDot} />}
               </TouchableOpacity>
-            ))}
+              <TouchableOpacity style={styles.avatar} onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.75}>
+                <Text style={styles.avatarText}>{firstName.charAt(0).toUpperCase()}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <TouchableOpacity style={styles.taskSaveBtn} onPress={handleAddTask}>
-            <Text style={styles.taskSaveBtnText}>Add Task</Text>
+          <View style={styles.heroCopy}>
+            <Text style={styles.greeting}>{greeting()},</Text>
+            <Text style={styles.name}>{firstName} <Text style={styles.wave}>👋</Text></Text>
+            <Text style={styles.meta}>{dateLabel()}  ·  {locationLabel}</Text>
+            <Text style={styles.heroSub}>
+              {attentionCount ? `Here’s what needs your attention today.` : `Everything looks good. You’re all caught up.`}
+            </Text>
+          </View>
+        </ImageBackground>
+
+        <View style={styles.body}>
+          <View style={styles.sectionHead}>
+            <View style={styles.sectionTitleWrap}>
+              <Text style={styles.sectionTitle}>Needs your attention</Text>
+              {attentionCount > 0 && <View style={styles.count}><Text style={styles.countText}>{attentionCount}</Text></View>}
+            </View>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/activity')} activeOpacity={0.7}>
+              <Text style={styles.viewAll}>{attentionCount ? 'View all' : 'Activity'}  ›</Text>
+            </TouchableOpacity>
+          </View>
+
+          {urgentDoc ? (
+            <TouchableOpacity style={[styles.attentionCard, styles.urgentCard]} onPress={() => router.push('/(tabs)/documents')} activeOpacity={0.86}>
+              <View style={[styles.attentionIcon, { backgroundColor: H.redIcon }]}><Ionicons name="document-text" size={24} color={H.red} /></View>
+              <View style={styles.flex}>
+                <Text style={[styles.eyebrow, { color: H.red }]}>URGENT</Text>
+                <Text style={styles.attentionTitle}>{urgentDoc.title || 'Document needs attention'}</Text>
+                <Text style={styles.attentionSub} numberOfLines={2}>{urgentDoc.message}</Text>
+                <View style={[styles.miniChip, { backgroundColor: '#FCE5E8' }]}>
+                  <Ionicons name="calendar-outline" size={12} color={H.red} />
+                  <Text style={[styles.miniChipText, { color: H.red }]}>Expired · review now</Text>
+                </View>
+              </View>
+              <View style={[styles.primaryAction, { backgroundColor: H.red }]}><Text style={styles.primaryActionText}>Renew</Text></View>
+              <Ionicons name="chevron-forward" size={18} color={H.muted2} />
+            </TouchableOpacity>
+          ) : null}
+
+          {homeEvent ? (
+            <TouchableOpacity style={[styles.attentionCard, styles.homeCard]} onPress={() => router.push('/(tabs)/maintenance')} activeOpacity={0.86}>
+              <View style={[styles.attentionIcon, { backgroundColor: H.amberIcon }]}><Ionicons name="home" size={24} color={H.amber} /></View>
+              <View style={styles.flex}>
+                <Text style={[styles.eyebrow, { color: H.amber }]}>HOME</Text>
+                <Text style={styles.attentionTitle}>Moisture detected in the kitchen</Text>
+                <Text style={styles.attentionSub} numberOfLines={2}>{(homeEvent as any).attributes?.chief_message || 'Check the kitchen for a possible leak.'}</Text>
+                <View style={[styles.miniChip, { backgroundColor: '#FFF0D8' }]}>
+                  <Ionicons name="water-outline" size={12} color={H.amber} />
+                  <Text style={[styles.miniChipText, { color: H.amber }]}>Detected · just now</Text>
+                </View>
+              </View>
+              {(homeEvent as any).attributes?.suggested_actions?.length ? (
+                <TouchableOpacity style={[styles.secondaryAction, { backgroundColor: '#F8EAD5' }]} onPress={(e) => { e.stopPropagation?.(); runHAAction((homeEvent as any).attributes.suggested_actions[0]); }} disabled={!!actionLoading}>
+                  <Text style={[styles.secondaryActionText, { color: '#6F4312' }]}>{actionLoading ? 'Working…' : (homeEvent as any).attributes.suggested_actions[0].label || 'Take action'}</Text>
+                </TouchableOpacity>
+              ) : <View style={[styles.secondaryAction, { backgroundColor: '#F8EAD5' }]}><Text style={[styles.secondaryActionText, { color: '#6F4312' }]}>View</Text></View>}
+              <Ionicons name="chevron-forward" size={18} color={H.muted2} />
+            </TouchableOpacity>
+          ) : null}
+
+          {!!dashboardSummary?.chief_message && (
+            <TouchableOpacity style={styles.briefCard} onPress={() => router.push('/(tabs)/chief-of-staff')} activeOpacity={0.82}>
+              <View style={styles.briefIcon}><Ionicons name="sparkles" size={17} color={H.purple} /></View>
+              <View style={styles.flex}><Text style={styles.briefLabel}>HEARTH BRIEF</Text><Text style={styles.briefText} numberOfLines={3}>{dashboardSummary.chief_message}</Text></View>
+              <Ionicons name="chevron-forward" size={17} color={H.muted2} />
+            </TouchableOpacity>
+          )}
+
+          {attentionCount === 0 && (
+            <View style={styles.allClear}>
+              <View style={styles.allClearIcon}><Ionicons name="checkmark" size={18} color={H.green} /></View>
+              <View style={styles.flex}><Text style={styles.allClearTitle}>Everything looks good</Text><Text style={styles.allClearSub}>Hearth is monitoring your household.</Text></View>
+            </View>
+          )}
+
+          <View style={[styles.sectionHead, { marginTop: 26 }]}>
+            <Text style={styles.sectionTitle}>Today</Text>
+            <View style={styles.todayActions}><TouchableOpacity onPress={() => setShowAddTask(true)} style={styles.addTaskMini}><Ionicons name="add" size={16} color={H.purple} /><Text style={styles.addTaskMiniText}>Task</Text></TouchableOpacity><TouchableOpacity onPress={() => router.push('/(tabs)/activity')} activeOpacity={0.7}><Text style={styles.viewAll}>View schedule  ›</Text></TouchableOpacity></View>
+          </View>
+
+          <View style={styles.timelineWrap}>
+            <View style={styles.timelineLine} />
+            {nextTask && (
+              <TouchableOpacity style={styles.todayRow} onPress={() => completeTask(nextTask.id)} activeOpacity={0.86}>
+                <View style={[styles.timelineDot, { backgroundColor: H.blue }]} />
+                <Text style={[styles.sideTime, { color: H.blue }]}>{dueLabel(nextTask.due_at)}</Text>
+                <View style={[styles.todayIcon, { backgroundColor: H.blueBg }]}><Ionicons name="calendar-outline" size={20} color={H.blue} /></View>
+                <View style={styles.flex}><Text style={styles.todayTitle}>{nextTask.title}</Text><Text style={styles.todaySub}>{nextTask.notes || 'Household task'}</Text></View>
+                <View style={styles.checkCircle} />
+                <Ionicons name="chevron-forward" size={18} color={H.muted2} />
+              </TouchableOpacity>
+            )}
+
+            {nextBill && (
+              <TouchableOpacity style={styles.todayRow} onPress={() => router.push('/(tabs)/bills')} activeOpacity={0.86}>
+                <View style={[styles.timelineDot, { backgroundColor: H.purple }]} />
+                <View style={styles.sideTimeSpacer} />
+                <View style={[styles.todayIcon, { backgroundColor: H.violetBg }]}><Ionicons name="card-outline" size={20} color={H.violet} /></View>
+                <View style={styles.flex}><Text style={styles.todayTitle}>{nextBill.provider}</Text><Text style={styles.todaySub}>{nextBill.billing_cycle} · {currency}{Number(nextBill.amount || 0).toLocaleString()}</Text></View>
+                <View style={[styles.softAction, { backgroundColor: '#EFEAFF' }]}><Text style={[styles.softActionText, { color: H.purple }]}>View</Text></View>
+                <Ionicons name="chevron-forward" size={18} color={H.muted2} />
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.todayRow} onPress={() => router.push('/(tabs)/grocery')} activeOpacity={0.86}>
+              <View style={[styles.timelineDot, { backgroundColor: H.green }]} />
+              <View style={styles.sideTimeSpacer} />
+              <View style={[styles.todayIcon, { backgroundColor: H.greenBg }]}><Ionicons name="basket-outline" size={20} color={H.green} /></View>
+              <View style={styles.flex}><Text style={styles.todayTitle}>Grocery plan</Text><Text style={styles.todaySub}>{groceryCount ? `${groceryCount} items ready` : 'Ready when you are'}</Text></View>
+              <View style={[styles.softAction, { backgroundColor: H.greenBg }]}><Text style={[styles.softActionText, { color: H.green }]}>View list</Text></View>
+              <Ionicons name="chevron-forward" size={18} color={H.muted2} />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={styles.scanCta} activeOpacity={0.9} onPress={() => router.push('/(tabs)/scan')}>
+            <LinearGradient colors={['#0B1738', '#171B50', '#3B1D8B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.scanGradient}>
+              <View style={styles.scanIcon}><Ionicons name="scan-outline" size={27} color="#D9D0FF" /></View>
+              <View style={styles.flex}>
+                <Text style={styles.scanTitle}>Scan anything</Text>
+                <Text style={styles.scanSub}>Passport, bill, receipt, insurance or medical record</Text>
+                <Text style={styles.scanMeta}>Hearth reads it and routes it to the right place.</Text>
+              </View>
+              <View style={styles.scanArrow}><Ionicons name="arrow-forward" size={20} color="#fff" /></View>
+            </LinearGradient>
           </TouchableOpacity>
-        </KeyboardAvoidingView>
+        </View>
+      </ScrollView>
+
+      <Modal visible={showAddTask} transparent animationType="fade" onRequestClose={() => setShowAddTask(false)}>
+        <View style={styles.taskModalRoot}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowAddTask(false)} />
+          <View style={styles.taskModalCard}>
+            <Text style={styles.taskModalTitle}>Add household task</Text>
+            <TextInput value={taskTitle} onChangeText={setTaskTitle} placeholder="What needs doing?" placeholderTextColor={H.muted2} style={styles.taskInput} />
+            <Text style={styles.taskLabel}>Due</Text>
+            <View style={styles.dueWrap}>{dueOptions.map(opt => <TouchableOpacity key={opt.key} style={[styles.dueChip, dueOption === opt.key && styles.dueChipActive]} onPress={() => setDueOption(opt.key)}><Text style={[styles.dueChipText, dueOption === opt.key && styles.dueChipTextActive]}>{opt.label}</Text></TouchableOpacity>)}</View>
+            <TouchableOpacity style={styles.taskSave} onPress={addTask}><Text style={styles.taskSaveText}>Add task</Text></TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
 }
 
-const StatItem = ({ value, label }: { value: string | number; label: string }) => (
-  <View style={styles.statCard}>
-    <Text style={styles.statValue}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
-
-const ModuleCard = ({ module, title, subtitle, badge, onPress }: any) => {
-  const info = MODULE_INFO[module as keyof typeof MODULE_INFO];
-  return (
-    <TouchableOpacity style={styles.moduleCard} onPress={onPress}>
-      <View style={[styles.moduleIcon, { backgroundColor: info.bg }]}>
-        <Ionicons name={info.icon} size={22} color={info.accent} />
-        {!!badge && (
-          <View style={styles.moduleBadge}>
-            <Text style={styles.moduleBadgeText}>{badge}</Text>
-          </View>
-        )}
-      </View>
-      <Text style={styles.moduleTitle}>{title}</Text>
-      <Text style={styles.moduleSubtitle} numberOfLines={1}>{subtitle}</Text>
-    </TouchableOpacity>
-  );
-};
-
 const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: COLORS.bg },
-  header:     { paddingTop: 60, paddingBottom: 28, paddingHorizontal: 24 },
-  headerRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  greeting:   { fontSize: 14, color: COLORS.muted, letterSpacing: 0.5 },
-  userName:   { fontSize: 28, fontWeight: '700', color: COLORS.white, marginTop: 2 },
-  profileBtn: { padding: 4 },
-  signOutBtn: { padding: 8, backgroundColor: COLORS.surface, borderRadius: 10 },
-  chiefMsg: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: 'rgba(79,195,247,0.08)', borderRadius: 12,
-    padding: 14, borderWidth: 1, borderColor: 'rgba(79,195,247,0.15)', gap: 10,
-  },
-  chiefMsgIcon: { fontSize: 14, color: COLORS.accent, marginTop: 1 },
-  chiefMsgText: { flex: 1, fontSize: 13, color: '#B8D4E8', lineHeight: 19, fontStyle: 'italic' },
-  section:      { paddingHorizontal: 20, marginBottom: 8 },
-  sectionTitle: { fontSize: 13, fontWeight: '600', color: COLORS.muted, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 12, marginTop: 8 },
-  alertCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,107,107,0.08)', borderRadius: 10,
-    padding: 12, marginBottom: 8,
-    borderWidth: 1, borderColor: 'rgba(255,107,107,0.2)', gap: 10,
-  },
-  alertText: { flex: 1, fontSize: 13, color: '#FFB3B3' },
-  haAlertCard: {
-    backgroundColor: 'rgba(255,209,102,0.06)', borderRadius: 14,
-    padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: 'rgba(255,209,102,0.25)',
-  },
-  haAlertHeader:  { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
-  haAlertIconBox: {
-    width: 32, height: 32, borderRadius: 8,
-    backgroundColor: 'rgba(255,209,102,0.12)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  haAlertLabel:   { fontSize: 10, fontWeight: '700', color: COLORS.warning, letterSpacing: 1, marginBottom: 3 },
-  haAlertMessage: { fontSize: 13, color: '#E8D8A0', lineHeight: 19 },
-  haActionRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  haActionBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 1,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  haActionBtnText: { fontSize: 12, fontWeight: '600' },
-  statsRow: {
-    flexDirection: 'row', marginHorizontal: 20, marginBottom: 28,
-    backgroundColor: COLORS.surface, borderRadius: 16, padding: 20,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
-  },
-  statCard:  { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 22, fontWeight: '700', color: COLORS.white, marginBottom: 4 },
-  statLabel: { fontSize: 11, color: COLORS.muted, letterSpacing: 0.3 },
-  moduleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 12 },
-  moduleCard: {
-    width: '47%', backgroundColor: COLORS.surface, borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
-  },
-  moduleIcon: {
-    width: 44, height: 44, borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 12, position: 'relative',
-  },
-  moduleBadge: {
-    position: 'absolute', top: -4, right: -4,
-    backgroundColor: COLORS.danger, borderRadius: 8,
-    minWidth: 16, height: 16,
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
-  },
-  moduleBadgeText: { fontSize: 10, color: COLORS.white, fontWeight: '700' },
-  moduleTitle:    { fontSize: 14, fontWeight: '600', color: COLORS.white, marginBottom: 3 },
-  moduleSubtitle: { fontSize: 12, color: COLORS.muted },
-  healthRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.surface, borderRadius: 16,
-    padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
-    gap: 14, marginBottom: 10,
-  },
-  healthIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  healthText: { flex: 1 },
-  smartHomeRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,209,102,0.05)', borderRadius: 16,
-    padding: 16, borderWidth: 1, borderColor: 'rgba(255,209,102,0.2)',
-    gap: 14,
-  },
-  smartHomeIconBox: {
-    width: 44, height: 44, borderRadius: 12,
-    backgroundColor: 'rgba(255,209,102,0.1)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  connectedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.success },
-  chiefCTA:      { marginHorizontal: 20, marginBottom: 28, borderRadius: 16, overflow: 'hidden' },
-  chiefGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18 },
-  chiefLeft:     { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  chiefLeftIcon: { fontSize: 20, color: COLORS.accent },
-  chiefTitle:    { fontSize: 15, fontWeight: '700', color: COLORS.white, marginBottom: 2 },
-  chiefSub:      { fontSize: 12, color: COLORS.muted },
-  expiryRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.surface, borderRadius: 10,
-    padding: 14, marginBottom: 8, gap: 12,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)',
-  },
-  expiryDot:   { width: 8, height: 8, borderRadius: 4 },
-  expiryTitle: { flex: 1, fontSize: 14, color: COLORS.white },
-  expiryDays:  { fontSize: 13, fontWeight: '600' },
-
-  // ── Household Tasks ──
-  taskSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  taskEmptyState: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: COLORS.surface, borderRadius: 12, padding: 16,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
-  },
-  taskEmptyText: { fontSize: 13, color: COLORS.muted },
-  taskRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: COLORS.surface, borderRadius: 12, padding: 14, marginBottom: 8,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
-  },
-  taskCheckbox: { padding: 2 },
-  taskTitle: { fontSize: 14, fontWeight: '600', color: COLORS.white },
-  taskDue: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  taskModal: { flex: 1, backgroundColor: COLORS.bg, padding: 24 },
-  taskModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 20, marginBottom: 24 },
-  taskModalTitle: { fontSize: 22, fontWeight: '700', color: COLORS.white },
-  taskModalClose: { padding: 6, backgroundColor: COLORS.surface, borderRadius: 10 },
-  taskFieldLabel: { fontSize: 12, fontWeight: '600', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
-  taskInput: { backgroundColor: COLORS.surface, borderRadius: 12, padding: 16, fontSize: 15, color: COLORS.white, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  taskDueRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  taskDueChip: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  taskDueChipActive: { backgroundColor: 'rgba(79,195,247,0.2)', borderColor: COLORS.accent },
-  taskDueChipText: { fontSize: 13, color: COLORS.muted },
-  taskDueChipTextActive: { color: COLORS.accent, fontWeight: '600' },
-  taskSaveBtn: { backgroundColor: COLORS.accent, borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 28 },
-  taskSaveBtnText: { color: COLORS.bg, fontWeight: '700', fontSize: 16 },
-
-  // ── Scan FAB ──
-  fab: {
-    position: 'absolute',
-    bottom: 28,
-    right: 20,
-  },
-  fabBtn:      { borderRadius: 28, overflow: 'hidden', elevation: 8, shadowColor: '#4FC3F7', shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
-  fabGradient: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 14 },
-  fabText:     { color: COLORS.bg, fontWeight: '700', fontSize: 15 },
+  root: { flex: 1, backgroundColor: H.paper },
+  hero: { minHeight: 330, paddingHorizontal: 22, paddingBottom: 44, overflow: 'hidden' },
+  heroImage: { opacity: 1 },
+  topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  brandText: { fontFamily: 'serif', fontSize: 25, color: H.navy, fontWeight: '700' },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  roundButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.82)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.75)' },
+  notificationDot: { position: 'absolute', right: 8, top: 7, width: 7, height: 7, borderRadius: 4, backgroundColor: '#FF5364', borderWidth: 1.5, borderColor: '#fff' },
+  avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#E8E5F5', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: H.navy, fontWeight: '800', fontSize: 15 },
+  heroCopy: { marginTop: 34, maxWidth: '74%' },
+  greeting: { fontFamily: 'serif', color: H.navy, fontSize: 26, lineHeight: 31 },
+  name: { color: H.navy, fontSize: 40, lineHeight: 46, fontWeight: '800', letterSpacing: -1.1 },
+  wave: { fontSize: 30 },
+  meta: { color: '#4F5D75', fontSize: 14, marginTop: 10, fontWeight: '500' },
+  heroSub: { color: '#536078', fontSize: 14.5, lineHeight: 21, marginTop: 7 },
+  body: { paddingHorizontal: 18, marginTop: -4 },
+  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  sectionTitle: { color: H.navy, fontSize: 23, fontWeight: '800', letterSpacing: -0.45 },
+  count: { minWidth: 25, height: 25, paddingHorizontal: 7, borderRadius: 13, backgroundColor: '#FF5B66', alignItems: 'center', justifyContent: 'center' },
+  countText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  viewAll: { color: H.muted, fontSize: 13, fontWeight: '600' },
+  attentionCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, minHeight: 118, borderRadius: 23, borderWidth: 1, marginBottom: 12, ...HearthDesign.shadow.card },
+  urgentCard: { backgroundColor: H.redBg, borderColor: '#F7D9DE' },
+  homeCard: { backgroundColor: H.amberBg, borderColor: '#F1E1C7' },
+  attentionIcon: { width: 55, height: 55, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  flex: { flex: 1, minWidth: 0 },
+  eyebrow: { fontSize: 10, fontWeight: '900', letterSpacing: 1.65, marginBottom: 4 },
+  attentionTitle: { fontSize: 15.5, color: H.navy, fontWeight: '800', letterSpacing: -0.2 },
+  attentionSub: { color: H.muted, fontSize: 12.5, lineHeight: 17.5, marginTop: 3 },
+  miniChip: { marginTop: 7, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 9, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5 },
+  miniChipText: { fontSize: 10.5, fontWeight: '700' },
+  primaryAction: { borderRadius: 999, paddingHorizontal: 17, paddingVertical: 10 },
+  primaryActionText: { color: '#fff', fontSize: 12.5, fontWeight: '800' },
+  secondaryAction: { borderRadius: 999, paddingHorizontal: 17, paddingVertical: 10 },
+  secondaryActionText: { fontSize: 12.5, fontWeight: '800' },
+  briefCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F7F4FF', borderWidth: 1, borderColor: '#E7E0FF', borderRadius: 18, padding: 13, marginBottom: 12 },
+  briefIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: H.violetBg, alignItems: 'center', justifyContent: 'center' },
+  briefLabel: { color: H.purple, fontSize: 9.5, fontWeight: '900', letterSpacing: 1.2 }, briefText: { color: H.navy, fontSize: 12.2, lineHeight: 17, marginTop: 3 },
+  allClear: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: H.lineSoft, padding: 16 },
+  allClearIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: H.greenBg, alignItems: 'center', justifyContent: 'center' },
+  allClearTitle: { color: H.navy, fontSize: 14.5, fontWeight: '800' },
+  allClearSub: { color: H.muted, fontSize: 12.5, marginTop: 2 },
+  todayActions: { flexDirection: 'row', alignItems: 'center', gap: 10 }, addTaskMini: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, backgroundColor: H.violetBg }, addTaskMiniText: { color: H.purple, fontSize: 11, fontWeight: '800' },
+  timelineWrap: { position: 'relative' },
+  timelineLine: { position: 'absolute', left: 70, top: 27, bottom: 25, width: 1, backgroundColor: '#E4E8EF' },
+  todayRow: { minHeight: 88, backgroundColor: '#fff', borderWidth: 1, borderColor: H.lineSoft, borderRadius: 20, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, ...HearthDesign.shadow.card },
+  timelineDot: { width: 7, height: 7, borderRadius: 4, marginLeft: -16 },
+  sideTime: { width: 54, fontSize: 11.5, fontWeight: '700', textAlign: 'right', marginRight: 1 },
+  sideTimeSpacer: { width: 54 },
+  todayIcon: { width: 43, height: 43, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  todayTitle: { color: H.navy, fontSize: 14.5, fontWeight: '800' },
+  todaySub: { color: H.muted, fontSize: 12.5, marginTop: 3 },
+  checkCircle: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.8, borderColor: H.navy },
+  softAction: { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 999 },
+  softActionText: { fontWeight: '800', fontSize: 12 },
+  scanCta: { borderRadius: 24, overflow: 'hidden', marginTop: 10, marginBottom: 8, ...HearthDesign.shadow.floating },
+  scanGradient: { minHeight: 122, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 13 },
+  scanIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: 'rgba(130,104,255,0.18)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(220,212,255,0.14)' },
+  scanTitle: { color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: -0.3 },
+  scanSub: { color: '#C7CBE7', fontSize: 11.8, lineHeight: 17, marginTop: 3 },
+  scanMeta: { color: '#929CCF', fontSize: 10.3, marginTop: 5 },
+  scanArrow: { width: 42, height: 42, borderRadius: 21, backgroundColor: H.purple, alignItems: 'center', justifyContent: 'center' },
+  taskModalRoot: { flex: 1, backgroundColor: 'rgba(8,12,24,0.4)', justifyContent: 'flex-end', paddingHorizontal: 14 }, taskModalCard: { borderRadius: 28, backgroundColor: H.paper, padding: 20, marginBottom: 20 }, taskModalTitle: { color: H.navy, fontSize: 22, fontWeight: '900', marginBottom: 14 }, taskInput: { height: 52, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: H.line, paddingHorizontal: 14, color: H.navy, fontSize: 15 }, taskLabel: { color: H.muted, fontSize: 11, fontWeight: '800', marginTop: 14, marginBottom: 8 }, dueWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, dueChip: { paddingHorizontal: 11, paddingVertical: 8, borderRadius: 999, backgroundColor: '#F0F0F1' }, dueChipActive: { backgroundColor: H.navy }, dueChipText: { color: H.navy, fontSize: 11, fontWeight: '700' }, dueChipTextActive: { color: '#fff' }, taskSave: { height: 50, borderRadius: 16, backgroundColor: H.purple, alignItems: 'center', justifyContent: 'center', marginTop: 16 }, taskSaveText: { color: '#fff', fontSize: 14, fontWeight: '900' },
 });

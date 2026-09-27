@@ -57,7 +57,8 @@
         {
           "cameraPermission": "Hearth needs camera access to scan your documents."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "scheme": "hearth",
     "extra": {

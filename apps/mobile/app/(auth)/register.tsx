@@ -1,17 +1,13 @@
 import { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, Alert, ScrollView, StatusBar, Image
+  StyleSheet, KeyboardAvoidingView, Platform, Alert, ScrollView, StatusBar
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Link, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../src/stores/authStore'
-
-const NAVY = '#0A1628'
-const SURFACE = '#162035'
-const ACCENT = '#4FC3F7'
-const WHITE = '#F8FAFF'
-const MUTED = '#8899AA'
+import { H, HearthDesign } from '../../src/theme/hearthDesign'
 
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState('')
@@ -64,156 +60,77 @@ export default function RegisterScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView contentContainerStyle={styles.inner}>
-          <View style={styles.logoBox}>
-            <Image
-              source={require('../../assets/icon.png')}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-          </View>
-          <Text style={styles.title}>Hearth</Text>
-          <Text style={styles.tagline}>Set up your household in 60 seconds</Text>
+      <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
+            <View style={styles.brandRow}>
+              <View style={styles.brandMark}><Ionicons name="home-outline" size={23} color={H.navy} /></View>
+              <Text style={styles.brandName}>Hearth</Text>
+            </View>
 
-          <Text style={styles.fieldLabel}>Full Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Jane Doe"
-            placeholderTextColor={MUTED}
-            value={fullName}
-            onChangeText={setFullName}
-            autoCapitalize="words"
-            editable={!loading}
-          />
+            <View style={styles.intro}>
+              <Text style={styles.eyebrow}>GET STARTED</Text>
+              <Text style={styles.title}>A calmer home starts here.</Text>
+              <Text style={styles.subtitle}>Create your account. Hearth will guide you through the household setup next.</Text>
+            </View>
 
-          <Text style={styles.fieldLabel}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="you@example.com"
-            placeholderTextColor={MUTED}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            editable={!loading}
-          />
+            <View style={styles.formCard}>
+              <Text style={styles.fieldLabel}>Full name</Text>
+              <TextInput style={styles.input} placeholder="Jane Doe" placeholderTextColor={H.muted2} value={fullName} onChangeText={setFullName} autoCapitalize="words" editable={!loading} />
 
-          <Text style={styles.fieldLabel}>Password</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Min 8 characters"
-              placeholderTextColor={MUTED}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              editable={!loading}
-            />
-            <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={MUTED} />
-            </TouchableOpacity>
-          </View>
+              <Text style={styles.fieldLabel}>Email</Text>
+              <TextInput style={styles.input} placeholder="you@example.com" placeholderTextColor={H.muted2} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" editable={!loading} />
 
-          <Text style={styles.fieldLabel}>Confirm Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Re-enter password"
-            placeholderTextColor={MUTED}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry={!showPassword}
-            editable={!loading}
-          />
+              <Text style={styles.fieldLabel}>Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput style={styles.passwordInput} placeholder="At least 8 characters" placeholderTextColor={H.muted2} value={password} onChangeText={setPassword} secureTextEntry={!showPassword} editable={!loading} />
+                <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={H.muted} />
+                </TouchableOpacity>
+              </View>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleRegister}
-            disabled={loading}
-          >
-            <Text style={styles.buttonText}>
-              {loading ? 'Creating account...' : 'Create Account'}
-            </Text>
-          </TouchableOpacity>
+              <Text style={styles.fieldLabel}>Confirm password</Text>
+              <TextInput style={styles.input} placeholder="Re-enter password" placeholderTextColor={H.muted2} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showPassword} editable={!loading} />
 
-          <Link href="/(auth)/login" asChild>
-            <TouchableOpacity style={styles.linkRow} disabled={loading}>
-              <Text style={styles.linkText}>
-                Already have an account? <Text style={styles.linkAccent}>Sign in</Text>
-              </Text>
-            </TouchableOpacity>
-          </Link>
-        </ScrollView>
-      </KeyboardAvoidingView>
+              <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleRegister} disabled={loading} activeOpacity={0.86}>
+                <Text style={styles.buttonText}>{loading ? 'Creating account…' : 'Create account'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Link href="/(auth)/login" asChild>
+              <TouchableOpacity style={styles.linkRow} disabled={loading}>
+                <Text style={styles.linkText}>Already have an account? <Text style={styles.linkAccent}>Sign in</Text></Text>
+              </TouchableOpacity>
+            </Link>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: NAVY },
-  keyboardView: { flex: 1 },
-  inner: { flexGrow: 1, justifyContent: 'center', padding: 28 },
-  logoBox: {
-    width: 64, height: 64, borderRadius: 20,
-    backgroundColor: 'rgba(79,195,247,0.12)',
-    alignItems: 'center', justifyContent: 'center',
-    alignSelf: 'center', marginBottom: 20,
-    borderWidth: 1, borderColor: 'rgba(79,195,247,0.25)',
-    overflow: 'hidden',
-  },
-  logoImage: {
-    width: 44, height: 44,
-  },
-  title: { fontSize: 32, fontWeight: '700', color: WHITE, textAlign: 'center', marginBottom: 6 },
-  tagline: { fontSize: 14, color: MUTED, textAlign: 'center', marginBottom: 32 },
-  fieldLabel: {
-    fontSize: 12, fontWeight: '600', color: MUTED,
-    textTransform: 'uppercase', letterSpacing: 0.8,
-    marginBottom: 8, marginTop: 4,
-  },
-  input: {
-    backgroundColor: SURFACE,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    fontSize: 15,
-    color: WHITE,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  passwordContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: SURFACE,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  passwordInput: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: WHITE,
-  },
-  eyeButton: {
-    paddingHorizontal: 14,
-  },
-  button: {
-    backgroundColor: ACCENT,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
+  container: { flex: 1, backgroundColor: H.paper },
+  safeArea: { flex: 1 },
+  inner: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 18, paddingBottom: 34 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandMark: { width: 42, height: 42, borderRadius: 14, backgroundColor: H.white, borderWidth: 1, borderColor: H.line, alignItems: 'center', justifyContent: 'center', ...HearthDesign.shadow.card },
+  brandName: { color: H.navy, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  intro: { marginTop: 38, marginBottom: 24 },
+  eyebrow: { color: H.purple, fontSize: 12, fontWeight: '800', letterSpacing: 1.4, marginBottom: 10 },
+  title: { color: H.navy, fontSize: 34, lineHeight: 39, fontWeight: '800', letterSpacing: -1.1 },
+  subtitle: { color: H.muted, fontSize: 15, lineHeight: 22, marginTop: 12 },
+  formCard: { backgroundColor: H.white, borderRadius: 24, borderWidth: 1, borderColor: H.lineSoft, padding: 18, ...HearthDesign.shadow.card },
+  fieldLabel: { fontSize: 12, fontWeight: '800', color: H.navy, marginBottom: 8, marginTop: 4 },
+  input: { minHeight: 54, backgroundColor: '#F8F7FA', borderRadius: 16, paddingHorizontal: 15, marginBottom: 15, fontSize: 16, color: H.navy, borderWidth: 1, borderColor: H.line },
+  passwordContainer: { minHeight: 54, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F7FA', borderWidth: 1, borderColor: H.line, borderRadius: 16, marginBottom: 15 },
+  passwordInput: { flex: 1, paddingHorizontal: 15, paddingVertical: 14, fontSize: 16, color: H.navy },
+  eyeButton: { paddingHorizontal: 14 },
+  button: { backgroundColor: H.navy, borderRadius: 16, minHeight: 54, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: NAVY, fontSize: 15, fontWeight: '700' },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '800' },
   linkRow: { marginTop: 22, alignItems: 'center' },
-  linkText: { color: MUTED, fontSize: 14 },
-  linkAccent: { color: ACCENT, fontWeight: '600' },
+  linkText: { color: H.muted, fontSize: 14 },
+  linkAccent: { color: H.purple, fontWeight: '800' },
 })

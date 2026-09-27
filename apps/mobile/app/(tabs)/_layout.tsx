@@ -1,90 +1,29 @@
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useKeepAwake } from 'expo-keep-awake';
+import HearthTabBar from '../../src/components/ui/HearthTabBar';
 
 export default function TabLayout() {
   useKeepAwake();
-
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: '#C77DFF',
-        tabBarInactiveTintColor: '#8899AA',
-        tabBarStyle: {
-          backgroundColor: '#0A1628',
-          borderTopColor: '#162035',
-          borderTopWidth: 1,
-        },
-      }}
-    >
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="documents"
-        options={{
-          title: 'Documents',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="document-text-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="bills"
-        options={{
-          title: 'Bills',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="card-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="grocery"
-        options={{
-          title: 'Grocery',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="basket-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="maintenance"
-        options={{
-          title: 'Maintenance',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="construct-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="health"
-        options={{
-          title: 'Health',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="heart-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="chief-of-staff"
-        options={{
-          title: 'Chief',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubble-ellipses-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      {/* Hidden from tab bar — accessible via router.push */}
-      <Tabs.Screen name="profile" options={{ href: null }} />
-      <Tabs.Screen name="scan"    options={{ href: null }} />
+    <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <HearthTabBar {...props} />}>
+      <Tabs.Screen name="dashboard" options={{ title: 'Home' }} />
+      <Tabs.Screen name="household" options={{ title: 'Household' }} />
+      <Tabs.Screen name="chief-of-staff" options={{ title: 'Chief' }} />
+      <Tabs.Screen name="activity" options={{ title: 'Activity' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      <Tabs.Screen name="documents" options={{ href: null }} />
+      <Tabs.Screen name="bills" options={{ href: null }} />
+      <Tabs.Screen name="grocery" options={{ href: null }} />
+      <Tabs.Screen name="maintenance" options={{ href: null }} />
+      <Tabs.Screen name="health" options={{ href: null }} />
+      <Tabs.Screen name="scan" options={{ href: null }} />
       <Tabs.Screen name="devices" options={{ href: null }} />
+      <Tabs.Screen name="profile-edit" options={{ href: null }} />
+      <Tabs.Screen name="members" options={{ href: null }} />
+      <Tabs.Screen name="integrations" options={{ href: null }} />
+      <Tabs.Screen name="preferences" options={{ href: null }} />
+      <Tabs.Screen name="privacy" options={{ href: null }} />
+      <Tabs.Screen name="help" options={{ href: null }} />
     </Tabs>
   );
 }

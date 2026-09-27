@@ -56,6 +56,7 @@ interface AutomationState {
   fetchStatus: () => Promise<void>;
   connectHA: (haUrl: string, accessToken: string) => Promise<{ device_count: number; message: string }>;
   fetchDevices: () => Promise<void>;
+  disconnectHA: () => Promise<void>;
   fetchEvents: () => Promise<void>;
   executeAction: (entityId: string, action: string, payload?: any) => Promise<void>;
   clearError: () => void;
@@ -90,6 +91,19 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
       return res.data;
     } catch (error: any) {
       const message = error.response?.data?.detail || 'Could not connect to Home Assistant';
+      set({ error: message, isLoading: false });
+      throw new Error(message);
+    }
+  },
+
+
+  disconnectHA: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      await api.delete('/api/automation/disconnect');
+      set({ status: { connected: false }, devices: [], events: [], isLoading: false });
+    } catch (error: any) {
+      const message = error.response?.data?.detail || 'Could not disconnect Home Assistant';
       set({ error: message, isLoading: false });
       throw new Error(message);
     }

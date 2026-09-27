@@ -4,7 +4,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '../src/stores/authStore';
 import { useHouseholdStore } from '../src/stores/householdStore';
 import { setUnauthorizedHandler } from '../src/services/api';
-import { registerForPushNotificationsAsync } from '../src/services/notifications';
+import Constants from 'expo-constants';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 
 export default function RootLayout() {
@@ -46,9 +46,17 @@ export default function RootLayout() {
   useEffect(() => {
     if (session && !hasRegisteredPush.current) {
       hasRegisteredPush.current = true;
-      registerForPushNotificationsAsync().catch((err) => {
-        console.log('Push registration failed (non-fatal):', err);
-      });
+
+      // Expo Go no longer supports Android remote push notifications.
+      // Avoid loading expo-notifications there so UI testing stays quiet;
+      // development/production builds still register normally.
+      if (Constants.appOwnership !== 'expo') {
+        import('../src/services/notifications')
+          .then(({ registerForPushNotificationsAsync }) => registerForPushNotificationsAsync())
+          .catch((err) => {
+            console.log('Push registration failed (non-fatal):', err);
+          });
+      }
     }
     if (!session) {
       hasRegisteredPush.current = false;
@@ -88,8 +96,8 @@ export default function RootLayout() {
   if (authLoading) {
     return (
       <ThemeProvider>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0A1628' }}>
-          <ActivityIndicator size="large" color="#C77DFF" />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FBFAF7' }}>
+          <ActivityIndicator size="large" color="#6C43FF" />
         </View>
       </ThemeProvider>
     );

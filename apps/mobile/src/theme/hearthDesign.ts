@@ -1,0 +1,52 @@
+export const HearthDesign = {
+  colors: {
+    paper: '#FBFAF7',
+    paperWarm: '#F7F3EE',
+    white: '#FFFFFF',
+    navy: '#0B1533',
+    navy2: '#172044',
+    purple: '#6C43FF',
+    purple2: '#8D6BFF',
+    muted: '#667085',
+    muted2: '#98A2B3',
+    line: '#E9E8ED',
+    lineSoft: '#F0EEF3',
+    red: '#C92D44',
+    redBg: '#FFF1F3',
+    redIcon: '#F9DCE1',
+    amber: '#A96818',
+    amberBg: '#FFF8EC',
+    amberIcon: '#FDEAC8',
+    green: '#168D54',
+    greenBg: '#ECF8F0',
+    blue: '#2A75E6',
+    blueBg: '#EBF3FF',
+    violet: '#7650E8',
+    violetBg: '#F1ECFF',
+  },
+  radius: {
+    sm: 12,
+    md: 16,
+    lg: 20,
+    xl: 24,
+    pill: 999,
+  },
+  shadow: {
+    card: {
+      shadowColor: '#18233B',
+      shadowOpacity: 0.06,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 2,
+    },
+    floating: {
+      shadowColor: '#24155A',
+      shadowOpacity: 0.18,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 8,
+    },
+  },
+} as const;
+
+export const H = HearthDesign.colors;
