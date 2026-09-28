@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   ImageBackground,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -105,6 +108,7 @@ export default function Dashboard() {
 
   const addTask = async () => {
     if (!taskTitle.trim()) { Alert.alert('Task needed', 'Enter what needs doing.'); return; }
+    Keyboard.dismiss();
     try {
       await createTask(taskTitle.trim(), undefined, dueFromOption(dueOption));
       setTaskTitle(''); setDueOption('none'); setShowAddTask(false);
@@ -137,6 +141,8 @@ export default function Dashboard() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={false} onRefresh={load} tintColor={H.purple} />}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         contentContainerStyle={{ paddingBottom: 26 }}
       >
         <ImageBackground source={hero} style={[styles.hero, { paddingTop: Math.max(insets.top, 18) + 10 }]} imageStyle={styles.heroImage} resizeMode="cover">
@@ -296,7 +302,7 @@ export default function Dashboard() {
       </ScrollView>
 
       <Modal visible={showAddTask} transparent animationType="fade" onRequestClose={() => setShowAddTask(false)}>
-        <View style={styles.taskModalRoot}>
+        <KeyboardAvoidingView style={styles.taskModalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowAddTask(false)} />
           <View style={styles.taskModalCard}>
             <Text style={styles.taskModalTitle}>Add household task</Text>
@@ -305,7 +311,7 @@ export default function Dashboard() {
             <View style={styles.dueWrap}>{dueOptions.map(opt => <TouchableOpacity key={opt.key} style={[styles.dueChip, dueOption === opt.key && styles.dueChipActive]} onPress={() => setDueOption(opt.key)}><Text style={[styles.dueChipText, dueOption === opt.key && styles.dueChipTextActive]}>{opt.label}</Text></TouchableOpacity>)}</View>
             <TouchableOpacity style={styles.taskSave} onPress={addTask}><Text style={styles.taskSaveText}>Add task</Text></TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

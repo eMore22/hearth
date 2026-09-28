@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -26,6 +29,7 @@ export default function HealthScreen() {
 
   const triage = async () => {
     if (!symptoms.trim()) return;
+    Keyboard.dismiss();
     try {
       const result = await triageSymptoms(symptoms.trim());
       setShowTriage(false);
@@ -39,7 +43,7 @@ export default function HealthScreen() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
         <ScreenHeader title="Family Health" subtitle="Your household health in one place." />
         <View style={styles.body}>
           <View style={styles.notice}>
@@ -89,7 +93,7 @@ export default function HealthScreen() {
       </ScrollView>
 
       <Modal visible={showTriage} transparent animationType="fade" onRequestClose={() => setShowTriage(false)}>
-        <View style={styles.modalRoot}>
+        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowTriage(false)} />
           <View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, 18) + 20 }]}>
             <Text style={styles.modalTitle}>Describe symptoms</Text>
@@ -97,7 +101,7 @@ export default function HealthScreen() {
             <TextInput value={symptoms} onChangeText={setSymptoms} placeholder="e.g. 6-year-old with fever for 2 days" placeholderTextColor={H.muted2} multiline style={styles.textarea} />
             <TouchableOpacity style={[styles.save, isLoading && { opacity: 0.6 }]} onPress={triage} disabled={isLoading}><Text style={styles.saveText}>{isLoading ? 'Checking…' : 'Get triage recommendation'}</Text></TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList,
-  Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar,
+  Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, StatusBar,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
@@ -19,11 +19,13 @@ export default function AddMembersScreen() {
 
   const addMember = () => {
     if (!name.trim()) { Alert.alert('Name required', 'Please enter a name.'); return }
+    Keyboard.dismiss()
     setMembers([...members, { name: name.trim(), email: email.trim() || undefined, relationship: relationship.trim() || undefined }])
     setName(''); setEmail(''); setRelationship('')
   }
 
   const handleContinue = async () => {
+    Keyboard.dismiss()
     setIsLoading(true)
     try { router.push('/onboarding/permissions') } finally { setIsLoading(false) }
   }
@@ -47,7 +49,7 @@ export default function AddMembersScreen() {
             <View style={styles.formCard}>
               <TextInput style={styles.input} placeholder="Full name" placeholderTextColor={H.muted2} value={name} onChangeText={setName} />
               <TextInput style={styles.input} placeholder="Email (optional)" placeholderTextColor={H.muted2} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-              <TextInput style={styles.input} placeholder="Relationship, e.g. Partner" placeholderTextColor={H.muted2} value={relationship} onChangeText={setRelationship} />
+              <TextInput style={styles.input} placeholder="Relationship, e.g. Partner" placeholderTextColor={H.muted2} value={relationship} onChangeText={setRelationship} returnKeyType="done" blurOnSubmit onSubmitEditing={() => Keyboard.dismiss()} />
               <TouchableOpacity style={styles.addButton} onPress={addMember}><Ionicons name="person-add-outline" size={18} color={H.purple} /><Text style={styles.addButtonText}>Add member</Text></TouchableOpacity>
             </View>
 
@@ -56,6 +58,8 @@ export default function AddMembersScreen() {
                 <Text style={styles.listTitle}>Added members</Text>
                 <FlatList
                   data={members}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                   keyExtractor={(_, index) => index.toString()}
                   renderItem={({ item, index }) => (
                     <View style={styles.memberItem}>

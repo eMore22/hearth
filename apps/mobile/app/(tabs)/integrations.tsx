@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ export default function IntegrationsScreen() {
     const cleanUrl = url.trim().replace(/\/$/, '');
     if (!/^https?:\/\//i.test(cleanUrl)) { Alert.alert('Check the URL', 'Enter the full Home Assistant URL, including https://'); return; }
     if (!token.trim()) { Alert.alert('Access token needed', 'Paste a Home Assistant long-lived access token.'); return; }
+    Keyboard.dismiss();
     try {
       const result = await connectHA(cleanUrl, token.trim());
       setToken('');
@@ -35,7 +36,7 @@ export default function IntegrationsScreen() {
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 44 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 44 }}>
         <ScreenHeader title="Integrations" subtitle="Connect the services that make Hearth proactive." />
         <View style={styles.body}>
           <View style={[styles.integrationCard, status.connected && styles.integrationConnected]}>

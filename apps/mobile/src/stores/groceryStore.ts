@@ -9,7 +9,8 @@ export interface MealPlan {
     lunch: { name: string; ingredients: string[] };
     dinner: { name: string; ingredients: string[] };
   }>;
-  estimated_cost: number;
+  estimated_cost?: number;
+  estimated_weekly_cost?: number;
   notes?: string;
 }
 

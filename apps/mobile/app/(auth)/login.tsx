@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
@@ -32,6 +33,7 @@ export default function LoginScreen() {
       return
     }
 
+    Keyboard.dismiss()
     setLoading(true)
     try {
       await signIn(email, password)
@@ -106,6 +108,9 @@ export default function LoginScreen() {
                   editable={!loading}
                   autoComplete="password"
                   textContentType="password"
+                  returnKeyType="done"
+                  blurOnSubmit
+                  onSubmitEditing={() => Keyboard.dismiss()}
                 />
                 <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
                   <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={H.muted} />

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -87,6 +87,7 @@ export default function DocumentsScreen() {
 
   const askDocuments = async () => {
     if (!question.trim()) return;
+    Keyboard.dismiss();
     setAsking(true);
     try { setAnswer(await askQuestion(question.trim())); }
     catch (e: any) { Alert.alert('Could not answer', e?.message || 'Please try again.'); }
@@ -101,14 +102,14 @@ export default function DocumentsScreen() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
         <ScreenHeader title="Documents" subtitle="Everything important, organised." />
 
         <View style={styles.body}>
           <View style={styles.searchRow}>
             <View style={styles.searchBox}>
               <Ionicons name="search-outline" size={18} color={H.muted} />
-              <TextInput value={query} onChangeText={setQuery} placeholder="Search documents..." placeholderTextColor={H.muted2} style={styles.searchInput} />
+              <TextInput value={query} onChangeText={setQuery} placeholder="Search documents..." placeholderTextColor={H.muted2} style={styles.searchInput} returnKeyType="search" blurOnSubmit onSubmitEditing={() => Keyboard.dismiss()} />
             </View>
             <TouchableOpacity style={styles.filterButton} onPress={() => setShowAsk(true)} activeOpacity={0.75}><Ionicons name="sparkles-outline" size={19} color={H.purple} /></TouchableOpacity>
           </View>
@@ -149,7 +150,7 @@ export default function DocumentsScreen() {
       </ScrollView>
 
       <Modal visible={showAsk} transparent animationType="fade" onRequestClose={() => setShowAsk(false)}>
-        <View style={styles.modalRoot}>
+        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowAsk(false)} />
           <View style={styles.sheet}>
             <View style={styles.handle} />
@@ -159,7 +160,7 @@ export default function DocumentsScreen() {
             <TouchableOpacity style={[styles.askButton, (!question.trim() || asking) && { opacity: .45 }]} onPress={askDocuments} disabled={!question.trim() || asking}><Text style={styles.askButtonText}>{asking ? 'Checking…' : 'Ask Hearth'}</Text></TouchableOpacity>
             {!!answer && <View style={styles.answerCard}><Text style={styles.answerLabel}>ANSWER</Text><Text style={styles.answerText}>{answer}</Text></View>}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showAdd} transparent animationType="fade" onRequestClose={() => !uploading && setShowAdd(false)}>

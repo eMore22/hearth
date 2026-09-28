@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar,
+  Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, StatusBar,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
@@ -25,6 +25,7 @@ export default function ResetPasswordScreen() {
     if (newPassword.length < 8) { Alert.alert('Weak password', 'Password must be at least 8 characters.'); return }
     if (newPassword !== confirmPassword) { Alert.alert('Passwords do not match', 'Please check both password fields.'); return }
 
+    Keyboard.dismiss()
     setLoading(true)
     try {
       await resetPassword(email, code.trim(), newPassword)
@@ -60,7 +61,7 @@ export default function ResetPasswordScreen() {
               </View>
 
               <Text style={styles.fieldLabel}>Confirm new password</Text>
-              <TextInput style={styles.input} placeholder="Re-enter password" placeholderTextColor={H.muted2} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showPassword} editable={!loading} />
+              <TextInput style={styles.input} placeholder="Re-enter password" placeholderTextColor={H.muted2} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showPassword} editable={!loading} returnKeyType="done" blurOnSubmit onSubmitEditing={() => Keyboard.dismiss()} />
 
               <TouchableOpacity style={[styles.button, loading && { opacity: 0.6 }]} onPress={handleSubmit} disabled={loading}>
                 {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Update password</Text>}

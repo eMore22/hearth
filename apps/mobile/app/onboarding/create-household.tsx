@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
-  Alert, KeyboardAvoidingView, Platform, Modal, ScrollView, StatusBar,
+  Alert, Keyboard, KeyboardAvoidingView, Platform, Modal, ScrollView, StatusBar,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
@@ -23,6 +23,7 @@ export default function CreateHouseholdScreen() {
   const handleCreate = async () => {
     if (!name.trim()) { Alert.alert('Household name', 'Please enter a household name.'); return }
     if (!country) { Alert.alert('Country', 'Please select a country.'); return }
+    Keyboard.dismiss()
     setIsLoading(true)
     try {
       await householdService.create({
@@ -41,7 +42,7 @@ export default function CreateHouseholdScreen() {
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}>
             <View style={styles.topRow}>
               <TouchableOpacity style={styles.back} onPress={() => router.back()}><Ionicons name="chevron-back" size={21} color={H.navy} /></TouchableOpacity>
               <View style={styles.progress}><View style={[styles.progressFill, { width: '66%' }]} /></View>
@@ -57,7 +58,7 @@ export default function CreateHouseholdScreen() {
               <TextInput style={styles.input} placeholder="e.g. Eugene Family" placeholderTextColor={H.muted2} value={name} onChangeText={setName} autoCapitalize="words" autoFocus />
 
               <Text style={styles.label}>Address <Text style={styles.optional}>(optional)</Text></Text>
-              <TextInput style={styles.input} placeholder="Street or neighbourhood" placeholderTextColor={H.muted2} value={address} onChangeText={setAddress} autoCapitalize="words" />
+              <TextInput style={styles.input} placeholder="Street or neighbourhood" placeholderTextColor={H.muted2} value={address} onChangeText={setAddress} autoCapitalize="words" returnKeyType="done" blurOnSubmit onSubmitEditing={() => Keyboard.dismiss()} />
 
               <Text style={styles.label}>Country</Text>
               <TouchableOpacity style={styles.selectInput} onPress={() => setShowCountryModal(true)} activeOpacity={0.8}>

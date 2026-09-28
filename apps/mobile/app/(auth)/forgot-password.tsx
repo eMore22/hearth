@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar,
+  Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, StatusBar,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -20,6 +20,7 @@ export default function ForgotPasswordScreen() {
       Alert.alert('Missing email', 'Please enter your email.')
       return
     }
+    Keyboard.dismiss()
     setLoading(true)
     try {
       await forgotPassword(email.trim())
@@ -46,7 +47,7 @@ export default function ForgotPasswordScreen() {
 
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>Email</Text>
-              <TextInput style={styles.input} placeholder="you@example.com" placeholderTextColor={H.muted2} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" editable={!loading} />
+              <TextInput style={styles.input} placeholder="you@example.com" placeholderTextColor={H.muted2} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" editable={!loading} returnKeyType="done" blurOnSubmit onSubmitEditing={() => Keyboard.dismiss()} />
               <TouchableOpacity style={[styles.button, loading && { opacity: 0.6 }]} onPress={handleSubmit} disabled={loading}>
                 {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Send reset code</Text>}
               </TouchableOpacity>

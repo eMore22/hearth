@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -70,6 +73,7 @@ export default function BillsScreen() {
       Alert.alert('Invalid amount', 'Enter a valid bill amount.');
       return;
     }
+    Keyboard.dismiss();
     setSaving(true);
     try {
       await createBill({ provider: provider.trim(), amount: n, billing_cycle: 'monthly', category: 'utility' });
@@ -98,7 +102,7 @@ export default function BillsScreen() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
         <ScreenHeader title="Bills & Subscriptions" subtitle="Track and never miss a payment." right={<TouchableOpacity style={styles.plus} onPress={() => setShowAdd(true)}><Ionicons name="add" size={22} color={H.navy} /></TouchableOpacity>} />
         <View style={styles.body}>
           <View style={styles.summaryRow}>
@@ -160,7 +164,7 @@ export default function BillsScreen() {
       </Modal>
 
       <Modal visible={showAdd} transparent animationType="fade" onRequestClose={() => setShowAdd(false)}>
-        <View style={styles.modalRoot}>
+        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowAdd(false)} />
           <View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, 18) + 20 }]}>
             <Text style={styles.modalTitle}>Add a bill</Text>
@@ -169,7 +173,7 @@ export default function BillsScreen() {
             <TextInput value={amount} onChangeText={setAmount} placeholder="Amount" placeholderTextColor={H.muted2} keyboardType="decimal-pad" style={styles.input} />
             <TouchableOpacity style={[styles.save, saving && { opacity: 0.6 }]} onPress={add} disabled={saving}><Text style={styles.saveText}>{saving ? 'Adding…' : 'Add bill'}</Text></TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

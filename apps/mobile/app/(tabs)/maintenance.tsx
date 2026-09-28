@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -57,6 +60,7 @@ export default function MaintenanceScreen() {
 
   const diagnose = async () => {
     if (!issue.trim()) return;
+    Keyboard.dismiss();
     try {
       const result = await diagnoseProblem(issue.trim());
       setDiagnosis(result);
@@ -72,7 +76,7 @@ export default function MaintenanceScreen() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
         <ScreenHeader title="Home & Maintenance" subtitle="Keep your home running smoothly." />
         <View style={styles.body}>
           <View style={styles.statusStrip}>
@@ -119,7 +123,7 @@ export default function MaintenanceScreen() {
       </ScrollView>
 
       <Modal visible={showDiagnose} transparent animationType="fade" onRequestClose={() => setShowDiagnose(false)}>
-        <View style={styles.modalRoot}>
+        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowDiagnose(false)} />
           <View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, 18) + 20 }]}>
             <Text style={styles.modalTitle}>Diagnose a home issue</Text>
@@ -127,7 +131,7 @@ export default function MaintenanceScreen() {
             <TextInput value={issue} onChangeText={setIssue} placeholder="e.g. Kitchen sink is leaking underneath" placeholderTextColor={H.muted2} multiline style={styles.textarea} />
             <TouchableOpacity style={[styles.save, isLoading && { opacity: 0.6 }]} onPress={diagnose} disabled={isLoading}><Text style={styles.saveText}>{isLoading ? 'Checking…' : 'Ask Hearth'}</Text></TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

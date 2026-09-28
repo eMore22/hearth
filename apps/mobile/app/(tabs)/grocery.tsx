@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -63,6 +66,7 @@ export default function GroceryScreen() {
   const saveBudget = async () => {
     const n = Number(budgetInput.replace(/,/g, ''));
     if (!Number.isFinite(n) || n < 0) { Alert.alert('Invalid budget', 'Enter a valid weekly budget.'); return; }
+    Keyboard.dismiss();
     await setBudget(n, household?.currency); setShowBudget(false);
   };
 
@@ -73,6 +77,7 @@ export default function GroceryScreen() {
 
   const addItem = async () => {
     if (!itemName.trim()) return;
+    Keyboard.dismiss();
     await addInventoryItem({ name: itemName.trim(), quantity: quantity.trim() || undefined });
     setItemName(''); setQuantity(''); setShowAdd(false);
   };
@@ -80,7 +85,7 @@ export default function GroceryScreen() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
         <ScreenHeader title="Grocery & Meals" subtitle="Plan, shop and stay stocked." />
         <View style={styles.body}>
           <View style={styles.planCard}>
@@ -119,7 +124,7 @@ export default function GroceryScreen() {
           {mealPlan && (
             <View style={styles.mealPreview}>
               <View style={styles.mealTop}><View><Text style={styles.mealLabel}>MEAL PLAN</Text><Text style={styles.mealTitle}>This week</Text></View><Ionicons name="restaurant-outline" size={22} color={H.purple} /></View>
-              <Text style={styles.mealSub}>{mealPlan.days?.length || 0} days planned · Estimated {currency}{Number(mealPlan.estimated_cost || 0).toLocaleString()}</Text>
+              <Text style={styles.mealSub}>{mealPlan.days?.length || 0} days planned · Estimated {currency}{Number(mealPlan.estimated_weekly_cost || mealPlan.estimated_cost || 0).toLocaleString()}</Text>
               <View style={styles.mealActions}><TouchableOpacity style={styles.mealAction} onPress={persistPlan}><Text style={styles.mealActionText}>Save plan</Text></TouchableOpacity><TouchableOpacity style={styles.mealAction} onPress={makeList}><Text style={styles.mealActionText}>Build list</Text></TouchableOpacity></View>
               {mealPlan.days?.slice(0,7).map((d: any) => <View key={d.day} style={styles.dayRow}><Text style={styles.dayName}>{d.day}</Text><Text style={styles.dayMeals} numberOfLines={2}>{[d.breakfast?.name,d.lunch?.name,d.dinner?.name].filter(Boolean).join(' · ')}</Text></View>)}
             </View>
@@ -127,10 +132,10 @@ export default function GroceryScreen() {
         </View>
       </ScrollView>
 
-      <Modal visible={showBudget} transparent animationType="fade" onRequestClose={() => setShowBudget(false)}><View style={styles.modalRoot}><TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowBudget(false)} /><View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom,18)+20 }]}><Text style={styles.modalTitle}>Weekly grocery budget</Text><TextInput value={budgetInput} onChangeText={setBudgetInput} placeholder="0" keyboardType="decimal-pad" placeholderTextColor={H.muted2} style={styles.input} /><TouchableOpacity style={styles.save} onPress={saveBudget}><Text style={styles.saveText}>Save budget</Text></TouchableOpacity></View></View></Modal>
+      <Modal visible={showBudget} transparent animationType="fade" onRequestClose={() => setShowBudget(false)}><KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}><TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowBudget(false)} /><View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom,18)+20 }]}><Text style={styles.modalTitle}>Weekly grocery budget</Text><TextInput value={budgetInput} onChangeText={setBudgetInput} placeholder="0" keyboardType="decimal-pad" placeholderTextColor={H.muted2} style={styles.input} /><TouchableOpacity style={styles.save} onPress={saveBudget}><Text style={styles.saveText}>Save budget</Text></TouchableOpacity></View></KeyboardAvoidingView></Modal>
 
       <Modal visible={showAdd} transparent animationType="fade" onRequestClose={() => setShowAdd(false)}>
-        <View style={styles.modalRoot}>
+        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowAdd(false)} />
           <View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, 18) + 20 }]}>
             <Text style={styles.modalTitle}>Add pantry item</Text>
@@ -138,7 +143,7 @@ export default function GroceryScreen() {
             <TextInput value={quantity} onChangeText={setQuantity} placeholder="Quantity (optional)" placeholderTextColor={H.muted2} style={styles.input} />
             <TouchableOpacity style={styles.save} onPress={addItem}><Text style={styles.saveText}>Add item</Text></TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +21,7 @@ export default function ProfileEditScreen() {
       Alert.alert('Add your name', 'Enter at least 2 characters.');
       return;
     }
+    Keyboard.dismiss();
     try {
       await updateProfile(trimmed);
       Alert.alert('Profile updated', 'Your name has been saved.', [{ text: 'Done', onPress: () => router.back() }]);
@@ -32,12 +33,12 @@ export default function ProfileEditScreen() {
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 40 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 40 }}>
         <ScreenHeader title="Edit profile" subtitle="Keep your Hearth identity up to date." />
         <View style={styles.body}>
           <View style={styles.avatar}><Text style={styles.avatarText}>{(name || user?.email || 'H').charAt(0).toUpperCase()}</Text></View>
           <Text style={styles.label}>FULL NAME</Text>
-          <View style={styles.inputWrap}><Ionicons name="person-outline" size={18} color={H.muted} /><TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Your name" placeholderTextColor={H.muted2} autoCapitalize="words" /></View>
+          <View style={styles.inputWrap}><Ionicons name="person-outline" size={18} color={H.muted} /><TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Your name" placeholderTextColor={H.muted2} autoCapitalize="words" returnKeyType="done" blurOnSubmit onSubmitEditing={() => Keyboard.dismiss()} /></View>
           <Text style={[styles.label, { marginTop: 18 }]}>EMAIL</Text>
           <View style={[styles.inputWrap, styles.readonly]}><Ionicons name="mail-outline" size={18} color={H.muted2} /><Text style={styles.email}>{user?.email || 'No email available'}</Text><Ionicons name="lock-closed-outline" size={14} color={H.muted2} /></View>
           <Text style={styles.hint}>Email changes are handled through account security.</Text>

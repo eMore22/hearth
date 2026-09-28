@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, Alert, ScrollView, StatusBar
+  StyleSheet, Keyboard, KeyboardAvoidingView, Platform, Alert, ScrollView, StatusBar
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Link, useRouter } from 'expo-router'
@@ -32,6 +32,7 @@ export default function RegisterScreen() {
       Alert.alert('Passwords don\'t match', 'Please make sure both password fields match.')
       return
     }
+    Keyboard.dismiss()
     setLoading(true)
     try {
       const result = await signUp(email, password, fullName)
@@ -63,7 +64,7 @@ export default function RegisterScreen() {
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}>
             <View style={styles.brandRow}>
               <View style={styles.brandMark}><Ionicons name="home-outline" size={23} color={H.navy} /></View>
               <Text style={styles.brandName}>Hearth</Text>
@@ -91,7 +92,7 @@ export default function RegisterScreen() {
               </View>
 
               <Text style={styles.fieldLabel}>Confirm password</Text>
-              <TextInput style={styles.input} placeholder="Re-enter password" placeholderTextColor={H.muted2} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showPassword} editable={!loading} />
+              <TextInput style={styles.input} placeholder="Re-enter password" placeholderTextColor={H.muted2} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showPassword} editable={!loading} returnKeyType="done" blurOnSubmit onSubmitEditing={() => Keyboard.dismiss()} />
 
               <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleRegister} disabled={loading} activeOpacity={0.86}>
                 <Text style={styles.buttonText}>{loading ? 'Creating account…' : 'Create account'}</Text>

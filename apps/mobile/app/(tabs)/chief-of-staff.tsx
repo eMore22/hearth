@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -77,6 +78,7 @@ export default function ChiefScreen() {
   const send = async (value = text) => {
     const message = value.trim();
     if (!message || isTyping) return;
+    Keyboard.dismiss();
     setText('');
     try { await sendMessage(message, buildContext()); }
     catch (e: any) { Alert.alert('Hearth could not reply', e?.message || 'Please try again.'); }
@@ -98,7 +100,7 @@ export default function ChiefScreen() {
         <TouchableOpacity onPress={clear} style={styles.clearButton}><Ionicons name="trash-outline" size={18} color={H.muted} /></TouchableOpacity>
       </View>
 
-      <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}>
         {messages.length === 0 ? (
           <View style={styles.hero}>
             <LinearGradient colors={['#EEE9FF', '#E6F0FF']} style={styles.orb}><Ionicons name="sparkles" size={32} color={H.purple} /></LinearGradient>

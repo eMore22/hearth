@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { householdService } from '../../src/services/api';
@@ -26,6 +26,7 @@ export default function MembersScreen() {
   const invite = async () => {
     const value = email.trim().toLowerCase();
     if (!value.includes('@')) { Alert.alert('Enter an email', 'Use the email address of an existing Hearth account.'); return; }
+    Keyboard.dismiss();
     setInviting(true);
     try {
       await householdService.inviteMember(value);
@@ -40,7 +41,7 @@ export default function MembersScreen() {
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 40 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 40 }}>
         <ScreenHeader title="Household members" subtitle="The people Hearth can organise around." />
         <View style={styles.body}>
           <View style={styles.inviteCard}>
