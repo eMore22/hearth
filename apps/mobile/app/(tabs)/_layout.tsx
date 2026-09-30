@@ -21,6 +21,7 @@ export default function TabLayout() {
       <Tabs.Screen name="profile-edit" options={{ href: null }} />
       <Tabs.Screen name="members" options={{ href: null }} />
       <Tabs.Screen name="integrations" options={{ href: null }} />
+      <Tabs.Screen name="subscription" options={{ href: null }} />
       <Tabs.Screen name="preferences" options={{ href: null }} />
       <Tabs.Screen name="privacy" options={{ href: null }} />
       <Tabs.Screen name="help" options={{ href: null }} />

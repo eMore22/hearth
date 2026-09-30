@@ -6,9 +6,12 @@ import { useHouseholdStore } from '../src/stores/householdStore';
 import { setUnauthorizedHandler } from '../src/services/api';
 import Constants from 'expo-constants';
 import { ThemeProvider } from '../src/theme/ThemeContext';
+import { revenueCatService } from '../src/services/revenuecat';
+import Purchases, { CustomerInfo } from 'react-native-purchases';
+import { useBillingStore } from '../src/stores/billingStore';
 
 export default function RootLayout() {
-  const { session, loading: authLoading, loadSession } = useAuthStore();
+  const { session, user, loading: authLoading, loadSession } = useAuthStore();
   const { household, loading: householdLoading, fetchHousehold } = useHouseholdStore();
   const segments  = useSegments();
   const router    = useRouter();
@@ -22,6 +25,40 @@ export default function RootLayout() {
 
   useEffect(() => {
     loadSession();
+  }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const syncRevenueCat = async () => {
+      const userId = user?.id ? String(user.id) : undefined;
+
+      await revenueCatService.configure(userId);
+
+      if (userId) {
+        await revenueCatService.identifyUser(userId);
+        await useBillingStore.getState().refresh();
+      } else {
+        await revenueCatService.clearUser();
+        useBillingStore.getState().reset();
+      }
+    };
+
+    syncRevenueCat().catch((err) => {
+      console.log('RevenueCat sync failed (non-fatal):', err);
+    });
+  }, [authLoading, user?.id]);
+
+  useEffect(() => {
+    const handleCustomerInfoUpdate = (customerInfo: CustomerInfo) => {
+      useBillingStore.getState().applyCustomerInfo(customerInfo);
+    };
+
+    Purchases.addCustomerInfoUpdateListener(handleCustomerInfoUpdate);
+
+    return () => {
+      Purchases.removeCustomerInfoUpdateListener(handleCustomerInfoUpdate);
+    };
   }, []);
 
   useEffect(() => {

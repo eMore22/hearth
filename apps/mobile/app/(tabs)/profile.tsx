@@ -12,6 +12,7 @@ import { ScreenHeader } from '../../src/components/ui/PremiumKit';
 const rowMeta = [
   { key: 'members', label: 'Household members', sub: 'Manage the people in your household', icon: 'people-outline' as const, route: '/(tabs)/members' },
   { key: 'integrations', label: 'Integrations', sub: 'Smart home and connected services', icon: 'link-outline' as const, route: '/(tabs)/integrations' },
+  { key: 'subscription', label: 'Subscription', sub: 'Manage your Hearth plan and billing', icon: 'card-outline' as const, route: '/(tabs)/subscription' },
   { key: 'preferences', label: 'Preferences', sub: 'Country, currency and timezone', icon: 'options-outline' as const, route: '/(tabs)/preferences' },
   { key: 'privacy', label: 'Privacy & security', sub: 'Password and household data controls', icon: 'lock-closed-outline' as const, route: '/(tabs)/privacy' },
   { key: 'help', label: 'Help & support', sub: 'Get help with Hearth', icon: 'help-circle-outline' as const, route: '/(tabs)/help' },
