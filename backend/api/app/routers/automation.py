@@ -8,6 +8,7 @@ Handles:
   POST /api/automation/action           — execute a command on a device
   GET  /api/automation/events           — recent smart home events
 """
+import asyncio
 import re
 import traceback
 from datetime import datetime
@@ -292,6 +293,26 @@ async def list_devices(current_user: dict = Depends(get_current_user)):
         return []
 
     supabase = get_supabase_admin()
+
+    # Pull fresh state from Home Assistant before returning the cached rows.
+    # If HA is temporarily unreachable, Hearth still falls back to the last
+    # known states stored in Supabase instead of blanking the device list.
+    try:
+        conn = supabase.table("ha_connections")\
+            .select("ha_instance_url, ha_access_token")\
+            .eq("household_id", household_id)\
+            .eq("is_active", True)\
+            .maybe_single()\
+            .execute()
+        if conn and conn.data:
+            bridge = build_ha_bridge(
+                conn.data["ha_instance_url"],
+                conn.data["ha_access_token"],
+            )
+            await _sync_devices(household_id, bridge, supabase)
+    except Exception as e:
+        print(f"⚠️ Live HA refresh failed; using cached states: {e}")
+
     try:
         result = supabase.table("ha_devices")\
             .select("*")\
@@ -340,6 +361,23 @@ async def execute_action(
     action_id = action_row.data[0]["id"] if action_row.data else None
 
     try:
+        domain = payload.entity_id.split(".", 1)[0]
+
+        # The mobile UI intentionally uses generic on/off semantics. Resolve
+        # those into the Home Assistant service expected by the entity domain.
+        # This keeps every caller (Smart Home, Home alerts, Chief) consistent.
+        resolved_action = payload.action
+        if domain == "lock":
+            if payload.action == "turn_on":
+                resolved_action = "unlock"
+            elif payload.action == "turn_off":
+                resolved_action = "lock"
+        elif domain == "cover":
+            if payload.action == "turn_on":
+                resolved_action = "open"
+            elif payload.action == "turn_off":
+                resolved_action = "close"
+
         action_map = {
             "turn_on":  bridge.turn_on,
             "turn_off": bridge.turn_off,
@@ -348,11 +386,58 @@ async def execute_action(
             "lock":     bridge.lock,
             "unlock":   bridge.unlock,
         }
-        handler = action_map.get(payload.action)
+        handler = action_map.get(resolved_action)
         if not handler:
             raise HTTPException(status_code=400, detail=f"Unknown action: {payload.action}")
 
         ha_response = await handler(payload.entity_id)
+
+        # Read the entity back from HA and persist the real post-action state.
+        # Some physical devices update a fraction of a second after the service
+        # call, so poll briefly rather than immediately trusting cached DB state.
+        expected_states = {
+            "turn_on": "on",
+            "turn_off": "off",
+            "lock": "locked",
+            "unlock": "unlocked",
+            "open": "open",
+            "close": "closed",
+        }
+        expected_state = expected_states.get(resolved_action)
+        entity_state = None
+        for attempt in range(4):
+            if attempt:
+                await asyncio.sleep(0.25 * attempt)
+            try:
+                entity_state = await bridge.get_entity_state(payload.entity_id)
+            except Exception:
+                entity_state = None
+            if entity_state and (
+                not expected_state or entity_state.get("state") == expected_state
+            ):
+                break
+
+        updated_device = None
+        if entity_state:
+            attrs = entity_state.get("attributes", {})
+            state_value = entity_state.get("state")
+            state_time = entity_state.get("last_changed") or datetime.utcnow().isoformat()
+            supabase.table("ha_devices").update({
+                "last_state": state_value,
+                "last_state_at": state_time,
+                "friendly_name": attrs.get("friendly_name", payload.entity_id),
+                "device_class": attrs.get("device_class"),
+            }).eq("household_id", household_id)\
+              .eq("entity_id", payload.entity_id)\
+              .execute()
+
+            refreshed = supabase.table("ha_devices")\
+                .select("*")\
+                .eq("household_id", household_id)\
+                .eq("entity_id", payload.entity_id)\
+                .maybe_single()\
+                .execute()
+            updated_device = refreshed.data if refreshed else None
 
         if action_id:
             supabase.table("ha_actions").update({
@@ -366,10 +451,21 @@ async def execute_action(
             household_id=household_id,
             event_name="device_action_executed",
             module="automation",
-            metadata={"entity_id": payload.entity_id, "action": payload.action, "initiated_by": "user"},
+            metadata={
+                "entity_id": payload.entity_id,
+                "action": resolved_action,
+                "requested_action": payload.action,
+                "initiated_by": "user",
+            },
         )
 
-        return {"status": "sent", "entity_id": payload.entity_id, "action": payload.action}
+        return {
+            "status": "sent",
+            "entity_id": payload.entity_id,
+            "action": resolved_action,
+            "requested_action": payload.action,
+            "device": updated_device,
+        }
 
     except HTTPException:
         raise
