@@ -46,7 +46,7 @@ export default function DevicesScreen() {
             <View style={styles.emptyCard}>
               <View style={styles.emptyIcon}><Ionicons name="home-outline" size={29} color={H.blue} /></View>
               <Text style={styles.emptyTitle}>Connect Home Assistant</Text>
-              <Text style={styles.emptySub}>Connect from Integrations, then Hearth will sync supported devices and sensors here.</Text>
+              <Text style={styles.emptySub}>Connect from Integrations, then Hearth HQ will sync supported devices and sensors here.</Text>
               <TouchableOpacity style={styles.connect} onPress={() => router.push('/(tabs)/integrations')}><Text style={styles.connectText}>Open integrations</Text></TouchableOpacity>
             </View>
           ) : (

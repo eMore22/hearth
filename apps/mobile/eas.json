@@ -24,6 +24,17 @@
         "EXPO_ROUTER_APP_ROOT": "./app",
         "EXPO_PUBLIC_API_URL": "https://hearth-hq.onrender.com"
       }
+    },
+    "internalTest": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_ROUTER_APP_ROOT": "./app",
+        "EXPO_PUBLIC_API_URL": "https://hearth-hq.onrender.com"
+      }
     }
   },
   "submit": {

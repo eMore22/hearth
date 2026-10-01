@@ -34,7 +34,7 @@ export default function ProfileEditScreen() {
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 40 }}>
-        <ScreenHeader title="Edit profile" subtitle="Keep your Hearth identity up to date." />
+        <ScreenHeader title="Edit profile" subtitle="Keep your Hearth HQ identity up to date." />
         <View style={styles.body}>
           <View style={styles.avatar}><Text style={styles.avatarText}>{(name || user?.email || 'H').charAt(0).toUpperCase()}</Text></View>
           <Text style={styles.label}>FULL NAME</Text>

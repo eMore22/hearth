@@ -61,9 +61,9 @@ export default function HouseholdScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 16) + 14 }]}>
         <View style={styles.topline}>
           <View>
-            <Text style={styles.eyebrow}>HEARTH</Text>
+            <Text style={styles.eyebrow}>HEARTH HQ</Text>
             <Text style={styles.title}>Your Household</Text>
-            <Text style={styles.sub}>Everything Hearth manages, in one place.</Text>
+            <Text style={styles.sub}>Everything Hearth HQ manages, in one place.</Text>
           </View>
           <TouchableOpacity style={styles.settings} onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.75}>
             <Ionicons name="settings-outline" size={20} color={H.navy} />
@@ -76,7 +76,7 @@ export default function HouseholdScreen() {
           </View>
           <View style={styles.flex}>
             <Text style={styles.statusTitle}>{attentionCount ? `${attentionCount} household item${attentionCount === 1 ? '' : 's'} need attention` : 'Everything looks good'}</Text>
-            <Text style={styles.statusSub}>Hearth is monitoring your documents, home, bills, food and health.</Text>
+            <Text style={styles.statusSub}>Hearth HQ is monitoring your documents, home, bills, food and health.</Text>
           </View>
         </View>
 
@@ -95,7 +95,7 @@ export default function HouseholdScreen() {
 
         <TouchableOpacity style={styles.chiefCard} onPress={() => router.push('/(tabs)/chief-of-staff')} activeOpacity={0.87}>
           <View style={styles.chiefIcon}><Ionicons name="sparkles" size={22} color="#CBBEFF" /></View>
-          <View style={styles.flex}><Text style={styles.chiefTitle}>Ask Hearth about your household</Text><Text style={styles.chiefSub}>Get answers across every area, without hunting through tabs.</Text></View>
+          <View style={styles.flex}><Text style={styles.chiefTitle}>Ask Hearth HQ about your household</Text><Text style={styles.chiefSub}>Get answers across every area, without hunting through tabs.</Text></View>
           <Ionicons name="arrow-forward" size={19} color="#CBBEFF" />
         </TouchableOpacity>
       </ScrollView>

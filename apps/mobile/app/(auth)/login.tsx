@@ -68,13 +68,13 @@ export default function LoginScreen() {
               <View style={styles.brandMark}>
                 <Ionicons name="home-outline" size={23} color={H.navy} />
               </View>
-              <Text style={styles.brandName}>Hearth</Text>
+              <Text style={styles.brandName}>Hearth HQ</Text>
             </View>
 
             <View style={styles.intro}>
               <Text style={styles.eyebrow}>WELCOME BACK</Text>
               <Text style={styles.title}>Your household,{"\n"}already organised.</Text>
-              <Text style={styles.subtitle}>Sign in to pick up exactly where Hearth left off.</Text>
+              <Text style={styles.subtitle}>Sign in to pick up exactly where Hearth HQ left off.</Text>
             </View>
 
             <View style={styles.formCard}>
@@ -136,7 +136,7 @@ export default function LoginScreen() {
             <Link href="/(auth)/register" asChild>
               <TouchableOpacity style={styles.linkButton} disabled={loading}>
                 <Text style={styles.linkText}>
-                  New to Hearth? <Text style={styles.linkTextBold}>Create an account</Text>
+                  New to Hearth HQ? <Text style={styles.linkTextBold}>Create an account</Text>
                 </Text>
               </TouchableOpacity>
             </Link>

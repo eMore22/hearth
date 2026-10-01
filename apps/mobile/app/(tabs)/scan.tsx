@@ -155,7 +155,7 @@ export default function ScanScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Scan Anything</Text>
-          <Text style={styles.headerSubtitle}>Hearth routes it automatically</Text>
+          <Text style={styles.headerSubtitle}>Hearth HQ routes it automatically</Text>
         </View>
         <View style={{ width: 36 }} />
       </LinearGradient>

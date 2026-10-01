@@ -111,7 +111,7 @@ export default function GroceryScreen() {
           {wasteAlerts.length > 0 && <View style={styles.wasteWrap}><Text style={styles.sectionTitle}>Use soon</Text>{wasteAlerts.slice(0,3).map((a, i) => <View key={`${a.item}-${i}`} style={styles.wasteCard}><Ionicons name="warning-outline" size={18} color={H.amber} /><View style={styles.flex}><Text style={styles.rowTitle}>{a.item}</Text><Text style={styles.rowMeta}>{a.days_left} days left · {a.suggested_recipe?.recipe_name || 'Use soon'}</Text></View></View>)}</View>}
 
           <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Pantry</Text><Text style={styles.sectionMeta}>{inventory.length} items</Text></View>
-          {inventory.length === 0 ? <EmptyMessage icon="basket-outline" title="Your pantry is empty" subtitle="Add staples and Hearth can use them when planning meals." /> : inventory.map(item => (
+          {inventory.length === 0 ? <EmptyMessage icon="basket-outline" title="Your pantry is empty" subtitle="Add staples and Hearth HQ can use them when planning meals." /> : inventory.map(item => (
             <View key={item.id} style={styles.row}>
               <View style={styles.dot} />
               <View style={styles.flex}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.rowMeta}>{item.quantity || 'Quantity not set'}{item.days_left != null ? ` · ${item.days_left} days left` : ''}</Text></View>

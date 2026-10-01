@@ -26,7 +26,7 @@ import { useGroceryStore } from '../../src/stores/groceryStore';
 import { useAutomationStore } from '../../src/stores/automationStore';
 import { useTaskStore } from '../../src/stores/taskStore';
 import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore';
-import type { SuggestedAction } from '../../src/stores/automationStore';
+import type { HADevice, SuggestedAction } from '../../src/stores/automationStore';
 import { useHouseholdStore } from '../../src/stores/householdStore';
 import { getCurrencySymbol } from '../../src/utils/currency';
 import { H, HearthDesign } from '../../src/theme/hearthDesign';
@@ -52,6 +52,45 @@ const dueLabel = (iso?: string) => {
   return d.toLocaleDateString('en-CA', { day: 'numeric', month: 'short' });
 };
 
+
+const isDeviceOn = (state = '') => ['on', 'open', 'unlocked', 'home', 'true'].includes(state.toLowerCase());
+
+const deviceIcon = (device: HADevice): keyof typeof Ionicons.glyphMap => {
+  if (device.domain === 'lock') return 'lock-closed-outline';
+  if (device.domain === 'light') return 'bulb-outline';
+  if (device.domain === 'cover') return 'home-outline';
+  if (device.domain === 'climate') return 'thermometer-outline';
+  if (device.domain === 'fan') return 'reorder-three-outline';
+  if (device.domain === 'water_heater') return 'water-outline';
+  return 'toggle-outline';
+};
+
+const deviceStateLabel = (device: HADevice) => {
+  const state = (device.last_state || 'unknown').toLowerCase();
+  if (device.domain === 'lock') return state === 'locked' ? 'Locked' : state === 'unlocked' ? 'Unlocked' : device.last_state || 'Unknown';
+  if (device.domain === 'cover') return state === 'open' ? 'Open' : state === 'closed' ? 'Closed' : device.last_state || 'Unknown';
+  if (state === 'on') return 'On';
+  if (state === 'off') return 'Off';
+  return device.last_state ? device.last_state.charAt(0).toUpperCase() + device.last_state.slice(1) : 'Unknown';
+};
+
+const deviceActionLabel = (device: HADevice) => {
+  const on = isDeviceOn(device.last_state);
+  if (device.domain === 'lock') return on ? 'Lock' : 'Unlock';
+  if (device.domain === 'cover') return on ? 'Close' : 'Open';
+  return on ? 'Turn off' : 'Turn on';
+};
+
+const devicePriority = (device: HADevice) => {
+  const name = `${device.friendly_name} ${device.entity_id}`.toLowerCase();
+  if (name.includes('water') || name.includes('valve')) return 100;
+  if (device.domain === 'lock') return 90;
+  if (device.domain === 'light') return 80;
+  if (name.includes('garage') || device.domain === 'cover') return 70;
+  if (device.domain === 'climate') return 60;
+  return 20;
+};
+
 const dueOptions = [
   { key: 'none', label: 'No due date' },
   { key: '1hour', label: 'In 1 hour' },
@@ -75,7 +114,7 @@ export default function Dashboard() {
   const { alerts, fetchAlerts } = useDocumentStore();
   const { bills, fetchBills, fetchMonthlyReport } = useBillStore();
   const { shoppingList, inventory, fetchInventory } = useGroceryStore();
-  const { events, fetchEvents, fetchStatus, executeAction } = useAutomationStore();
+  const { events, devices, status, fetchEvents, fetchStatus, fetchDevices, executeAction } = useAutomationStore();
   const { tasks, fetchTasks, completeTask, createTask } = useTaskStore();
   const { dashboardSummary, fetchDashboardSummary } = useChiefOfStaffStore();
   const [showAddTask, setShowAddTask] = useState(false);
@@ -91,6 +130,7 @@ export default function Dashboard() {
     fetchInventory();
     fetchEvents();
     fetchStatus();
+    fetchDevices();
     fetchTasks();
     fetchDashboardSummary().catch(() => undefined);
   };
@@ -106,6 +146,12 @@ export default function Dashboard() {
   const groceryCount = shoppingList?.total_items || inventory.length;
   const attentionCount = (urgentDoc ? 1 : 0) + (homeEvent ? 1 : 0);
 
+  const quickDevices = useMemo(
+    () => [...devices].filter(device => device.is_actionable).sort((a, b) => devicePriority(b) - devicePriority(a)).slice(0, 4),
+    [devices],
+  );
+
+
   const addTask = async () => {
     if (!taskTitle.trim()) { Alert.alert('Task needed', 'Enter what needs doing.'); return; }
     Keyboard.dismiss();
@@ -113,6 +159,31 @@ export default function Dashboard() {
       await createTask(taskTitle.trim(), undefined, dueFromOption(dueOption));
       setTaskTitle(''); setDueOption('none'); setShowAddTask(false);
     } catch (e: any) { Alert.alert('Could not add task', e?.message || 'Please try again.'); }
+  };
+
+  const runQuickDeviceAction = (device: HADevice) => {
+    const action = isDeviceOn(device.last_state) ? 'turn_off' : 'turn_on';
+    const run = async () => {
+      const key = `quick_${device.entity_id}`;
+      setActionLoading(key);
+      try { await executeAction(device.entity_id, action); }
+      catch (e: any) { Alert.alert('Action failed', e?.message || 'Please try again.'); }
+      finally { setActionLoading(null); }
+    };
+
+    const name = `${device.friendly_name} ${device.entity_id}`.toLowerCase();
+    if ((name.includes('water') || name.includes('valve')) && action === 'turn_off') {
+      Alert.alert(
+        'Shut off water?',
+        `Turn off ${device.friendly_name}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Shut off', style: 'destructive', onPress: run },
+        ],
+      );
+      return;
+    }
+    run();
   };
 
   const runHAAction = async (action: SuggestedAction) => {
@@ -161,7 +232,7 @@ export default function Dashboard() {
           <View style={styles.topbar}>
             <View style={styles.brand}>
               <Ionicons name="home-outline" size={21} color={H.navy} />
-              <Text style={styles.brandText}>Hearth</Text>
+              <Text style={styles.brandText}>Hearth HQ</Text>
             </View>
             <View style={styles.topActions}>
               <TouchableOpacity style={styles.roundButton} activeOpacity={0.75}>
@@ -236,7 +307,7 @@ export default function Dashboard() {
           {!!dashboardSummary?.chief_message && (
             <TouchableOpacity style={styles.briefCard} onPress={() => router.push('/(tabs)/chief-of-staff')} activeOpacity={0.82}>
               <View style={styles.briefIcon}><Ionicons name="sparkles" size={17} color={H.purple} /></View>
-              <View style={styles.flex}><Text style={styles.briefLabel}>HEARTH BRIEF</Text><Text style={styles.briefText} numberOfLines={3}>{dashboardSummary.chief_message}</Text></View>
+              <View style={styles.flex}><Text style={styles.briefLabel}>HEARTH HQ BRIEF</Text><Text style={styles.briefText} numberOfLines={3}>{dashboardSummary.chief_message}</Text></View>
               <Ionicons name="chevron-forward" size={17} color={H.muted2} />
             </TouchableOpacity>
           )}
@@ -244,7 +315,48 @@ export default function Dashboard() {
           {attentionCount === 0 && (
             <View style={styles.allClear}>
               <View style={styles.allClearIcon}><Ionicons name="checkmark" size={18} color={H.green} /></View>
-              <View style={styles.flex}><Text style={styles.allClearTitle}>Everything looks good</Text><Text style={styles.allClearSub}>Hearth is monitoring your household.</Text></View>
+              <View style={styles.flex}><Text style={styles.allClearTitle}>Everything looks good</Text><Text style={styles.allClearSub}>Hearth HQ is monitoring your household.</Text></View>
+            </View>
+          )}
+
+          {status.connected && quickDevices.length > 0 && (
+            <View style={styles.quickHomeSection}>
+              <View style={styles.sectionHead}>
+                <View style={styles.sectionTitleWrap}>
+                  <Text style={styles.sectionTitle}>Quick home controls</Text>
+                </View>
+                <TouchableOpacity onPress={() => router.push('/(tabs)/devices')} activeOpacity={0.7}>
+                  <Text style={styles.viewAll}>Manage  ›</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.quickHomeHint}>Large, simple controls for the devices you may need most.</Text>
+              <View style={styles.quickHomeList}>
+                {quickDevices.map(device => {
+                  const on = isDeviceOn(device.last_state);
+                  const key = `quick_${device.entity_id}`;
+                  return (
+                    <View key={device.entity_id} style={styles.quickDeviceRow}>
+                      <View style={[styles.quickDeviceIcon, { backgroundColor: on ? H.greenBg : '#F3F2F1' }]}>
+                        <Ionicons name={deviceIcon(device)} size={22} color={on ? H.green : H.muted} />
+                      </View>
+                      <View style={styles.flex}>
+                        <Text style={styles.quickDeviceName} numberOfLines={1}>{device.friendly_name}</Text>
+                        <Text style={styles.quickDeviceState}>{deviceStateLabel(device)}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.quickDeviceButton, on && styles.quickDeviceButtonOn, actionLoading === key && { opacity: 0.55 }]}
+                        onPress={() => runQuickDeviceAction(device)}
+                        disabled={actionLoading === key}
+                        activeOpacity={0.82}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${deviceActionLabel(device)} ${device.friendly_name}`}
+                      >
+                        <Text style={[styles.quickDeviceButtonText, on && styles.quickDeviceButtonTextOn]}>{actionLoading === key ? 'Working…' : deviceActionLabel(device)}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           )}
 
@@ -293,7 +405,7 @@ export default function Dashboard() {
               <View style={styles.flex}>
                 <Text style={styles.scanTitle}>Scan anything</Text>
                 <Text style={styles.scanSub}>Passport, bill, receipt, insurance or medical record</Text>
-                <Text style={styles.scanMeta}>Hearth reads it and routes it to the right place.</Text>
+                <Text style={styles.scanMeta}>Hearth HQ reads it and routes it to the right place.</Text>
               </View>
               <View style={styles.scanArrow}><Ionicons name="arrow-forward" size={20} color="#fff" /></View>
             </LinearGradient>
@@ -363,6 +475,17 @@ const styles = StyleSheet.create({
   allClearIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: H.greenBg, alignItems: 'center', justifyContent: 'center' },
   allClearTitle: { color: H.navy, fontSize: 14.5, fontWeight: '800' },
   allClearSub: { color: H.muted, fontSize: 12.5, marginTop: 2 },
+  quickHomeSection: { marginTop: 26 },
+  quickHomeHint: { color: H.muted, fontSize: 12.5, lineHeight: 18, marginTop: -4, marginBottom: 10 },
+  quickHomeList: { gap: 9 },
+  quickDeviceRow: { minHeight: 76, backgroundColor: '#fff', borderWidth: 1, borderColor: H.lineSoft, borderRadius: 20, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 11, ...HearthDesign.shadow.card },
+  quickDeviceIcon: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  quickDeviceName: { color: H.navy, fontSize: 14.5, fontWeight: '900' },
+  quickDeviceState: { color: H.muted, fontSize: 12, fontWeight: '700', marginTop: 3, textTransform: 'capitalize' },
+  quickDeviceButton: { minWidth: 86, minHeight: 46, paddingHorizontal: 13, borderRadius: 15, backgroundColor: H.navy, alignItems: 'center', justifyContent: 'center' },
+  quickDeviceButtonOn: { backgroundColor: H.greenBg, borderWidth: 1, borderColor: '#CDEBD9' },
+  quickDeviceButtonText: { color: '#fff', fontSize: 12.5, fontWeight: '900' },
+  quickDeviceButtonTextOn: { color: H.green },
   todayActions: { flexDirection: 'row', alignItems: 'center', gap: 10 }, addTaskMini: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, backgroundColor: H.violetBg }, addTaskMiniText: { color: H.purple, fontSize: 11, fontWeight: '800' },
   timelineWrap: { position: 'relative' },
   timelineLine: { position: 'absolute', left: 70, top: 27, bottom: 25, width: 1, backgroundColor: '#E4E8EF' },

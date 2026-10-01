@@ -8,7 +8,7 @@ import { H, HearthDesign } from '../../src/theme/hearthDesign'
 const features = [
   { icon: 'document-text-outline' as const, title: 'Keep important documents in view', text: 'Track expiries, renewals and household records.' },
   { icon: 'card-outline' as const, title: 'Know what is due next', text: 'Bring bills, subscriptions and recurring costs together.' },
-  { icon: 'sparkles-outline' as const, title: 'Let Hearth connect the dots', text: 'Get one household briefing instead of checking five different places.' },
+  { icon: 'sparkles-outline' as const, title: 'Let Hearth HQ connect the dots', text: 'Get one household briefing instead of checking five different places.' },
 ]
 
 export default function WelcomeScreen() {
@@ -18,7 +18,7 @@ export default function WelcomeScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.brandRow}>
           <View style={styles.brandMark}><Ionicons name="home-outline" size={22} color={H.navy} /></View>
-          <Text style={styles.brand}>Hearth</Text>
+          <Text style={styles.brand}>Hearth HQ</Text>
           <Text style={styles.step}>1 of 3</Text>
         </View>
 
@@ -26,7 +26,7 @@ export default function WelcomeScreen() {
           <View style={styles.heroIcon}><Ionicons name="sparkles" size={25} color="#fff" /></View>
           <Text style={styles.kicker}>YOUR HOUSEHOLD, ORGANISED</Text>
           <Text style={styles.title}>A chief of staff for everyday home life.</Text>
-          <Text style={styles.subtitle}>Hearth keeps an eye on what matters and brings the right thing forward at the right time.</Text>
+          <Text style={styles.subtitle}>Hearth HQ keeps an eye on what matters and brings the right thing forward at the right time.</Text>
         </View>
 
         <View style={styles.features}>

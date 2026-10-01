@@ -41,7 +41,7 @@ export default function MaintenanceScreen() {
 
   const createCalendar = async () => {
     try {
-      await generateCalendar(DEFAULT_PROFILE); Alert.alert('Care calendar ready', 'Hearth generated a maintenance schedule for your home.');
+      await generateCalendar(DEFAULT_PROFILE); Alert.alert('Care calendar ready', 'Hearth HQ generated a maintenance schedule for your home.');
     } catch (e: any) { Alert.alert('Could not generate calendar', e?.message || 'Please try again.'); }
   };
 
@@ -67,8 +67,8 @@ export default function MaintenanceScreen() {
       setShowDiagnose(false);
       setIssue('');
       Alert.alert(
-        result.urgency === 'emergency' ? 'Urgent attention needed' : 'Hearth diagnosis',
-        `${result.likely_causes?.[0] || 'Hearth reviewed the issue.'}\n\n${result.diy_check_steps?.slice(0, 2).join('\n') || ''}`,
+        result.urgency === 'emergency' ? 'Urgent attention needed' : 'Hearth HQ diagnosis',
+        `${result.likely_causes?.[0] || 'Hearth HQ reviewed the issue.'}\n\n${result.diy_check_steps?.slice(0, 2).join('\n') || ''}`,
       );
     } catch (e: any) { Alert.alert('Could not diagnose', e?.message || 'Please try again.'); }
   };
@@ -111,7 +111,7 @@ export default function MaintenanceScreen() {
           </View>
 
           <View style={styles.sectionHead}><Text style={styles.sectionTitle}>Maintenance</Text><Text style={styles.sectionMeta}>{pending.length} upcoming</Text></View>
-          {tasks.length === 0 ? <EmptyMessage icon="construct-outline" title="No maintenance tasks" subtitle="When Hearth finds recurring home-care jobs, they’ll appear here." /> : tasks.map((task, index) => (
+          {tasks.length === 0 ? <EmptyMessage icon="construct-outline" title="No maintenance tasks" subtitle="When Hearth HQ finds recurring home-care jobs, they’ll appear here." /> : tasks.map((task, index) => (
             <View key={task.id || `${task.name}-${index}`} style={styles.row}>
               <IconBadge icon="construct-outline" bg={task.completed ? H.greenBg : H.amberBg} color={task.completed ? H.green : H.amber} size={44} />
               <View style={styles.flex}><Text style={styles.rowTitle}>{task.name}</Text><Text style={styles.rowMeta}>{task.due_date ? `Due ${new Date(task.due_date).toLocaleDateString('en-CA', { day: 'numeric', month: 'short' })}` : 'Scheduled maintenance'}{task.diy_friendly ? ' · DIY friendly' : ''}</Text></View>
@@ -129,7 +129,7 @@ export default function MaintenanceScreen() {
             <Text style={styles.modalTitle}>Diagnose a home issue</Text>
             <Text style={styles.modalSub}>Describe what you’re seeing, hearing or smelling.</Text>
             <TextInput value={issue} onChangeText={setIssue} placeholder="e.g. Kitchen sink is leaking underneath" placeholderTextColor={H.muted2} multiline style={styles.textarea} />
-            <TouchableOpacity style={[styles.save, isLoading && { opacity: 0.6 }]} onPress={diagnose} disabled={isLoading}><Text style={styles.saveText}>{isLoading ? 'Checking…' : 'Ask Hearth'}</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.save, isLoading && { opacity: 0.6 }]} onPress={diagnose} disabled={isLoading}><Text style={styles.saveText}>{isLoading ? 'Checking…' : 'Ask Hearth HQ'}</Text></TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </Modal>

@@ -10,7 +10,7 @@ interface ChiefOfStaffButtonProps {
 }
 
 export default function ChiefOfStaffButton({
-  label = 'Ask Hearth',
+  label = 'Ask Hearth HQ',
   onPress
 }: ChiefOfStaffButtonProps) {
   const handlePress = () => {

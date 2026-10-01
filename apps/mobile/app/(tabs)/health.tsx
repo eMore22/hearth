@@ -34,7 +34,7 @@ export default function HealthScreen() {
       const result = await triageSymptoms(symptoms.trim());
       setShowTriage(false);
       setSymptoms('');
-      Alert.alert('Hearth health guidance', `${result.recommendation}\n\n${result.disclaimer}`);
+      Alert.alert('Hearth HQ health guidance', `${result.recommendation}\n\n${result.disclaimer}`);
     } catch (e: any) {
       Alert.alert('Could not complete triage', e?.message || 'Please try again.');
     }

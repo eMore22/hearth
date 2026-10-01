@@ -25,7 +25,7 @@ export default function MembersScreen() {
 
   const invite = async () => {
     const value = email.trim().toLowerCase();
-    if (!value.includes('@')) { Alert.alert('Enter an email', 'Use the email address of an existing Hearth account.'); return; }
+    if (!value.includes('@')) { Alert.alert('Enter an email', 'Use the email address of an existing Hearth HQ account.'); return; }
     Keyboard.dismiss();
     setInviting(true);
     try {
@@ -34,7 +34,7 @@ export default function MembersScreen() {
       await load();
       Alert.alert('Member added', `${value} has been added to this household.`);
     } catch (e: any) {
-      Alert.alert('Could not add member', e?.response?.data?.detail || 'That person may need to create a Hearth account first.');
+      Alert.alert('Could not add member', e?.response?.data?.detail || 'That person may need to create a Hearth HQ account first.');
     } finally { setInviting(false); }
   };
 
@@ -42,12 +42,12 @@ export default function MembersScreen() {
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 40 }}>
-        <ScreenHeader title="Household members" subtitle="The people Hearth can organise around." />
+        <ScreenHeader title="Household members" subtitle="The people Hearth HQ can organise around." />
         <View style={styles.body}>
           <View style={styles.inviteCard}>
             <View style={styles.inviteIcon}><Ionicons name="person-add-outline" size={22} color={H.purple} /></View>
             <Text style={styles.cardTitle}>Add someone to your household</Text>
-            <Text style={styles.cardSub}>They need an existing Hearth account. Add them with the same email they use to sign in.</Text>
+            <Text style={styles.cardSub}>They need an existing Hearth HQ account. Add them with the same email they use to sign in.</Text>
             <View style={styles.inputWrap}><Ionicons name="mail-outline" size={18} color={H.muted} /><TextInput value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholder="name@example.com" placeholderTextColor={H.muted2} style={styles.input} /></View>
             <TouchableOpacity style={[styles.inviteBtn, inviting && { opacity: 0.55 }]} disabled={inviting} onPress={invite}><Text style={styles.inviteText}>{inviting ? 'Adding…' : 'Add member'}</Text></TouchableOpacity>
           </View>
