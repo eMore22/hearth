@@ -43,7 +43,7 @@ export default function ForgotPasswordScreen() {
             </TouchableOpacity>
             <View style={styles.icon}><Ionicons name="key-outline" size={26} color={H.purple} /></View>
             <Text style={styles.title}>Reset your password</Text>
-            <Text style={styles.subtitle}>Enter your email and Hearth will send you a reset code.</Text>
+            <Text style={styles.subtitle}>Enter your email and Hearth HQ will send you a reset code.</Text>
 
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>Email</Text>

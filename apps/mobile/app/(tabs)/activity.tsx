@@ -34,7 +34,7 @@ export default function ActivityScreen() {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
-        <ScreenHeader title="Activity" subtitle="Everything Hearth has done for you." back={false} />
+        <ScreenHeader title="Activity" subtitle="Everything Hearth HQ has done for you." back={false} />
         <View style={styles.body}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
             {filters.map(f => <TouchableOpacity key={f} onPress={() => setFilter(f)} style={[styles.filterChip, filter === f && styles.filterChipActive]}><Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f}</Text></TouchableOpacity>)}
@@ -42,7 +42,7 @@ export default function ActivityScreen() {
 
           <Text style={styles.dayTitle}>Recent</Text>
           {items.length === 0 ? (
-            <View style={styles.empty}><View style={styles.emptyIcon}><Ionicons name="pulse-outline" size={22} color={H.purple} /></View><Text style={styles.emptyTitle}>No recent activity</Text><Text style={styles.emptySub}>When Hearth detects, reminds or organises something, it’ll show up here.</Text></View>
+            <View style={styles.empty}><View style={styles.emptyIcon}><Ionicons name="pulse-outline" size={22} color={H.purple} /></View><Text style={styles.emptyTitle}>No recent activity</Text><Text style={styles.emptySub}>When Hearth HQ detects, reminds or organises something, it’ll show up here.</Text></View>
           ) : items.map(item => (
             <View key={item.id} style={styles.row}>
               <View style={[styles.icon, { backgroundColor: item.bg }]}><Ionicons name={item.icon} size={20} color={item.fg} /></View>

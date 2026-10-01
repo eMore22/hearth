@@ -81,7 +81,7 @@ export default function ChiefScreen() {
     Keyboard.dismiss();
     setText('');
     try { await sendMessage(message, buildContext()); }
-    catch (e: any) { Alert.alert('Hearth could not reply', e?.message || 'Please try again.'); }
+    catch (e: any) { Alert.alert('Hearth HQ could not reply', e?.message || 'Please try again.'); }
   };
 
   const clear = () => Alert.alert('Clear conversation?', 'This removes the current Chief of Staff history for this household.', [
@@ -95,7 +95,7 @@ export default function ChiefScreen() {
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
         <View style={styles.brandWrap}>
           <LinearGradient colors={['#7360FF', '#5B39F0']} style={styles.brandIcon}><Ionicons name="sparkles" size={20} color="#fff" /></LinearGradient>
-          <View><Text style={styles.brandTitle}>Chief of Staff</Text><Text style={styles.brandSub}>Hearth household AI</Text></View>
+          <View><Text style={styles.brandTitle}>Chief of Staff</Text><Text style={styles.brandSub}>Hearth HQ household AI</Text></View>
         </View>
         <TouchableOpacity onPress={clear} style={styles.clearButton}><Ionicons name="trash-outline" size={18} color={H.muted} /></TouchableOpacity>
       </View>
@@ -104,7 +104,7 @@ export default function ChiefScreen() {
         {messages.length === 0 ? (
           <View style={styles.hero}>
             <LinearGradient colors={['#EEE9FF', '#E6F0FF']} style={styles.orb}><Ionicons name="sparkles" size={32} color={H.purple} /></LinearGradient>
-            <Text style={styles.hello}>What can Hearth handle for you?</Text>
+            <Text style={styles.hello}>What can Hearth HQ handle for you?</Text>
             <Text style={styles.sub}>Ask about bills, documents, meals, home alerts, household tasks or connected devices.</Text>
             <View style={styles.starters}>
               {starters.map(item => (
@@ -131,7 +131,7 @@ export default function ChiefScreen() {
                 )}
               </View>
             ))}
-            {isTyping && <View style={styles.typingRow}><View style={styles.assistantAvatar}><Ionicons name="sparkles" size={14} color={H.purple} /></View><View style={[styles.message, styles.assistantMessage]}><Text style={styles.typing}>Hearth is thinking…</Text></View></View>}
+            {isTyping && <View style={styles.typingRow}><View style={styles.assistantAvatar}><Ionicons name="sparkles" size={14} color={H.purple} /></View><View style={[styles.message, styles.assistantMessage]}><Text style={styles.typing}>Hearth HQ is thinking…</Text></View></View>}
           </View>
         )}
       </ScrollView>

@@ -24,11 +24,11 @@ export default function IntegrationsScreen() {
       const result = await connectHA(cleanUrl, token.trim());
       setToken('');
       await fetchStatus();
-      Alert.alert('Connected', result.message || `Hearth connected to ${result.device_count || 0} devices.`);
+      Alert.alert('Connected', result.message || `Hearth HQ connected to ${result.device_count || 0} devices.`);
     } catch (e: any) { Alert.alert('Could not connect', e?.message || 'Check your URL and token.'); }
   };
 
-  const disconnect = () => Alert.alert('Disconnect Home Assistant?', 'Hearth will stop syncing and controlling your smart-home devices.', [
+  const disconnect = () => Alert.alert('Disconnect Home Assistant?', 'Hearth HQ will stop syncing and controlling your smart-home devices.', [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Disconnect', style: 'destructive', onPress: async () => { try { await disconnectHA(); } catch (e: any) { Alert.alert('Could not disconnect', e?.message || 'Please try again.'); } } },
   ]);
@@ -37,7 +37,7 @@ export default function IntegrationsScreen() {
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 44 }}>
-        <ScreenHeader title="Integrations" subtitle="Connect the services that make Hearth proactive." />
+        <ScreenHeader title="Integrations" subtitle="Connect the services that make Hearth HQ proactive." />
         <View style={styles.body}>
           <View style={[styles.integrationCard, status.connected && styles.integrationConnected]}>
             <View style={styles.integrationTop}><View style={[styles.logo, { backgroundColor: H.blueBg }]}><Ionicons name="home-outline" size={24} color={H.blue} /></View><View style={styles.flex}><Text style={styles.name}>Home Assistant</Text><Text style={styles.desc}>Smart-home devices, sensors and automations</Text></View>{status.connected ? <View style={styles.statusPill}><Text style={styles.statusText}>Connected</Text></View> : null}</View>

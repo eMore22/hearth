@@ -39,9 +39,9 @@ export default function SubscriptionScreen() {
   }, []);
 
   const currentPlan = hasFamily
-    ? 'Hearth Family'
+    ? 'Hearth HQ Family'
     : hasHome
-      ? 'Hearth Home'
+      ? 'Hearth HQ Home'
       : 'No active plan';
 
   const purchasePlan = async (
@@ -57,7 +57,7 @@ export default function SubscriptionScreen() {
     if (success) {
       Alert.alert(
         'Subscription active',
-        `${planName} is now active on your Hearth account.`,
+        `${planName} is now active on your Hearth HQ account.`,
       );
     }
   };
@@ -75,10 +75,10 @@ export default function SubscriptionScreen() {
       Alert.alert(
         'Purchases restored',
         state.hasFamily
-          ? 'Your Hearth Family subscription has been restored.'
+          ? 'Your Hearth HQ Family subscription has been restored.'
           : state.hasHome
-            ? 'Your Hearth Home subscription has been restored.'
-            : 'No active Hearth subscription was found for this Google Play account.',
+            ? 'Your Hearth HQ Home subscription has been restored.'
+            : 'No active Hearth HQ subscription was found for this Google Play account.',
       );
     }
   };
@@ -91,7 +91,7 @@ export default function SubscriptionScreen() {
     } catch {
       Alert.alert(
         'Could not open Google Play',
-        'Open Google Play → Payments & subscriptions → Subscriptions to manage your Hearth plan.',
+        'Open Google Play → Payments & subscriptions → Subscriptions to manage your Hearth HQ plan.',
       );
     }
   };
@@ -112,7 +112,7 @@ export default function SubscriptionScreen() {
       >
         <ScreenHeader
           title="Subscription"
-          subtitle="Choose the Hearth plan that fits your household."
+          subtitle="Choose the Hearth HQ plan that fits your household."
         />
 
         <View style={styles.body}>
@@ -126,10 +126,10 @@ export default function SubscriptionScreen() {
               <Text style={styles.currentTitle}>{currentPlan}</Text>
               <Text style={styles.currentSub}>
                 {hasFamily
-                  ? 'Family includes all Hearth Home access.'
+                  ? 'Family includes all Hearth HQ Home access.'
                   : hasHome
-                    ? 'Your core Hearth household tools are active.'
-                    : 'Choose a plan below to unlock Hearth subscription features.'}
+                    ? 'Your core Hearth HQ household tools are active.'
+                    : 'Choose a plan below to unlock Hearth HQ subscription features.'}
               </Text>
             </View>
 
@@ -143,14 +143,14 @@ export default function SubscriptionScreen() {
           {loading && !homePackage && !familyPackage ? (
             <View style={styles.loadingWrap}>
               <ActivityIndicator size="large" color={H.purple} />
-              <Text style={styles.loadingText}>Loading Hearth plans…</Text>
+              <Text style={styles.loadingText}>Loading Hearth HQ plans…</Text>
             </View>
           ) : (
             <>
               <View style={styles.planCard}>
                 <View style={styles.planTop}>
                   <View>
-                    <Text style={styles.planEyebrow}>HEARTH HOME</Text>
+                    <Text style={styles.planEyebrow}>HEARTH HQ HOME</Text>
                     <Text style={styles.planPrice}>
                       {homePrice}
                       <Text style={styles.perMonth}> / month</Text>
@@ -171,7 +171,7 @@ export default function SubscriptionScreen() {
                 </View>
 
                 <Text style={styles.planDescription}>
-                  Core household management, organization and Hearth AI tools
+                  Core household management, organization and Hearth HQ AI tools
                   for your home.
                 </Text>
 
@@ -192,7 +192,7 @@ export default function SubscriptionScreen() {
                 <View style={styles.featureRow}>
                   <Ionicons name="checkmark-circle" size={17} color={H.green} />
                   <Text style={styles.featureText}>
-                    Hearth AI household assistance
+                    Hearth HQ AI household assistance
                   </Text>
                 </View>
 
@@ -203,7 +203,7 @@ export default function SubscriptionScreen() {
                       styles.buttonDisabled,
                   ]}
                   disabled={hasHome || purchasing || !homePackage}
-                  onPress={() => purchasePlan(homePackage, 'Hearth Home')}
+                  onPress={() => purchasePlan(homePackage, 'Hearth HQ Home')}
                   activeOpacity={0.8}
                 >
                   {purchasing ? (
@@ -214,7 +214,7 @@ export default function SubscriptionScreen() {
                         ? 'Included with Family'
                         : hasHome
                           ? 'Current plan'
-                          : 'Choose Hearth Home'}
+                          : 'Choose Hearth HQ Home'}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -223,12 +223,12 @@ export default function SubscriptionScreen() {
               <View style={[styles.planCard, styles.familyCard]}>
                 <View style={styles.recommended}>
                   <Ionicons name="star" size={12} color={H.purple} />
-                  <Text style={styles.recommendedText}>FULL HEARTH ACCESS</Text>
+                  <Text style={styles.recommendedText}>FULL HEARTH HQ ACCESS</Text>
                 </View>
 
                 <View style={styles.planTop}>
                   <View>
-                    <Text style={styles.planEyebrow}>HEARTH FAMILY</Text>
+                    <Text style={styles.planEyebrow}>HEARTH HQ FAMILY</Text>
                     <Text style={styles.planPrice}>
                       {familyPrice}
                       <Text style={styles.perMonth}> / month</Text>
@@ -243,21 +243,21 @@ export default function SubscriptionScreen() {
                 </View>
 
                 <Text style={styles.planDescription}>
-                  Everything in Hearth Home, with expanded access for the
+                  Everything in Hearth HQ Home, with expanded access for the
                   household and family experience.
                 </Text>
 
                 <View style={styles.featureRow}>
                   <Ionicons name="checkmark-circle" size={17} color={H.green} />
                   <Text style={styles.featureText}>
-                    Everything included in Hearth Home
+                    Everything included in Hearth HQ Home
                   </Text>
                 </View>
 
                 <View style={styles.featureRow}>
                   <Ionicons name="checkmark-circle" size={17} color={H.green} />
                   <Text style={styles.featureText}>
-                    Family-level Hearth access
+                    Family-level Hearth HQ access
                   </Text>
                 </View>
 
@@ -276,7 +276,7 @@ export default function SubscriptionScreen() {
                   ]}
                   disabled={hasFamily || purchasing || !familyPackage}
                   onPress={() =>
-                    purchasePlan(familyPackage, 'Hearth Family')
+                    purchasePlan(familyPackage, 'Hearth HQ Family')
                   }
                   activeOpacity={0.82}
                 >
@@ -287,8 +287,8 @@ export default function SubscriptionScreen() {
                       {hasFamily
                         ? 'Current plan'
                         : hasHome
-                          ? 'Upgrade to Hearth Family'
-                          : 'Choose Hearth Family'}
+                          ? 'Upgrade to Hearth HQ Family'
+                          : 'Choose Hearth HQ Family'}
                     </Text>
                   )}
                 </TouchableOpacity>

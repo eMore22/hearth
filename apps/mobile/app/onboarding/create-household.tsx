@@ -50,8 +50,8 @@ export default function CreateHouseholdScreen() {
             </View>
 
             <Text style={styles.eyebrow}>SET UP YOUR HOME BASE</Text>
-            <Text style={styles.title}>Tell Hearth about your household.</Text>
-            <Text style={styles.description}>This helps Hearth personalise currency, timezone and household reminders.</Text>
+            <Text style={styles.title}>Tell Hearth HQ about your household.</Text>
+            <Text style={styles.description}>This helps Hearth HQ personalise currency, timezone and household reminders.</Text>
 
             <View style={styles.formCard}>
               <Text style={styles.label}>Household name</Text>

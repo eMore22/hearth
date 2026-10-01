@@ -54,7 +54,7 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const STORAGE_KEY = 'hearth_theme_mode';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // Hearth's redesigned consumer experience defaults to the warm light theme.
+  // Hearth HQ's redesigned consumer experience defaults to the warm light theme.
   // A saved user preference still wins after SecureStore loads.
   const [mode, setMode] = useState<'light' | 'dark'>('light');
   const [isLoaded, setIsLoaded] = useState(false);

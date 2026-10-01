@@ -89,7 +89,7 @@ export default function BillsScreen() {
     if (!result.length) Alert.alert('Subscription check', 'No obvious unused subscriptions found.');
   };
 
-  const removeBill = (bill: any) => Alert.alert('Delete bill?', `Remove ${bill.provider} from Hearth?`, [
+  const removeBill = (bill: any) => Alert.alert('Delete bill?', `Remove ${bill.provider} from Hearth HQ?`, [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Delete', style: 'destructive', onPress: async () => { try { await deleteBill(bill.id); } catch (e: any) { Alert.alert('Could not delete', e?.message || 'Please try again.'); } } },
   ]);
@@ -142,7 +142,7 @@ export default function BillsScreen() {
 
           <View style={styles.sectionHead}><Text style={styles.sectionTitle}>All bills</Text><TouchableOpacity style={styles.plus} onPress={() => setShowAdd(true)}><Ionicons name="add" size={22} color={H.navy} /></TouchableOpacity></View>
 
-          {visible.length === 0 ? <EmptyMessage icon="card-outline" title="No bills yet" subtitle="Add recurring bills and subscriptions so Hearth can keep an eye on them." /> : visible.map(bill => {
+          {visible.length === 0 ? <EmptyMessage icon="card-outline" title="No bills yet" subtitle="Add recurring bills and subscriptions so Hearth HQ can keep an eye on them." /> : visible.map(bill => {
             const m = metaFor(bill.category, bill.provider);
             return (
               <View key={bill.id} style={styles.row}>
@@ -168,7 +168,7 @@ export default function BillsScreen() {
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowAdd(false)} />
           <View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, 18) + 20 }]}>
             <Text style={styles.modalTitle}>Add a bill</Text>
-            <Text style={styles.modalSub}>Hearth will add it to your household overview.</Text>
+            <Text style={styles.modalSub}>Hearth HQ will add it to your household overview.</Text>
             <TextInput value={provider} onChangeText={setProvider} placeholder="Provider" placeholderTextColor={H.muted2} style={styles.input} />
             <TextInput value={amount} onChangeText={setAmount} placeholder="Amount" placeholderTextColor={H.muted2} keyboardType="decimal-pad" style={styles.input} />
             <TouchableOpacity style={[styles.save, saving && { opacity: 0.6 }]} onPress={add} disabled={saving}><Text style={styles.saveText}>{saving ? 'Adding…' : 'Add bill'}</Text></TouchableOpacity>

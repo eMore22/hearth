@@ -24,21 +24,21 @@ export default function PermissionsScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.top}><Text style={styles.step}>3 of 3</Text><Text style={styles.brand}>Hearth</Text></View>
+        <View style={styles.top}><Text style={styles.step}>3 of 3</Text><Text style={styles.brand}>Hearth HQ</Text></View>
 
         <View style={styles.content}>
           <View style={styles.bellWrap}><View style={styles.bellInner}><Ionicons name="notifications-outline" size={34} color={H.purple} /></View></View>
           <Text style={styles.eyebrow}>STAY ONE STEP AHEAD</Text>
-          <Text style={styles.title}>Let Hearth nudge you when something matters.</Text>
+          <Text style={styles.title}>Let Hearth HQ nudge you when something matters.</Text>
           <Text style={styles.subtitle}>Get reminders for bills, expiring documents, home alerts and other household priorities.</Text>
 
           <View style={styles.previewCard}>
             <View style={styles.previewIcon}><Ionicons name="document-text-outline" size={20} color={H.red} /></View>
-            <View style={{ flex: 1 }}><Text style={styles.previewTitle}>Passport expires soon</Text><Text style={styles.previewText}>Hearth · in 30 days</Text></View>
+            <View style={{ flex: 1 }}><Text style={styles.previewTitle}>Passport expires soon</Text><Text style={styles.previewText}>Hearth HQ · in 30 days</Text></View>
           </View>
           <View style={styles.previewCard}>
             <View style={[styles.previewIcon, { backgroundColor: H.violetBg }]}><Ionicons name="card-outline" size={20} color={H.purple} /></View>
-            <View style={{ flex: 1 }}><Text style={styles.previewTitle}>Electricity bill due Friday</Text><Text style={styles.previewText}>Hearth · household reminder</Text></View>
+            <View style={{ flex: 1 }}><Text style={styles.previewTitle}>Electricity bill due Friday</Text><Text style={styles.previewText}>Hearth HQ · household reminder</Text></View>
           </View>
         </View>
 

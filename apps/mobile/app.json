@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Hearth",
+    "name": "Hearth HQ",
     "slug": "hearth",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -18,8 +18,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.emore22.hearth",
       "infoPlist": {
-        "NSCameraUsageDescription": "Hearth needs camera access to scan your documents.",
-        "NSPhotoLibraryUsageDescription": "Hearth needs photo access to upload your documents."
+        "NSCameraUsageDescription": "Hearth HQ needs camera access to scan your documents.",
+        "NSPhotoLibraryUsageDescription": "Hearth HQ needs photo access to upload your documents."
       }
     },
     "android": {
@@ -55,7 +55,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Hearth needs camera access to scan your documents."
+          "cameraPermission": "Hearth HQ needs camera access to scan your documents."
         }
       ],
       "expo-font"

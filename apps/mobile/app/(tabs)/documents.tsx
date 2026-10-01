@@ -70,7 +70,7 @@ export default function DocumentsScreen() {
     try {
       await uploadDocument(asset);
       setShowAdd(false);
-      Alert.alert('Document saved', 'Hearth analysed the file and added it to your document vault.');
+      Alert.alert('Document saved', 'Hearth HQ analysed the file and added it to your document vault.');
     } catch (e: any) {
       Alert.alert('Upload failed', e?.response?.data?.detail || e?.message || 'Please try again.');
     } finally {
@@ -131,7 +131,7 @@ export default function DocumentsScreen() {
             <TouchableOpacity style={styles.plus} onPress={() => setShowAdd(true)} activeOpacity={0.75}><Ionicons name="add" size={22} color={H.navy} /></TouchableOpacity>
           </View>
 
-          {visible.length === 0 ? <EmptyMessage icon="document-text-outline" title={filter === 'All' ? 'No documents here yet' : `No ${filter.toLowerCase()} documents yet`} subtitle={filter === 'All' ? 'Scan or upload a document and Hearth will organise it for you.' : `Add a ${filter.toLowerCase()} document and Hearth will organise it here.`} /> : visible.map(doc => {
+          {visible.length === 0 ? <EmptyMessage icon="document-text-outline" title={filter === 'All' ? 'No documents here yet' : `No ${filter.toLowerCase()} documents yet`} subtitle={filter === 'All' ? 'Scan or upload a document and Hearth HQ will organise it for you.' : `Add a ${filter.toLowerCase()} document and Hearth HQ will organise it here.`} /> : visible.map(doc => {
             const icon = docIcon(doc.document_type || doc.title);
             const expired = expiredIds.has(doc.id) || (!!doc.expiry_date && new Date(doc.expiry_date) < new Date());
             return (
@@ -155,9 +155,9 @@ export default function DocumentsScreen() {
           <View style={styles.sheet}>
             <View style={styles.handle} />
             <Text style={styles.sheetTitle}>Ask about your documents</Text>
-            <Text style={styles.sheetSub}>Ask Hearth about dates, names, policy details or anything extracted from your document vault.</Text>
+            <Text style={styles.sheetSub}>Ask Hearth HQ about dates, names, policy details or anything extracted from your document vault.</Text>
             <TextInput value={question} onChangeText={setQuestion} placeholder="e.g. When does my passport expire?" placeholderTextColor={H.muted2} style={styles.askInput} multiline />
-            <TouchableOpacity style={[styles.askButton, (!question.trim() || asking) && { opacity: .45 }]} onPress={askDocuments} disabled={!question.trim() || asking}><Text style={styles.askButtonText}>{asking ? 'Checking…' : 'Ask Hearth'}</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.askButton, (!question.trim() || asking) && { opacity: .45 }]} onPress={askDocuments} disabled={!question.trim() || asking}><Text style={styles.askButtonText}>{asking ? 'Checking…' : 'Ask Hearth HQ'}</Text></TouchableOpacity>
             {!!answer && <View style={styles.answerCard}><Text style={styles.answerLabel}>ANSWER</Text><Text style={styles.answerText}>{answer}</Text></View>}
           </View>
         </KeyboardAvoidingView>
@@ -171,7 +171,7 @@ export default function DocumentsScreen() {
             <Text style={styles.sheetTitle}>Add to Documents</Text>
             <Text style={styles.sheetSub}>Scan a paper document, choose an image, or upload a PDF/file.</Text>
             {uploading ? (
-              <View style={styles.uploading}><ActivityIndicator color={H.purple} /><Text style={styles.uploadingText}>Hearth is analysing your document…</Text></View>
+              <View style={styles.uploading}><ActivityIndicator color={H.purple} /><Text style={styles.uploadingText}>Hearth HQ is analysing your document…</Text></View>
             ) : (
               <>
                 <TouchableOpacity style={styles.addAction} onPress={() => { setShowAdd(false); router.push('/(tabs)/scan'); }}><View style={[styles.actionIcon,{backgroundColor:H.violetBg}]}><Ionicons name="scan-outline" size={22} color={H.purple}/></View><View style={styles.flex}><Text style={styles.actionTitle}>Scan with camera</Text><Text style={styles.actionSub}>Use Hearth’s intelligent scanner and routing</Text></View><Ionicons name="chevron-forward" size={18} color={H.muted2}/></TouchableOpacity>
