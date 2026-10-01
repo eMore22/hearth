@@ -131,12 +131,27 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
   executeAction: async (entityId, action, payload = {}) => {
     set({ isLoading: true, error: null });
     try {
-      await api.post('/api/automation/action', {
+      const res = await api.post('/api/automation/action', {
         entity_id: entityId,
         action,
         payload,
       });
-      // Refresh device states and events after action
+
+      // The backend returns the state read directly back from Home Assistant.
+      // Apply it immediately so the control does not snap back to stale UI.
+      const updatedDevice = res.data?.device as HADevice | undefined;
+      if (updatedDevice?.entity_id) {
+        set((state) => ({
+          devices: state.devices.map((device) =>
+            device.entity_id === updatedDevice.entity_id
+              ? { ...device, ...updatedDevice }
+              : device
+          ),
+        }));
+      }
+
+      // Then perform a live refresh for the whole device list. The backend's
+      // /devices endpoint now re-syncs from HA before returning its rows.
       await get().fetchDevices();
       await get().fetchEvents();
       set({ isLoading: false });
