@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore';
@@ -46,7 +47,16 @@ export default function ChiefScreen() {
     Keyboard.dismiss();
     setText('');
     try { await sendMessage(message); }
-    catch (e: any) { Alert.alert('Hearth HQ could not reply', e?.message || 'Please try again.'); }
+    catch (e: any) {
+      if (e?.response?.status === 402) {
+        Alert.alert('Chief is included with Hearth Home', 'Upgrade to Home or Family to use Chief across your household.', [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'View plans', onPress: () => router.push('/(tabs)/subscription') },
+        ]);
+      } else {
+        Alert.alert('Hearth HQ could not reply', e?.message || 'Please try again.');
+      }
+    }
   };
 
   const clear = () => Alert.alert('Clear conversation?', 'This removes the current Chief of Staff history for this household.', [
