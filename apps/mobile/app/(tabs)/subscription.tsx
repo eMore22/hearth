@@ -129,7 +129,7 @@ export default function SubscriptionScreen() {
                   ? 'Family includes all Hearth HQ Home access.'
                   : hasHome
                     ? 'Your core Hearth HQ household tools are active.'
-                    : 'Keep core bills, documents, groceries, reminders and household tasks free. Upgrade for advanced Chief, AI tools and connected home features.'}
+                    : 'Your household essentials stay free. Upgrade when you need joined-up intelligence, advanced tools or family collaboration.'}
               </Text>
             </View>
 
@@ -138,6 +138,23 @@ export default function SubscriptionScreen() {
                 <Text style={styles.activeText}>Active</Text>
               </View>
             )}
+          </View>
+
+          <View style={styles.planCard}>
+            <View style={styles.planTop}>
+              <View><Text style={styles.planEyebrow}>HEARTH FREE</Text><Text style={styles.planPrice}>Free</Text></View>
+              {!hasHome && !hasFamily && <View style={styles.currentPill}><Text style={styles.currentPillText}>Current</Text></View>}
+            </View>
+            <Text style={styles.planDescription}>A genuinely useful household foundation, without a subscription.</Text>
+            {['Track bills, subscriptions and payment due dates',
+              'Store household documents and expiry dates',
+              'Manage groceries, shopping lists and household tasks',
+              'Keep maintenance and medication records with reminders'].map(feature => (
+              <View key={feature} style={styles.featureRow}>
+                <Ionicons name="checkmark-circle" size={17} color={H.green} />
+                <Text style={styles.featureText}>{feature}</Text>
+              </View>
+            ))}
           </View>
 
           {loading && !homePackage && !familyPackage ? (
@@ -171,28 +188,27 @@ export default function SubscriptionScreen() {
                 </View>
 
                 <Text style={styles.planDescription}>
-                  Core household management, organization and Hearth HQ AI tools
-                  for your home.
+                  Go beyond tracking. Chief brings household records together, helps you plan and turns scattered information into useful next steps.
                 </Text>
 
                 <View style={styles.featureRow}>
                   <Ionicons name="checkmark-circle" size={17} color={H.green} />
                   <Text style={styles.featureText}>
-                    Household organization and planning
+                    Chief of Staff briefings across bills, documents, groceries and tasks
                   </Text>
                 </View>
 
                 <View style={styles.featureRow}>
                   <Ionicons name="checkmark-circle" size={17} color={H.green} />
                   <Text style={styles.featureText}>
-                    Bills, documents, grocery and maintenance tools
+                    Document questions, smart-home integrations and advanced insights
                   </Text>
                 </View>
 
                 <View style={styles.featureRow}>
                   <Ionicons name="checkmark-circle" size={17} color={H.green} />
                   <Text style={styles.featureText}>
-                    Hearth HQ AI household assistance
+                    Meal planning, spending analysis and maintenance guidance
                   </Text>
                 </View>
 
@@ -243,8 +259,7 @@ export default function SubscriptionScreen() {
                 </View>
 
                 <Text style={styles.planDescription}>
-                  Everything in Hearth HQ Home, with expanded access for the
-                  household and family experience.
+                  Manage one household together. Family adds shared access for members, with the same powerful Home tools.
                 </Text>
 
                 <View style={styles.featureRow}>
@@ -257,14 +272,14 @@ export default function SubscriptionScreen() {
                 <View style={styles.featureRow}>
                   <Ionicons name="checkmark-circle" size={17} color={H.green} />
                   <Text style={styles.featureText}>
-                    Family-level Hearth HQ access
+                    Invite household members and manage records together
                   </Text>
                 </View>
 
                 <View style={styles.featureRow}>
                   <Ionicons name="checkmark-circle" size={17} color={H.green} />
                   <Text style={styles.featureText}>
-                    Built for households managing more together
+                    Shared household overview, bills, tasks and reminders
                   </Text>
                 </View>
 
