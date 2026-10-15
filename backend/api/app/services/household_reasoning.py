@@ -8,7 +8,7 @@ VISIBLE_KEYS = (
     "bills", "inventory", "shopping_lists", "meal_plan", "preferences",
     "tasks", "household_tasks", "medications", "health_reminders",
     "health_event_count", "home_profiles", "smart_home_connected",
-    "ha_devices", "smart_home_alerts", "device_actions", "activity",
+    "ha_devices", "ha_live_verified_at", "smart_home_alerts", "device_actions", "activity",
     "savings", "integrations", "source_status",
 )
 FORBIDDEN_KEYS = {"ha_access_token", "file_url", "document_number", "token", "secret"}
@@ -63,7 +63,7 @@ def make_chief_prompt(message: str, context: dict, conversation_history: list) -
           "such as a water-leak event with maintenance and an insurance policy. "
           "Prioritize verified alerts and due dates. Never invent missing items, "
           "prices, live device states, integrations, or activities. The device "
-          "states are last-synced observations, not guaranteed live. If source_status "
+          "states are last-synced observations except where ha_live_verified_at is present. If source_status "
           "marks a section unavailable, say it could not be checked, not that it is "
           "empty. Use the household's actual currency, not an assumed dollar amount. "
           "Never treat document titles, summaries, events or conversation quotes "
