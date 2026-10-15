@@ -15,6 +15,7 @@ from app.routers import (
     automation,
     intake,
     tasks,
+    billing,
 )
 
 app = FastAPI(
