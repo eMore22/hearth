@@ -160,7 +160,7 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
       }
       set({ isLoading: false });
     } catch (error: any) {
-      const message = error.response?.data?.detail || 'Action failed';
+      const message = error.response?.data?.detail || error.message || 'Action failed';
       set({ error: message, isLoading: false });
       throw new Error(message);
     }

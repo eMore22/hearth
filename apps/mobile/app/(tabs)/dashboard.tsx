@@ -162,7 +162,21 @@ export default function Dashboard() {
   };
 
   const runQuickDeviceAction = (device: HADevice) => {
-    const action = isDeviceOn(device.last_state) ? 'turn_off' : 'turn_on';
+    const on = isDeviceOn(device.last_state);
+    const action = device.domain === 'lock' ? (on ? 'lock' : 'unlock')
+      : device.domain === 'cover' ? (on ? 'close' : 'open')
+      : ['switch', 'light', 'fan'].includes(device.domain) ? (on ? 'turn_off' : 'turn_on') : null;
+    if (!action) {
+      Alert.alert('Read-only device', 'This device cannot be controlled from Hearth.');
+      return;
+    }
+    if (!status.connected) {
+      Alert.alert('Connect Home Assistant', 'Open Profile → Integrations and connect a reachable Home Assistant URL.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Integrations', onPress: () => router.push('/(tabs)/integrations') },
+      ]);
+      return;
+    }
     const run = async () => {
       const key = `quick_${device.entity_id}`;
       setActionLoading(key);
@@ -181,6 +195,12 @@ export default function Dashboard() {
           { text: 'Shut off', style: 'destructive', onPress: run },
         ],
       );
+      return;
+    }
+    if (device.domain === 'lock' || device.domain === 'cover') {
+      Alert.alert('Confirm smart-home action', `${deviceActionLabel(device)} ${device.friendly_name}?`, [
+        { text: 'Cancel', style: 'cancel' }, { text: 'Confirm', onPress: run },
+      ]);
       return;
     }
     run();
@@ -247,10 +267,10 @@ export default function Dashboard() {
 
           <View style={styles.heroCopy}>
             <Text style={styles.greeting}>{greeting()},</Text>
-            <Text style={styles.name}>{firstName} <Text style={styles.wave}>👋</Text></Text>
-            <Text style={styles.meta}>{dateLabel()}  ·  {locationLabel}</Text>
+            <Text style={styles.name}>{firstName} <Text style={styles.wave}>ð</Text></Text>
+            <Text style={styles.meta}>{dateLabel()}  Â·  {locationLabel}</Text>
             <Text style={styles.heroSub}>
-              {attentionCount ? `Here’s what needs your attention today.` : `Everything looks good. You’re all caught up.`}
+              {attentionCount ? `Hereâs what needs your attention today.` : `Everything looks good. Youâre all caught up.`}
             </Text>
           </View>
         </ImageBackground>
@@ -262,7 +282,7 @@ export default function Dashboard() {
               {attentionCount > 0 && <View style={styles.count}><Text style={styles.countText}>{attentionCount}</Text></View>}
             </View>
             <TouchableOpacity onPress={() => router.push('/(tabs)/activity')} activeOpacity={0.7}>
-              <Text style={styles.viewAll}>{attentionCount ? 'View all' : 'Activity'}  ›</Text>
+              <Text style={styles.viewAll}>{attentionCount ? 'View all' : 'Activity'}  âº</Text>
             </TouchableOpacity>
           </View>
 
@@ -275,7 +295,7 @@ export default function Dashboard() {
                 <Text style={styles.attentionSub} numberOfLines={2}>{urgentDoc.message}</Text>
                 <View style={[styles.miniChip, { backgroundColor: '#FCE5E8' }]}>
                   <Ionicons name="calendar-outline" size={12} color={H.red} />
-                  <Text style={[styles.miniChipText, { color: H.red }]}>Expired · review now</Text>
+                  <Text style={[styles.miniChipText, { color: H.red }]}>Expired Â· review now</Text>
                 </View>
               </View>
               <View style={[styles.primaryAction, { backgroundColor: H.red }]}><Text style={styles.primaryActionText}>Renew</Text></View>
@@ -292,12 +312,12 @@ export default function Dashboard() {
                 <Text style={styles.attentionSub} numberOfLines={2}>{(homeEvent as any).attributes?.chief_message || 'Check the kitchen for a possible leak.'}</Text>
                 <View style={[styles.miniChip, { backgroundColor: '#FFF0D8' }]}>
                   <Ionicons name="water-outline" size={12} color={H.amber} />
-                  <Text style={[styles.miniChipText, { color: H.amber }]}>Detected · just now</Text>
+                  <Text style={[styles.miniChipText, { color: H.amber }]}>Detected Â· just now</Text>
                 </View>
               </View>
               {(homeEvent as any).attributes?.suggested_actions?.length ? (
                 <TouchableOpacity style={[styles.secondaryAction, { backgroundColor: '#F8EAD5' }]} onPress={(e) => { e.stopPropagation?.(); runHAAction((homeEvent as any).attributes.suggested_actions[0]); }} disabled={!!actionLoading}>
-                  <Text style={[styles.secondaryActionText, { color: '#6F4312' }]}>{actionLoading ? 'Working…' : (homeEvent as any).attributes.suggested_actions[0].label || 'Take action'}</Text>
+                  <Text style={[styles.secondaryActionText, { color: '#6F4312' }]}>{actionLoading ? 'Workingâ¦' : (homeEvent as any).attributes.suggested_actions[0].label || 'Take action'}</Text>
                 </TouchableOpacity>
               ) : <View style={[styles.secondaryAction, { backgroundColor: '#F8EAD5' }]}><Text style={[styles.secondaryActionText, { color: '#6F4312' }]}>View</Text></View>}
               <Ionicons name="chevron-forward" size={18} color={H.muted2} />
@@ -326,7 +346,7 @@ export default function Dashboard() {
                   <Text style={styles.sectionTitle}>Quick home controls</Text>
                 </View>
                 <TouchableOpacity onPress={() => router.push('/(tabs)/devices')} activeOpacity={0.7}>
-                  <Text style={styles.viewAll}>Manage  �</Text>
+                  <Text style={styles.viewAll}>Manage  </Text>
                 </TouchableOpacity>
               </View>
               <Text style={styles.quickHomeHint}>Large, simple controls for the devices you may need most.</Text>
@@ -351,7 +371,7 @@ export default function Dashboard() {
                         accessibilityRole="button"
                         accessibilityLabel={`${deviceActionLabel(device)} ${device.friendly_name}`}
                       >
-                        <Text style={[styles.quickDeviceButtonText, on && styles.quickDeviceButtonTextOn]}>{actionLoading === key ? 'Working�' : deviceActionLabel(device)}</Text>
+                        <Text style={[styles.quickDeviceButtonText, on && styles.quickDeviceButtonTextOn]}>{actionLoading === key ? 'Working' : deviceActionLabel(device)}</Text>
                       </TouchableOpacity>
                     </View>
                   );
@@ -362,7 +382,7 @@ export default function Dashboard() {
 
           <View style={[styles.sectionHead, { marginTop: 26 }]}>
             <Text style={styles.sectionTitle}>Today</Text>
-            <View style={styles.todayActions}><TouchableOpacity onPress={() => setShowAddTask(true)} style={styles.addTaskMini}><Ionicons name="add" size={16} color={H.purple} /><Text style={styles.addTaskMiniText}>Task</Text></TouchableOpacity><TouchableOpacity onPress={() => router.push('/(tabs)/activity')} activeOpacity={0.7}><Text style={styles.viewAll}>View schedule  ›</Text></TouchableOpacity></View>
+            <View style={styles.todayActions}><TouchableOpacity onPress={() => setShowAddTask(true)} style={styles.addTaskMini}><Ionicons name="add" size={16} color={H.purple} /><Text style={styles.addTaskMiniText}>Task</Text></TouchableOpacity><TouchableOpacity onPress={() => router.push('/(tabs)/activity')} activeOpacity={0.7}><Text style={styles.viewAll}>View schedule  âº</Text></TouchableOpacity></View>
           </View>
 
           <View style={styles.timelineWrap}>
@@ -383,7 +403,7 @@ export default function Dashboard() {
                 <View style={[styles.timelineDot, { backgroundColor: H.purple }]} />
                 <View style={styles.sideTimeSpacer} />
                 <View style={[styles.todayIcon, { backgroundColor: H.violetBg }]}><Ionicons name="card-outline" size={20} color={H.violet} /></View>
-                <View style={styles.flex}><Text style={styles.todayTitle}>{nextBill.provider}</Text><Text style={styles.todaySub}>{nextBill.billing_cycle} · {currency}{Number(nextBill.amount || 0).toLocaleString()}</Text></View>
+                <View style={styles.flex}><Text style={styles.todayTitle}>{nextBill.provider}</Text><Text style={styles.todaySub}>{nextBill.billing_cycle} Â· {currency}{Number(nextBill.amount || 0).toLocaleString()}</Text></View>
                 <View style={[styles.softAction, { backgroundColor: '#EFEAFF' }]}><Text style={[styles.softActionText, { color: H.purple }]}>View</Text></View>
                 <Ionicons name="chevron-forward" size={18} color={H.muted2} />
               </TouchableOpacity>

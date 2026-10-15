@@ -24,7 +24,7 @@ export default function ProfileEditScreen() {
     Keyboard.dismiss();
     try {
       await updateProfile(trimmed);
-      Alert.alert('Profile updated', 'Your name has been saved.', [{ text: 'Done', onPress: () => router.back() }]);
+      Alert.alert('Profile updated', 'Your name has been saved.', [{ text: 'Done', onPress: () => router.replace('/(tabs)/profile') }]);
     } catch (e: any) {
       Alert.alert('Could not update profile', e?.message || 'Please try again.');
     }
@@ -34,7 +34,7 @@ export default function ProfileEditScreen() {
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 40 }}>
-        <ScreenHeader title="Edit profile" subtitle="Keep your Hearth HQ identity up to date." />
+        <ScreenHeader backTo="/(tabs)/profile" title="Edit profile" subtitle="Keep your Hearth HQ identity up to date." />
         <View style={styles.body}>
           <View style={styles.avatar}><Text style={styles.avatarText}>{(name || user?.email || 'H').charAt(0).toUpperCase()}</Text></View>
           <Text style={styles.label}>FULL NAME</Text>

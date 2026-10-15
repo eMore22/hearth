@@ -75,7 +75,7 @@ class ChiefContextTests(unittest.TestCase):
         self.assertEqual(overview["integrations"][0]["connected"], True)
         self.assertEqual(overview["smart_home_connected"], True)
         reply = offline_household_brief(overview)
-        self.assertIn("Home Assistant connected", reply)
+        self.assertIn("Home Assistant: configured", reply)
 
     def test_client_context_cannot_create_device_command(self):
         with patch("app.agents.base_agent.get_ai_gateway"):
@@ -90,7 +90,7 @@ class ChiefContextTests(unittest.TestCase):
     def test_provider_outage_still_has_household_summary(self):
         context = load_household_context("mine", FakeDB())
         result = offline_household_brief(context)
-        self.assertIn("1 tracked bills", result)
+        self.assertIn("Bills: 1 tracked", result)
 
 
 if __name__ == "__main__":

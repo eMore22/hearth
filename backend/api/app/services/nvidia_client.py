@@ -34,7 +34,7 @@ class NvidiaClient:
         self.models = {
             "simple_chat":    "mistralai/mistral-nemotron",
             "intent":         "mistralai/mistral-nemotron",
-            "reasoning":      "nvidia/llama-3.1-nemotron-70b-instruct",
+            "reasoning":      "nvidia/llama-3.3-nemotron-super-49b-v1.5",
             "vision":         "microsoft/phi-3-vision-128k-instruct",
             "ocr":            "microsoft/phi-3-vision-128k-instruct",
             "embed":          "nvidia/nv-embedqa-e5-v5",
@@ -44,7 +44,7 @@ class NvidiaClient:
         }
 
     def get_model(self, task: str) -> str:
-        return self.models.get(task, self.models["simple_chat"])
+        return getattr(settings, "NVIDIA_REASONING_MODEL", "") or self.models.get(task, self.models["simple_chat"]) if task == "reasoning" else self.models.get(task, self.models["simple_chat"])
 
     def complete(
         self,

@@ -8,18 +8,20 @@ export function ScreenHeader({
   title,
   subtitle,
   back = true,
+  backTo,
   right,
 }: {
   title: string;
   subtitle?: string;
   back?: boolean;
+  backTo?: string;
   right?: ReactNode;
 }) {
   return (
     <View style={styles.header}>
       <View style={styles.headerTop}>
         {back ? (
-          <TouchableOpacity style={styles.back} onPress={() => router.back()} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.back} onPress={() => backTo ? router.replace(backTo as any) : router.back()} activeOpacity={0.7}>
             <Ionicons name="chevron-back" size={21} color={H.navy} />
           </TouchableOpacity>
         ) : <View style={{ width: 42 }} />}
