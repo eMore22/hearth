@@ -1,4 +1,5 @@
 import { revenueCatService } from '../services/revenuecat';
+import api from '../services/api';
 import { useAuthStore } from './authStore';
 import { create } from 'zustand';
 import Purchases, {
@@ -100,6 +101,9 @@ export const useBillingStore = create<BillingState>((set) => ({
       const userId = useAuthStore.getState().user?.id;
       if (!userId || !(await revenueCatService.configure(String(userId)))) throw new Error('Billing unavailable');
       const { customerInfo } = await Purchases.purchasePackage(pkg);
+      // Never trust a purchase claim from the phone: refresh the server's
+      // short cached lookup against RevenueCat for the authenticated user.
+      await api.post('/api/billing/refresh').catch(() => undefined);
 
       set({
         customerInfo,
@@ -127,6 +131,7 @@ export const useBillingStore = create<BillingState>((set) => ({
       const userId = useAuthStore.getState().user?.id;
       if (!userId || !(await revenueCatService.configure(String(userId)))) throw new Error('Billing unavailable');
       const customerInfo = await Purchases.restorePurchases();
+      await api.post('/api/billing/refresh').catch(() => undefined);
 
       set({
         customerInfo,
