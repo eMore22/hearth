@@ -140,7 +140,8 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
       // The backend returns the state read directly back from Home Assistant.
       // Apply it immediately so the control does not snap back to stale UI.
       const updatedDevice = res.data?.device as HADevice | undefined;
-      if (updatedDevice?.entity_id) {
+      const confirmed = res.data?.confirmed === true;
+      if (confirmed && updatedDevice?.entity_id) {
         set((state) => ({
           devices: state.devices.map((device) =>
             device.entity_id === updatedDevice.entity_id
@@ -154,6 +155,9 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
       // /devices endpoint now re-syncs from HA before returning its rows.
       await get().fetchDevices();
       await get().fetchEvents();
+      if (!confirmed) {
+        throw new Error('Home Assistant accepted the command, but the device has not confirmed its new state. Check the device before trying again.');
+      }
       set({ isLoading: false });
     } catch (error: any) {
       const message = error.response?.data?.detail || 'Action failed';
