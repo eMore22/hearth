@@ -74,7 +74,7 @@ Return ONLY valid JSON:
             return result
         except Exception as e:
             print(f"⚠️ Health triage JSON parse failed: {e}")
-            print(f"⚠️ Raw Claude response was: {response[:500]}")
+            # Do not log sensitive medical text or provider responses.
             return {
                 "triage_level": "home_care",
                 "recommendation": "We couldn't complete a full assessment right now. If symptoms persist or worsen, contact a healthcare professional.",
@@ -139,5 +139,6 @@ Return ONLY valid JSON:
             return {
                 "potential_interactions": [],
                 "upcoming_refills": [],
-                "general_advice": "Keep track of your medications and consult your doctor regularly."
+                "general_advice": "Interaction checking is temporarily unavailable. Do not assume medications are safe together; ask a pharmacist or clinician.",
+                "unable_to_check": True
             }
