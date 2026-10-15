@@ -76,7 +76,7 @@ class SubscriptionTests(unittest.TestCase):
             "before=len(app.routes); child=len(auth.router.routes); "
             "app.include_router(auth.router,prefix='/diagnostic'); "
             "print(json.dumps({'before':before,'child':child,"
-            "'after':len(app.routes),'paths':[{'path':r.path,"
+            "'after':len(app.routes),'route_types':[(type(r).__name__,r.path,str(getattr(r,'methods',None))) for r in app.routes], 'paths':[{'path':r.path,"
             "'methods':list(r.methods),'deps':[str(d.call.__name__) "
             "for d in getattr(getattr(r,'dependant',None),'dependencies',[])]} "
             "for r in app.routes if hasattr(r,'methods')]}))"
@@ -100,7 +100,7 @@ class SubscriptionTests(unittest.TestCase):
         for method, path in cases:
             match = next((r for r in routes if r["path"] == path
                           and method in r["methods"]), None)
-            self.assertIsNotNone(match, f"{path} missing. Available routes: {routes}")
+            self.assertIsNotNone(match, f"{path} missing. Available routes: {info}")
             self.assertIn("check", match["deps"], path)
 
 if __name__ == "__main__":
