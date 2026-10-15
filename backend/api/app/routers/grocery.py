@@ -3,6 +3,8 @@ from datetime import date
 from app.dependencies import get_current_user, get_supabase_admin
 from app.agents.grocery_agent import GroceryAgent
 
+from app.services.subscriptions import require_tier
+
 router = APIRouter(tags=["grocery"])
 
 @router.get("/inventory")
@@ -48,7 +50,7 @@ async def add_inventory_item(request: Request, current_user: dict = Depends(get_
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/meal-plan/generate")
+@router.post("/meal-plan/generate", dependencies=[Depends(require_tier("home"))])
 async def generate_meal_plan(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
     agent = GroceryAgent(household_id=current_user.get("household_id"), user_id=str(current_user["id"]))
@@ -70,7 +72,7 @@ async def create_shopping_list(request: Request, current_user: dict = Depends(ge
     agent = GroceryAgent(household_id=current_user.get("household_id"), user_id=str(current_user["id"]))
     return agent.run({"action": "create_shopping_list", "meal_plan": body.get("meal_plan")})
 
-@router.post("/shopping-list/generate")
+@router.post("/shopping-list/generate", dependencies=[Depends(require_tier("home"))])
 async def generate_budget_shopping_list(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
     agent = GroceryAgent(household_id=current_user.get("household_id"), user_id=str(current_user["id"]))
@@ -102,7 +104,7 @@ async def waste_alert(request: Request, current_user: dict = Depends(get_current
     agent = GroceryAgent(household_id=current_user.get("household_id"), user_id=str(current_user["id"]))
     return agent.run({"action": "waste_alert", "inventory": body.get("inventory", [])})
 
-@router.post("/meal-plan/modify")
+@router.post("/meal-plan/modify", dependencies=[Depends(require_tier("home"))])
 async def modify_meal(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
     agent = GroceryAgent(household_id=current_user.get("household_id"), user_id=str(current_user["id"]))
