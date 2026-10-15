@@ -161,7 +161,7 @@ class BaseHouseholdAgent(ABC):
         Falls back to Claude if NVIDIA fails.
         """
         if not self.nvidia_client:
-            return self.ask_claude(prompt, max_tokens=max_tokens)
+            return "Advanced AI is temporarily unavailable. I can still manage your bills, documents, groceries, tasks and smart home."
 
         try:
             result = self.nvidia_client.complete(
@@ -183,7 +183,7 @@ class BaseHouseholdAgent(ABC):
                 )
                 return response.content[0].text
             except Exception:
-                return json.dumps({"error": "Both AI providers temporarily unavailable"})
+                return "Advanced AI is temporarily unavailable. I can still manage your bills, documents, groceries, tasks and smart home."
 
     # ── SMART ROUTER ─────────────────────────────────────────────────────────
     def ask(
