@@ -99,16 +99,22 @@ IMPORTANT RULES:
         """Handle common read-only requests without a model."""
         msg = message.lower()
         if category == "bills" and any(w in msg for w in ("due", "upcoming", "what bills", "show bills")):
+            if (context.get("source_status") or {}).get("bills") == "unavailable":
+                return "I couldn't check the bill records just now. Try again shortly."
             bills = context.get("bills") or []
             return ("Bills: " + "; ".join(
                 (str(b.get("provider") or b.get("name") or "Bill")
                  + (f" due {b['due_date']}" if b.get("due_date") else ""))
                 for b in bills[:12])) if bills else "I don't see any bills in your household overview."
         if category == "grocery" and any(w in msg for w in ("inventory", "pantry", "what groceries", "shopping list")):
+            if (context.get("source_status") or {}).get("groceries") == "unavailable":
+                return "I couldn't check your grocery records just now. Try again shortly."
             items = context.get("inventory") or []
             return ("Pantry: " + ", ".join(str(i.get("name") or i.get("item_name") or "Item")
                                             for i in items[:20])) if items else "Your pantry is currently empty in Hearth."
         if category == "documents" and any(w in msg for w in ("expiry", "expire", "expiring", "document list")):
+            if (context.get("source_status") or {}).get("documents") == "unavailable":
+                return "I couldn't check your document vault just now. Try again shortly."
             alerts = context.get("alerts") or []
             return ("Document alerts: " + "; ".join(str(x.get("message", "Review document")) for x in alerts[:5])
                     if alerts else f"You have {len(context.get('documents') or [])} saved documents and no current expiry alerts.")
@@ -123,6 +129,8 @@ IMPORTANT RULES:
                 + (f", last sync {item['last_sync_at']}" if item.get("last_sync_at") else "")
                 for item in integrations)) if integrations else "Integration status is not available."
         if category == "smart_home" and any(w in msg for w in ("status", "devices", "what is on", "connected")):
+            if (context.get("source_status") or {}).get("ha_devices") == "unavailable":
+                return "I couldn't read Home Assistant device states just now. Try again shortly."
             devices = context.get("ha_devices") or []
             return ("Device status: " + "; ".join(
                 f"{d.get('friendly_name', 'Device')}: last known {d.get('last_state', 'unknown')}"
