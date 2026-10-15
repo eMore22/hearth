@@ -76,12 +76,12 @@ Return ONLY valid JSON:
             print(f"⚠️ Health triage JSON parse failed: {e}")
             # Do not log sensitive medical text or provider responses.
             return {
-                "triage_level": "home_care",
-                "recommendation": "We couldn't complete a full assessment right now. If symptoms persist or worsen, contact a healthcare professional.",
-                "home_care_tips": ["Rest and stay hydrated"],
-                "red_flags": [],
+                "triage_level": "unavailable",
+                "recommendation": "Advanced health guidance is unavailable. Please contact a clinician for assessment, and seek urgent care for severe or rapidly worsening symptoms.",
+                "home_care_tips": [],
+                "red_flags": ["Severe or rapidly worsening symptoms warrant urgent medical care"],
                 "suggested_otc": None,
-                "disclaimer": "This is not medical advice. Please consult a doctor.",
+                "disclaimer": "No medical assessment was completed. Consult a healthcare professional.",
                 "_fallback_used": True,
             }
 
