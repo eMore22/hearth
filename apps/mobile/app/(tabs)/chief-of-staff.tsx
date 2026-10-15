@@ -16,13 +16,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useChiefOfStaffStore } from '../../src/stores/chiefOfStaffStore';
-import { useDocumentStore } from '../../src/stores/documentStore';
-import { useBillStore } from '../../src/stores/billStore';
-import { useGroceryStore } from '../../src/stores/groceryStore';
-import { useMaintenanceStore } from '../../src/stores/maintenanceStore';
-import { useHealthStore } from '../../src/stores/healthStore';
-import { useTaskStore } from '../../src/stores/taskStore';
-import { useAutomationStore } from '../../src/stores/automationStore';
 import { H, HearthDesign } from '../../src/theme/hearthDesign';
 
 const starters = [
@@ -36,51 +29,23 @@ export default function ChiefScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const { messages, isTyping, fetchHistory, sendMessage, clearMessages } = useChiefOfStaffStore();
-  const { documents, alerts, fetchDocuments, fetchAlerts } = useDocumentStore();
-  const { bills, monthlyReport, fetchBills, fetchMonthlyReport } = useBillStore();
-  const { inventory, mealPlan, budget, fetchInventory, fetchBudget } = useGroceryStore();
-  const { tasks: maintenanceTasks, fetchTasks: fetchMaintenanceTasks } = useMaintenanceStore();
-  const { medications, triageHistory, fetchMedications } = useHealthStore();
-  const { tasks: householdTasks, fetchTasks: fetchHouseholdTasks } = useTaskStore();
-  const { events: haEvents, devices: haDevices, status: haStatus, fetchEvents: fetchHAEvents, fetchStatus: fetchHAStatus, fetchDevices: fetchHADevices } = useAutomationStore();
   const [text, setText] = useState('');
 
+  useEffect(() => { fetchHistory(); }, []);
   useEffect(() => {
-    fetchHistory();
-    fetchDocuments(); fetchAlerts();
-    fetchBills(); fetchMonthlyReport().catch(() => undefined);
-    fetchInventory(); fetchBudget();
-    fetchMaintenanceTasks(); fetchMedications(); fetchHouseholdTasks();
-    fetchHAEvents(); fetchHAStatus(); fetchHADevices();
-  }, []);
-  useEffect(() => { const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60); return () => clearTimeout(t); }, [messages.length, isTyping]);
+    const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+    return () => clearTimeout(t);
+  }, [messages.length, isTyping]);
 
-  const buildContext = () => ({
-    documents,
-    alerts,
-    bills,
-    monthlyReport,
-    tasks: maintenanceTasks,
-    inventory,
-    meal_plan: mealPlan,
-    grocery_budget: budget,
-    medications,
-    household_tasks: (householdTasks || []).filter((t: any) => !t.is_completed).map((t: any) => ({ title: t.title, due_at: t.due_at })),
-    recent_health_checks: (triageHistory || []).slice(0, 3).map((t: any) => ({ symptoms: t.symptoms, level: t.result?.triage_level, date: t.date })),
-    smart_home_connected: haStatus.connected,
-    smart_home_device_count: haStatus.device_count || haDevices.length,
-    smart_home_alerts: (haEvents || []).filter((e: any) => e.alert_sent && e.attributes?.chief_message).slice(0, 5).map((e: any) => ({
-      entity: e.attributes?.friendly_name || e.entity_id, message: e.attributes?.chief_message, new_state: e.new_state, device_class: e.attributes?.device_class, time: e.created_at,
-    })),
-    ha_devices: haDevices,
-  });
+  // Chief fetches an authorized household snapshot server-side on each
+  // request. Don't duplicate sensitive records in client-composed context.
 
   const send = async (value = text) => {
     const message = value.trim();
     if (!message || isTyping) return;
     Keyboard.dismiss();
     setText('');
-    try { await sendMessage(message, buildContext()); }
+    try { await sendMessage(message); }
     catch (e: any) { Alert.alert('Hearth HQ could not reply', e?.message || 'Please try again.'); }
   };
 
