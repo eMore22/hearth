@@ -14,6 +14,8 @@ from app.dependencies import get_current_user, get_supabase_admin
 from app.agents.document_agent import DocumentAgent
 from app.services.analytics import log_event
 
+from app.services.subscriptions import require_tier
+
 router = APIRouter(tags=["intake"])
 
 DESTINATION_LABELS = {
@@ -31,7 +33,7 @@ DESTINATION_LABELS = {
 }
 
 
-@router.post("/scan")
+@router.post("/scan", dependencies=[Depends(require_tier("home"))])
 async def unified_scan(
     file: UploadFile = File(...),
     member_name: Optional[str] = None,
