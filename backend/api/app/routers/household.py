@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from app.dependencies import get_supabase, get_supabase_admin, get_current_user
+from app.services.subscriptions import require_tier
 
 router = APIRouter()
 
@@ -184,7 +185,7 @@ async def get_members(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/invite")
+@router.post("/invite", dependencies=[Depends(require_tier("family"))])
 async def invite_member(
     payload: InviteMemberRequest,
     user=Depends(get_current_user),
