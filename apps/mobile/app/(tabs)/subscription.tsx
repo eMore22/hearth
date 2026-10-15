@@ -110,7 +110,7 @@ export default function SubscriptionScreen() {
           paddingBottom: Math.max(insets.bottom, 24) + 24,
         }}
       >
-        <ScreenHeader
+        <ScreenHeader backTo="/(tabs)/profile"
           title="Subscription"
           subtitle="Choose the Hearth HQ plan that fits your household."
         />
