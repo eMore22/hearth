@@ -13,7 +13,7 @@ export interface ChatMessage {
   user_id?: string;
   proactive_suggestions?: string[];
   // Present when the Chief executed a smart-home command during this reply
-  action_result?: { status: 'sent' | 'failed'; entity_id?: string; action?: string; error?: string };
+  action_result?: { status: 'sent' | 'confirmed' | 'failed'; entity_id?: string; action?: string; error?: string };
 }
 
 export interface DashboardSummary {
