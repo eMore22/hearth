@@ -3,6 +3,8 @@ from datetime import date, timedelta
 from app.dependencies import get_current_user, get_supabase_admin
 from app.agents.maintenance_agent import MaintenanceAgent
 
+from app.services.subscriptions import require_tier
+
 router = APIRouter(tags=["maintenance"])
 
 
@@ -105,28 +107,28 @@ async def complete_task(task_id: str, request: Request, current_user: dict = Dep
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/calendar/generate")
+@router.post("/calendar/generate", dependencies=[Depends(require_tier("home"))])
 async def generate_calendar(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
     agent = MaintenanceAgent(household_id=current_user.get("household_id"), user_id=str(current_user["id"]))
     return agent.run({"action": "generate_calendar", "home_profile": body.get("home_profile", {})})
 
 
-@router.post("/diagnose")
+@router.post("/diagnose", dependencies=[Depends(require_tier("home"))])
 async def diagnose(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
     agent = MaintenanceAgent(household_id=current_user.get("household_id"), user_id=str(current_user["id"]))
     return agent.run({"action": "diagnose_problem", "description": body.get("description"), "photos": body.get("photos")})
 
 
-@router.post("/estimate-cost")
+@router.post("/estimate-cost", dependencies=[Depends(require_tier("home"))])
 async def estimate_cost(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
     agent = MaintenanceAgent(household_id=current_user.get("household_id"), user_id=str(current_user["id"]))
     return agent.run({"action": "estimate_cost", "appliance": body.get("appliance"), "issue": body.get("issue")})
 
 
-@router.get("/diy/{task_name}")
+@router.get("/diy/{task_name}", dependencies=[Depends(require_tier("home"))])
 async def diy_instructions(task_name: str, current_user: dict = Depends(get_current_user)):
     agent = MaintenanceAgent(household_id=current_user.get("household_id"), user_id=str(current_user["id"]))
     return agent.run({"action": "get_diy_instructions", "task_name": task_name})
