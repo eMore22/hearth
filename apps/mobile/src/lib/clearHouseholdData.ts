@@ -9,16 +9,13 @@ import { useTaskStore } from '../stores/taskStore';
 import { useAutomationStore } from '../stores/automationStore';
 
 export function clearLocalHouseholdData() {
-  const stores = [
-    useChiefOfStaffStore,
-    useHouseholdStore,
-    useDocumentStore,
-    useBillStore,
-    useGroceryStore,
-    useMaintenanceStore,
-    useHealthStore,
-    useTaskStore,
-    useAutomationStore,
-  ] as const;
-  for (const store of stores) store.setState(store.getInitialState());
+  useChiefOfStaffStore.setState(useChiefOfStaffStore.getInitialState());
+  useHouseholdStore.setState(useHouseholdStore.getInitialState());
+  useDocumentStore.setState(useDocumentStore.getInitialState());
+  useBillStore.setState(useBillStore.getInitialState());
+  useGroceryStore.setState(useGroceryStore.getInitialState());
+  useMaintenanceStore.setState(useMaintenanceStore.getInitialState());
+  useHealthStore.setState(useHealthStore.getInitialState());
+  useTaskStore.setState(useTaskStore.getInitialState());
+  useAutomationStore.setState(useAutomationStore.getInitialState());
 }
