@@ -5,8 +5,8 @@ from app.services.ai_gateway import get_ai_gateway, AIUnavailable
 def detect_pii(text: str) -> list[dict]:
     values = []
     for kind, pattern in (
-        ("email", r"(?<![\\w.])[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}"),
-        ("phone", r"(?<!\\w)\\+?\\d[\\d ()-]{7,}\\d(?!\\w)"),
+        ("email", r"(?<![\w.])[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}"),
+        ("phone", r"(?<!\w)\+?\d[\d ()-]{7,}\d(?!\w)"),
     ):
         for hit in re.finditer(pattern, text):
             values.append({"type": kind, "value": hit.group(0)})
