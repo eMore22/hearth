@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from typing import Any, Dict, List, Optional
 from app.agents.base_agent import BaseHouseholdAgent
 from app.dependencies import get_supabase_admin
@@ -19,7 +20,7 @@ Be practical and realistic with your suggestions."""
             return self.generate_meal_plan(input_data.get("preferences", {}))
         elif action == "create_shopping_list":
             return self.create_shopping_list(input_data.get("meal_plan", {}))
-        elif action == "check_waste":
+        elif action in ("check_waste", "waste_alert"):
             return self.check_waste_alerts(input_data.get("inventory", []))
         elif action == "save_custom_meal_plan":
             return self.save_custom_meal_plan(
@@ -116,27 +117,37 @@ Return ONLY valid JSON:
             return {"categories": {}, "total_estimated_items": 0, "estimated_cost": 0}
 
     def check_waste_alerts(self, inventory: List[Dict]) -> List[Dict]:
-        if not inventory:
-            return []
+        """Offline expiry hints: no token consumption or AI dependency.
 
-        prompt = f"""Analyze this grocery inventory and flag items at risk of going to waste:
-
-Inventory: {json.dumps(inventory)}
-
-Return ONLY a JSON array:
-[{{
-  "item": "",
-  "days_left": number,
-  "priority": "high|medium|low",
-  "suggested_action": "cook today|freeze|use in recipe"
-}}]"""
-
-        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT)
-        try:
-            clean = response.replace("```json", "").replace("```", "").strip()
-            return json.loads(clean)
-        except:
-            return []
+        Expiry dates are only planning signals, not a food safety verdict.
+        """
+        today = date.today()
+        alerts = []
+        for item in inventory[:250]:
+            if not isinstance(item, dict):
+                continue
+            expiry = item.get("expiry_date") or item.get("expires_at")
+            if not expiry:
+                continue
+            try:
+                expiry_date = date.fromisoformat(str(expiry)[:10])
+            except (TypeError, ValueError):
+                continue
+            days_left = (expiry_date - today).days
+            if days_left > 3:
+                continue
+            name = str(item.get("name") or item.get("item_name") or "Grocery item")[:120]
+            alerts.append({
+                "item": name,
+                "days_left": days_left,
+                "priority": "high" if days_left <= 1 else "medium",
+                "suggested_action": (
+                    "Review expiry and food safety before use"
+                    if days_left < 0 else
+                    "Use soon or freeze if suitable"
+                ),
+            })
+        return sorted(alerts, key=lambda x: x["days_left"])
 
     def save_custom_meal_plan(self, meal_plan: Dict, household_id: str) -> Dict:
         supabase = get_supabase_admin()
