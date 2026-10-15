@@ -24,6 +24,32 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
     # reasoning or device commands. It may be stale or client-controlled.
     supabase = get_supabase_admin()
     context = await run_in_threadpool(load_household_context, household_id, supabase)
+    # Refresh integration state only when needed. Offline HA must not block
+    # bills/documents/grocery questions or trigger accidental actions.
+    if context.get("smart_home_connected") and any(
+        term in message.casefold() for term in
+        ("device", "smart home", "water", "leak", "door", "lock", "valve",
+         "garage", "light", "sensor", "what needs", "attention", "integration")
+    ):
+        try:
+            connection = (supabase.table("ha_connections")
+                          .select("ha_instance_url,ha_access_token")
+                          .eq("household_id", household_id)
+                          .eq("is_active", True).maybe_single().execute().data)
+            if connection:
+                bridge = build_ha_bridge(connection["ha_instance_url"],
+                                         connection["ha_access_token"])
+                live = await bridge.get_all_states()
+                parsed = bridge.parse_devices_from_states(live)
+                from datetime import datetime, timezone
+                context["ha_devices"] = parsed
+                context["smart_home_device_count"] = len(parsed)
+                context["ha_live_verified_at"] = datetime.now(timezone.utc).isoformat()
+                context["source_status"]["ha_devices"] = "live_verified"
+        except Exception:
+            # Existing bounded DB observations remain available, labeled
+            # last-synced; never present a timeout as a successful action.
+            context["source_status"]["ha_live_refresh"] = "unavailable"
     try:
         prior = (supabase.table("chat_messages").select("role,content")
                  .eq("household_id", household_id)
