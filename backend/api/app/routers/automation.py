@@ -20,6 +20,8 @@ from app.dependencies import get_current_user, get_supabase_admin
 from app.services.ha_bridge import build_ha_bridge, HABridgeService
 from app.services.analytics import log_event
 
+from app.services.subscriptions import require_tier
+
 router = APIRouter(tags=["automation"])
 
 
@@ -194,7 +196,7 @@ async def receive_webhook(
 
 # ── Connect ───────────────────────────────────────────────────────────────────
 
-@router.post("/connect")
+@router.post("/connect", dependencies=[Depends(require_tier("home"))])
 async def connect_ha(
     payload: ConnectHARequest,
     current_user: dict = Depends(get_current_user),
