@@ -1,2 +1,4 @@
-Hearth HQ internal validation build requested on 2026-10-15.
-Build from reviewed hardening branch; do not merge or publish until purchase and device smoke tests pass.
+Hearth HQ FINAL Android production AAB requested after successful CI and merge on 2026-10-15.
+Release merged SHA: c70b9738697e1dd598bfb04f4542efdb13cc6113.
+This build uses reviewed source content of release branch and Expo EAS production environment.
+Do not submit to public Google Play before successful test purchase/restore and final QA.
