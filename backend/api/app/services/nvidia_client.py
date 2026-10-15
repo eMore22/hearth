@@ -18,7 +18,9 @@ class NvidiaClient:
     def __init__(self, api_key: str):
         self.client = OpenAI(
             base_url="https://integrate.api.nvidia.com/v1",
-            api_key=api_key
+            api_key=api_key,
+            timeout=18.0,
+            max_retries=1,
         )
 
         # meta/llama-3.1-8b-instruct reached end-of-life on NVIDIA NIM on
