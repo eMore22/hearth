@@ -114,9 +114,18 @@ async def list_documents(
         records = docs.data or []
         for record in records:
             ref = record.get("file_url") or ""
+            # Legacy builds saved a public-style URL, but the bucket is
+            # private. Sign a household-scoped storage path for either format.
+            legacy_prefix = "/storage/v1/object/public/documents/"
+            path = None
             if ref.startswith("storage://documents/"):
+                path = ref[len("storage://documents/"):]
+            elif legacy_prefix in ref:
+                from urllib.parse import urlsplit
+                path = urlsplit(ref).path.split(legacy_prefix, 1)[-1]
+            if path:
                 try:
-                    signed = supabase.storage.from_("documents").create_signed_url(ref[len("storage://documents/"):], 3600)
+                    signed = supabase.storage.from_("documents").create_signed_url(path, 3600)
                     record["file_url"] = (signed.get("signedURL") or signed.get("signedUrl") or signed.get("signed_url")) if isinstance(signed, dict) else None
                 except Exception:
                     record["file_url"] = None
