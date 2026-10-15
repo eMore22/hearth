@@ -24,6 +24,10 @@ export default function SubscriptionScreen() {
     familyPackage,
     hasHome,
     hasFamily,
+    serverTier,
+    serverVerified,
+    serverEnforced,
+    serverCheckFailed,
     loading,
     purchasing,
     restoring,
@@ -140,6 +144,19 @@ export default function SubscriptionScreen() {
             )}
           </View>
 
+          <View style={{ marginTop: 12, marginBottom: 12, paddingHorizontal: 15,
+            paddingVertical: 13, borderRadius: 14, backgroundColor: '#F5F3FA',
+            borderWidth: 1, borderColor: '#E6E0F0' }}>
+            <Text style={{ color: H.navy, fontWeight: '800', fontSize: 12 }}>
+              {serverCheckFailed ? 'Server verification temporarily unavailable'
+               : serverVerified && serverTier ? `Server-verified access: ${serverTier.toUpperCase()}`
+               : 'Server verification not configured'}
+            </Text>
+            <Text style={{ color: H.muted, fontSize: 11, lineHeight: 17, marginTop: 4 }}>
+              {serverEnforced ? 'Premium access restrictions are active.'
+               : 'Premium restrictions are in release testing. Your purchases are still managed through Google Play.'}
+            </Text>
+          </View>
           <View style={styles.planCard}>
             <View style={styles.planTop}>
               <View><Text style={styles.planEyebrow}>HEARTH FREE</Text><Text style={styles.planPrice}>Free</Text></View>
