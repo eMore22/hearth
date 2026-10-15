@@ -122,7 +122,7 @@ export default function ChiefScreen() {
                 {msg.role !== 'user' && <View style={styles.assistantAvatar}><Ionicons name="sparkles" size={14} color={H.purple} /></View>}
                 <View style={[styles.message, msg.role === 'user' ? styles.userMessage : styles.assistantMessage]}>
                   <Text style={[styles.messageText, msg.role === 'user' ? styles.userText : styles.assistantText]}>{msg.content}</Text>
-                  {!!msg.action_result && <View style={styles.actionResult}><Ionicons name={msg.action_result.status === 'sent' ? 'checkmark-circle' : 'alert-circle'} size={14} color={msg.action_result.status === 'sent' ? H.green : H.red} /><Text style={[styles.actionResultText, { color: msg.action_result.status === 'sent' ? H.green : H.red }]}>{msg.action_result.status === 'sent' ? 'Action completed' : 'Action failed'}</Text></View>}
+                  {!!msg.action_result && <View style={styles.actionResult}><Ionicons name={msg.action_result.status === 'confirmed' ? 'checkmark-circle' : 'alert-circle'} size={14} color={msg.action_result.status === 'confirmed' ? H.green : msg.action_result.status === 'sent' ? H.muted : H.red} /><Text style={[styles.actionResultText, { color: msg.action_result.status === 'confirmed' ? H.green : msg.action_result.status === 'sent' ? H.muted : H.red }]}>{msg.action_result.status === 'confirmed' ? 'Device confirmed' : msg.action_result.status === 'sent' ? 'Command sent. Check device state.' : 'Action failed'}</Text></View>}
                 </View>
                 {!!msg.proactive_suggestions?.length && (
                   <View style={styles.suggestionList}>
