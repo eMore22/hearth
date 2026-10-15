@@ -210,24 +210,19 @@ Respond as Hearth Chief of Staff. Rules:
         return self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=500)
 
     async def _classify_intent(self, message: str) -> str:
-        try:
-            if self.nvidia_client:
-                return self.nvidia_client.classify_intent(message)
-        except Exception:
-            pass
-
+        """Prefer free deterministic routing for known household requests."""
         msg = message.lower()
-        if any(w in msg for w in ["smart home", "sensor", "leak", "door", "lock", "device", "garage", "valve"]):
+        if any(w in msg for w in ("smart home", "sensor", "leak", "door", "lock", "device", "garage", "valve", "light", "switch", "temperature")):
             return "smart_home"
-        if any(w in msg for w in ["document", "passport", "insurance", "expire", "warranty"]):
+        if any(w in msg for w in ("document", "passport", "insurance", "expire", "warranty")):
             return "documents"
-        if any(w in msg for w in ["bill", "subscription", "payment", "rent"]):
+        if any(w in msg for w in ("bill", "subscription", "payment", "rent")):
             return "bills"
-        if any(w in msg for w in ["meal", "food", "grocery", "cook", "shopping"]):
+        if any(w in msg for w in ("meal", "food", "grocery", "cook", "shopping", "pantry", "inventory")):
             return "grocery"
-        if any(w in msg for w in ["fix", "repair", "maintenance", "broken"]):
+        if any(w in msg for w in ("fix", "repair", "maintenance", "broken")):
             return "maintenance"
-        if any(w in msg for w in ["sick", "health", "doctor", "medication"]):
+        if any(w in msg for w in ("sick", "health", "doctor", "medication")):
             return "health"
         return "general"
 
@@ -244,44 +239,29 @@ Respond as Hearth Chief of Staff. Rules:
         if not devices:
             return None
 
-        msg = message.lower()
-
-        ACTION_VERBS = [
-            (["close", "shut"],            "close"),
-            (["open"],                     "open"),
-            (["lock"],                     "lock"),
-            (["unlock"],                   "unlock"),
-            (["turn off", "switch off"],   "turn_off"),
-            (["turn on", "switch on"],     "turn_on"),
+        import re
+        msg = " ".join(message.lower().split())
+        # Only unambiguous imperative instructions can control equipment.
+        match = re.match(
+            r"^(?:please\\s+|can you\\s+|could you\\s+|hey hearth[,]?\\s+)*"
+            r"(unlock|lock|open|close|shut|turn on|turn off|switch on|switch off)\\b", msg
+        )
+        if not match:
+            return None
+        detected_action = {
+            "unlock": "unlock", "lock": "lock", "open": "open",
+            "close": "close", "shut": "close", "turn on": "turn_on",
+            "switch on": "turn_on", "turn off": "turn_off", "switch off": "turn_off",
+        }[match.group(1)]
+        matches = [
+            device for device in devices
+            if device.get("is_actionable")
+            and (device.get("friendly_name") or "").strip()
+            and (device.get("friendly_name") or "").lower() in msg
         ]
-
-        detected_action = None
-        for phrases, action in ACTION_VERBS:
-            if any(p in msg for p in phrases):
-                detected_action = action
-                break
-
-        if not detected_action:
+        if len(matches) != 1:
             return None
-
-        best_match = None
-        best_score = 0
-        for device in devices:
-            name = (device.get("friendly_name") or "").lower()
-            if not name:
-                continue
-            name_words = set(name.split())
-            msg_words = set(msg.split())
-            overlap = len(name_words & msg_words)
-            if overlap > best_score:
-                best_score = overlap
-                best_match = device
-
-        if not best_match or best_score == 0:
-            return None
-
-        if not best_match.get("is_actionable"):
-            return None
+        best_match = matches[0]
 
         domain = best_match.get("domain", "")
         VALID_ACTIONS_BY_DOMAIN = {
@@ -323,7 +303,7 @@ Respond as Hearth Chief of Staff. Rules:
             + ". Keep it under 20 words and upbeat. No markdown."
         )
 
-        summary["chief_message"] = self.ask_light(prompt, max_tokens=60)
+        summary["chief_message"] = (f"{ha_alerts} smart-home alert(s) need attention." if ha_alerts else "Your home, organized in one place.")
         self.log_action("dashboard_summary", "generated")
         return summary
 
