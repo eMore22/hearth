@@ -165,7 +165,16 @@ async def delete_document(
 ):
     supabase = get_supabase_admin()
     try:
-        supabase.table("documents").delete().eq("id", document_id).execute()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        household_id = get_household_id(user)
+        if not household_id:
+            raise HTTPException(status_code=403, detail="No household access")
+        deleted = (supabase.table("documents")
+                   .delete().eq("id", document_id)
+                   .eq("household_id", household_id).execute())
+        if not deleted.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Could not delete document")
     return {"message": "Document deleted"}
