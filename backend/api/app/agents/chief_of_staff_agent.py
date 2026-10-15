@@ -125,7 +125,7 @@ IMPORTANT RULES:
         if any(w in msg for w in ("integrations", "integration status", "what is connected", "connected services")):
             integrations = context.get("integrations") or []
             return ("Integrations: " + "; ".join(
-                f"{item.get('name')}: {'connected' if item.get('connected') else 'not connected'}"
+                f"{item.get('name')}: {'configured (not live-verified)' if item.get('connected') else 'not configured'}"
                 + (f", last sync {item['last_sync_at']}" if item.get("last_sync_at") else "")
                 for item in integrations)) if integrations else "Integration status is not available."
         if category == "smart_home" and any(w in msg for w in ("status", "devices", "what is on", "connected")):
@@ -203,7 +203,7 @@ IMPORTANT RULES:
             "light":  {"turn_on", "turn_off"},
             "fan":    {"turn_on", "turn_off"},
         }
-        valid_actions = VALID_ACTIONS_BY_DOMAIN.get(domain, {"turn_on", "turn_off"})
+        valid_actions = VALID_ACTIONS_BY_DOMAIN.get(domain, set())
         if detected_action not in valid_actions:
             return None
 
