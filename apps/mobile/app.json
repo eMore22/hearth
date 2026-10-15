@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#06040C"
+      "backgroundColor": "#000000"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -20,12 +20,17 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Hearth HQ needs camera access to scan your documents.",
         "NSPhotoLibraryUsageDescription": "Hearth HQ needs photo access to upload your documents."
+      },
+      "splash": {
+        "image": "./assets/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#000000"
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#06040C"
+        "backgroundColor": "#000000"
       },
       "package": "com.emore22.hearth",
       "permissions": [
