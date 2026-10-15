@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi.concurrency import run_in_threadpool
 import asyncio
 from app.dependencies import get_current_user, get_supabase_admin
 from app.agents.chief_of_staff_agent import ChiefOfStaffAgent
@@ -22,7 +23,7 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
     # IMPORTANT: never rely on a mobile-supplied state snapshot for either
     # reasoning or device commands. It may be stale or client-controlled.
     supabase = get_supabase_admin()
-    context = load_household_context(household_id, supabase)
+    context = await run_in_threadpool(load_household_context, household_id, supabase)
     try:
         prior = (supabase.table("chat_messages").select("role,content")
                  .eq("household_id", household_id)
@@ -141,7 +142,7 @@ async def dashboard_summary(request: Request, current_user: dict = Depends(get_c
     household_id = current_user.get("household_id")
     if not household_id:
         raise HTTPException(status_code=403, detail="Household access required")
-    data = load_household_context(household_id, get_supabase_admin())
+    data = await run_in_threadpool(load_household_context, household_id, get_supabase_admin())
     agent = ChiefOfStaffAgent(household_id=household_id, user_id=str(current_user["id"]))
     result = agent.get_dashboard_summary(data)
 
