@@ -6,6 +6,8 @@ from app.agents.document_agent import DocumentAgent
 import uuid
 import traceback
 
+from app.services.subscriptions import require_tier
+
 router = APIRouter()
 
 
@@ -134,7 +136,7 @@ async def list_documents(
         return []
 
 
-@router.post("/ask")
+@router.post("/ask", dependencies=[Depends(require_tier("home"))])
 async def ask_question(
     payload: AskDocumentQuestion,
     user=Depends(get_current_user),
