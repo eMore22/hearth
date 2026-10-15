@@ -417,6 +417,9 @@ async def execute_action(
             ):
                 break
 
+        # A service call being accepted does not prove that hardware switched.
+        # Report the observed state separately so the app can avoid a false success.
+        confirmed = bool(entity_state and entity_state.get("state") == expected_state)
         updated_device = None
         if entity_state:
             attrs = entity_state.get("attributes", {})
@@ -465,6 +468,8 @@ async def execute_action(
             "action": resolved_action,
             "requested_action": payload.action,
             "device": updated_device,
+            "confirmed": confirmed,
+            "observed_state": entity_state.get("state") if entity_state else None,
         }
 
     except HTTPException:
