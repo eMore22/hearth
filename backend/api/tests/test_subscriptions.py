@@ -72,12 +72,21 @@ class SubscriptionTests(unittest.TestCase):
         import json
         code = (
             "import json; from app.main import app; "
-            "print(json.dumps([{'path':r.path,'methods':list(r.methods),"
-            "'deps':[str(d.call.__name__) for d in getattr(getattr(r,'dependant',None),'dependencies',[])]} "
-            "for r in app.routes if hasattr(r,'methods')]))"
+            "from app.routers import auth, chief_of_staff; "
+            "before=len(app.routes); child=len(auth.router.routes); "
+            "app.include_router(auth.router,prefix='/diagnostic'); "
+            "print(json.dumps({'before':before,'child':child,"
+            "'after':len(app.routes),'paths':[{'path':r.path,"
+            "'methods':list(r.methods),'deps':[str(d.call.__name__) "
+            "for d in getattr(getattr(r,'dependant',None),'dependencies',[])]} "
+            "for r in app.routes if hasattr(r,'methods')]}))"
         )
         raw = subprocess.check_output([sys.executable, "-c", code], text=True)
-        routes = json.loads(raw.strip().splitlines()[-1])
+        info = json.loads(raw.strip().splitlines()[-1])
+        self.assertGreater(info['child'], 0)
+        self.assertGreater(info['after'], info['before'],
+                           f"App router did not accept child routes: {info}")
+        routes = info['paths']
         cases = [
             ("POST", "/api/chief/chat"),
             ("POST", "/api/household/invite"),
