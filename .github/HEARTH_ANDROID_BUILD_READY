@@ -2,3 +2,8 @@ Hearth HQ internal validation build requested on 2026-10-15.
 Build from reviewed hardening branch; do not merge or publish until purchase and device smoke tests pass.
 
 2026-10-15: Build final Android AAB from main after Profile navigation, Chief fallback and dashboard quick-control fixes.
+
+Final bundled internal-testing AAB request (2026-10-15).
+Source: main commit f2c26a6c66efa22cac130336ecce65bde12fabd4.
+Includes approved native Hearth splash, Profile navigation, Chief offline briefing, connected-home error handling and finance projection, Free/Home/Family value comparison and server billing diagnostic.
+Internal testing only; do not publicly launch without entitlement gate and physical-device smoke tests.
