@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import (
@@ -24,8 +25,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -52,3 +53,17 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/account-deletion", response_class=HTMLResponse, include_in_schema=False)
+def account_deletion():
+    """Public account-deletion request path for users without app access."""
+    return """<!doctype html><html lang='en'><head><meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width,initial-scale=1'>
+    <title>Hearth HQ – Delete account</title></head><body style='font:16px system-ui;max-width:650px;margin:8vh auto;padding:24px;line-height:1.6'>
+    <h1>Delete your Hearth HQ account</h1><p>To request deletion of your Hearth HQ account and associated household data,
+    email <a href='mailto:support@hearthhq.online?subject=Hearth%20HQ%20account%20deletion%20request'>support@hearthhq.online</a>
+    from your account email address with the subject <strong>Hearth HQ account deletion request</strong>.</p>
+    <p>We will verify account ownership before processing the request. Include no passwords or private documents in the email.
+    If you have a Google Play subscription, cancel it separately in Google Play to stop future renewals.</p>
+    <p>If any information must be retained for legal, security, or billing reasons, we will explain what is retained and why.</p></body></html>"""
