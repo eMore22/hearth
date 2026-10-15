@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request, HTTPException
+import asyncio
 from app.dependencies import get_current_user, get_supabase_admin
 from app.agents.chief_of_staff_agent import ChiefOfStaffAgent
 from app.services.ha_bridge import build_ha_bridge
@@ -50,8 +51,10 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
             action=device_command.get("action"),
             supabase=get_supabase_admin(),
         )
-        if result["action_result"].get("status") == "sent":
-            result["message"] = "Command sent to Home Assistant. Check the device state to confirm it completed."
+        if result["action_result"].get("status") == "confirmed":
+            result["message"] = "Home Assistant confirmed the device's new state."
+        elif result["action_result"].get("status") == "sent":
+            result["message"] = "Command sent, but the device did not confirm the change. Check the device state."
         else:
             result["message"] = "I could not complete that device command. Please check your Home Assistant connection."
 
@@ -219,7 +222,31 @@ async def _execute_device_command(household_id: str, entity_id: str, action: str
                 "status": "sent", "ha_response": ha_response,
             }).eq("id", action_id).execute()
 
-        return {"status": "sent", "entity_id": entity_id, "action": action}
+        expected = {
+            "turn_on": "on", "turn_off": "off", "lock": "locked",
+            "unlock": "unlocked", "open": "open", "close": "closed",
+        }[action]
+        confirmed = False
+        observed = None
+        # HA accepting a service call is not proof that a physical actuator
+        # changed. Poll an authoritative observation before reporting success.
+        for attempt in range(4):
+            if attempt:
+                await asyncio.sleep(0.8)
+            try:
+                current = await bridge.get_entity_state(entity_id)
+                observed = current.get("state")
+                if observed == expected:
+                    confirmed = True
+                    break
+            except Exception:
+                pass
+        if observed is not None:
+            supabase.table("ha_devices").update({
+                "last_state": observed,
+            }).eq("household_id", household_id).eq("entity_id", entity_id).execute()
+        return {"status": "confirmed" if confirmed else "sent",
+                "entity_id": entity_id, "action": action, "observed_state": observed}
 
     except Exception as e:
         if action_id:
