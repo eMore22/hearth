@@ -29,7 +29,8 @@ Always return valid JSON when asked to analyze or generate reports."""
         elif action == "monthly_report":
             return self.generate_monthly_report(
                 input_data.get("bills", []),
-                input_data.get("previous_month_bills", [])
+                input_data.get("previous_month_bills", []),
+                input_data.get("currency"),
             )
         else:
             raise ValueError(f"Unknown action: {action}")
@@ -110,31 +111,73 @@ Return ONLY valid JSON:
                 "expected_outcome": "Possible discount or retention offer"
             }
 
-    def generate_monthly_report(self, bills: List[Dict], previous_month_bills: List[Dict] = None) -> Dict:
-        """Generate a monthly spending summary and insights."""
-        prompt = f"""Create a monthly financial report.
+    def generate_monthly_report(self, bills: List[Dict],
+                                previous_month_bills: List[Dict] = None,
+                                currency: Optional[str] = None) -> Dict:
+        """Project recurring household obligations without any AI calls.
 
-Current Month Bills: {json.dumps(bills)}
-Previous Month Bills: {json.dumps(previous_month_bills or [])}
+        This is not bank-verified expenditure. Don't mix currency units or
+        guess an amount for unknown cycles and one-time purchases.
+        """
+        from collections import defaultdict
 
-Return ONLY valid JSON:
-{{
-  "total_spent": number,
-  "change_from_last_month": number,
-  "biggest_expense": {{"provider": "", "amount": 0}},
-  "top_categories": ["category1", "category2"],
-  "recommendations": ["recommendation 1", "recommendation 2"]
-}}"""
-
-        response = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=800)
-        try:
-            clean = response.replace("```json", "").replace("```", "").strip()
-            return json.loads(clean)
-        except:
-            return {
-                "total_spent": 0,
-                "change_from_last_month": 0,
-                "biggest_expense": {"provider": "", "amount": 0},
-                "top_categories": [],
-                "recommendations": []
-            }
+        factors = {
+            "daily": 365 / 12, "weekly": 52 / 12,
+            "biweekly": 26 / 12, "fortnightly": 26 / 12,
+            "monthly": 1, "month": 1, "quarterly": 1 / 3,
+            "annual": 1 / 12, "annually": 1 / 12, "yearly": 1 / 12,
+        }
+        available = [b for b in bills if b.get("is_active", True)]
+        normalized = (currency or next((str(b["currency"]) for b in available
+                          if b.get("currency")), "")).upper()
+        total, categories, per_bill = 0.0, defaultdict(float), []
+        skipped_currencies, unrecognized_cycles = set(), 0
+        for bill in available:
+            bill_currency = str(bill.get("currency") or normalized).upper()
+            if normalized and bill_currency and bill_currency != normalized:
+                skipped_currencies.add(bill_currency)
+                continue
+            cycle = str(bill.get("billing_cycle") or "").lower().strip()
+            if cycle not in factors:
+                unrecognized_cycles += 1
+                continue
+            try:
+                amount = float(bill.get("amount") or 0)
+            except (ValueError, TypeError):
+                continue
+            if not 0 <= amount < 1e12:
+                continue
+            per_month = amount * factors[cycle]
+            total += per_month
+            provider = str(bill.get("provider") or bill.get("name") or "Bill")[:120]
+            categories[str(bill.get("category") or "other")] += per_month
+            per_bill.append({"provider": provider, "amount": round(per_month, 2)})
+        per_bill.sort(key=lambda x: x["amount"], reverse=True)
+        monthly = round(total, 2)
+        suggestions = []
+        if skipped_currencies:
+            suggestions.append("Some bills use other currencies and were excluded: "
+                               + ", ".join(sorted(skipped_currencies)) + ".")
+        if unrecognized_cycles:
+            suggestions.append(f"{unrecognized_cycles} bill(s) have unsupported billing cycles.")
+        if not per_bill:
+            suggestions.append("Add recurring bill amounts and payment cycles to estimate your monthly obligations.")
+        else:
+            suggestions.append("Review upcoming payment dates and subscription renewals before spending.")
+        return {
+            "month": __import__("datetime").date.today().strftime("%Y-%m"),
+            "currency": normalized or None,
+            "total_spent": monthly,
+            "estimated_monthly_total": monthly,
+            "is_estimate": True,
+            "change_from_last_month": 0,
+            "change_available": False,
+            "biggest_expense": per_bill[0] if per_bill else {"provider": "", "amount": 0},
+            "biggest_increases": [],
+            "top_categories": sorted(categories, key=categories.get, reverse=True)[:5],
+            "recommendations": suggestions,
+            "summary": (f"Estimated monthly recurring obligations: {monthly:,.2f} "
+                        f"{normalized or 'units'}. This is not confirmed spending."),
+            "mood": "neutral",
+            "savings_tip": "Check recurring subscriptions for services you no longer use.",
+        }
