@@ -69,9 +69,10 @@ IMPORTANT RULES:
                 response["message"] = deterministic
             else:
                 try:
-                    response["message"] = self._ai_response_with_memory(
-                        message=message, category=category, context=context,
-                        conversation_history=conversation_history,
+                    from fastapi.concurrency import run_in_threadpool
+                    response["message"] = await run_in_threadpool(
+                        self._ai_response_with_memory,
+                        message, category, context, conversation_history,
                     )
                 except Exception:
                     response["message"] = offline_household_brief(context)
