@@ -29,14 +29,26 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (authLoading) return;
+    let disposed = false;
+    let listening = false;
+
+    const handleCustomerInfoUpdate = (customerInfo: CustomerInfo) => {
+      if (!disposed) useBillingStore.getState().applyCustomerInfo(customerInfo);
+    };
 
     const syncRevenueCat = async () => {
       const userId = user?.id ? String(user.id) : undefined;
+      const ready = await revenueCatService.configure(userId);
+      if (disposed) return;
 
-      await revenueCatService.configure(userId);
+      if (!ready) {
+        useBillingStore.getState().reset();
+        return;
+      }
 
+      Purchases.addCustomerInfoUpdateListener(handleCustomerInfoUpdate);
+      listening = true;
       if (userId) {
-        await revenueCatService.identifyUser(userId);
         await useBillingStore.getState().refresh();
       } else {
         await revenueCatService.clearUser();
@@ -44,22 +56,15 @@ export default function RootLayout() {
       }
     };
 
-    syncRevenueCat().catch((err) => {
-      console.log('RevenueCat sync failed (non-fatal):', err);
+    syncRevenueCat().catch(() => {
+      // Billing failures must not prevent users from accessing their household.
     });
-  }, [authLoading, user?.id]);
-
-  useEffect(() => {
-    const handleCustomerInfoUpdate = (customerInfo: CustomerInfo) => {
-      useBillingStore.getState().applyCustomerInfo(customerInfo);
-    };
-
-    Purchases.addCustomerInfoUpdateListener(handleCustomerInfoUpdate);
 
     return () => {
-      Purchases.removeCustomerInfoUpdateListener(handleCustomerInfoUpdate);
+      disposed = true;
+      if (listening) Purchases.removeCustomerInfoUpdateListener(handleCustomerInfoUpdate);
     };
-  }, []);
+  }, [authLoading, user?.id]);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
