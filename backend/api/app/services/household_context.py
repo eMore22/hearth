@@ -43,18 +43,15 @@ def load_household_context(household_id: str, db: Any = None) -> dict:
         overview["source_status"][key] = "available" if results is not None else "unavailable"
         return results or []
 
-    household = collect("household", "households",
-                        "id,name,country,currency,timezone", limit=1)
-    # The households table uses 'id' rather than 'household_id', unlike modules.
-    if not household:
-        try:
-            record = (db.table("households").select("id,name,country,currency,timezone")
-                      .eq("id", household_id).limit(1).execute().data or [])
-            household = record
-            overview["source_status"]["household"] = "available"
-        except Exception as exc:
-            logger.warning("Household profile unavailable (%s)", type(exc).__name__)
-            overview["source_status"]["household"] = "unavailable"
+    # Unlike module tables, households uses id rather than household_id.
+    try:
+        household = (db.table("households").select("id,name,country,currency,timezone")
+                     .eq("id", household_id).limit(1).execute().data or [])
+        overview["source_status"]["household"] = "available"
+    except Exception as exc:
+        logger.warning("Household profile unavailable (%s)", type(exc).__name__)
+        household = []
+        overview["source_status"]["household"] = "unavailable"
     overview["household"] = household[0] if household else {}
 
     members = collect("members", "household_members", "role", limit=30)
@@ -105,10 +102,19 @@ def load_household_context(household_id: str, db: Any = None) -> dict:
     events = collect("ha_events", "ha_events",
         "entity_id,event_type,new_state,alert_sent,created_at", limit=30,
         ordered="created_at")
+    # Only recent observations are considered current alerts. Never infer
+    # that an older, already acknowledged alert is still active.
+    def recent(event: dict) -> bool:
+        try:
+            stamp = datetime.fromisoformat(str(event.get("created_at")).replace("Z", "+00:00"))
+            return (datetime.now(timezone.utc) - stamp).total_seconds() <= 48 * 3600
+        except (TypeError, ValueError):
+            return False
+
     overview["smart_home_alerts"] = [
         {"entity": event.get("entity_id"), "new_state": event.get("new_state"),
          "time": event.get("created_at")}
-        for event in events if event.get("alert_sent")
+        for event in events if event.get("alert_sent") and recent(event)
     ][:8]
     overview["device_actions"] = collect("device_actions", "ha_actions",
         "entity_id,action,status,created_at", limit=15, ordered="created_at")
