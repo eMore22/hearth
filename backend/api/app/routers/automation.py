@@ -203,6 +203,23 @@ async def connect_ha(
     if not household_id:
         raise HTTPException(status_code=400, detail="Create a household first")
 
+    # Render must never fetch loopback / RFC1918 / cloud metadata endpoints
+    # through a user-supplied Home Assistant URL.
+    from urllib.parse import urlsplit
+    import ipaddress
+    url = urlsplit(payload.ha_instance_url)
+    host = url.hostname or ""
+    if (url.scheme != "https" or not host or url.username or url.password
+            or host == "localhost" or host.endswith(".local")
+            or "." not in host):
+        raise HTTPException(status_code=400, detail="Use a public HTTPS Home Assistant URL")
+    try:
+        address = ipaddress.ip_address(host)
+        if not address.is_global:
+            raise HTTPException(status_code=400, detail="Private Home Assistant URLs are not allowed")
+    except ValueError:
+        pass
+
     bridge = build_ha_bridge(payload.ha_instance_url, payload.ha_access_token)
     is_reachable = await bridge.ping()
     if not is_reachable:
@@ -357,6 +374,22 @@ async def execute_action(
 
     if not conn or not conn.data:
         raise HTTPException(status_code=400, detail="Home Assistant not connected")
+
+    # Do not dispatch arbitrary entity IDs supplied by a client.
+    target = (supabase.table("ha_devices").select("domain, is_actionable")
+              .eq("household_id", household_id).eq("entity_id", payload.entity_id)
+              .maybe_single().execute())
+    if not target.data or not target.data.get("is_actionable"):
+        raise HTTPException(status_code=404, detail="Device not found in this household")
+    domain = target.data.get("domain")
+    allowed = {
+        "switch": {"turn_on", "turn_off"}, "light": {"turn_on", "turn_off"},
+        "fan": {"turn_on", "turn_off"}, "input_boolean": {"turn_on", "turn_off"},
+        "climate": {"turn_on", "turn_off"}, "lock": {"lock", "unlock", "turn_on", "turn_off"},
+        "cover": {"open", "close", "turn_on", "turn_off"},
+    }
+    if payload.action not in allowed.get(domain, set()):
+        raise HTTPException(status_code=400, detail="Unsupported action for this device")
 
     bridge = build_ha_bridge(conn.data["ha_instance_url"], conn.data["ha_access_token"])
 
