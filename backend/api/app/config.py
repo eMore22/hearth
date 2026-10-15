@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # NVIDIA
     NVIDIA_API_KEY: str = ""
 
+    # Shared secret supplied only to trusted Home Assistant webhooks.
+    HA_WEBHOOK_SECRET: str = ""
+
     # CORS
     ALLOWED_ORIGINS: List[str] = ["http://localhost:19006", "http://localhost:8081", "http://localhost:3000"]
 
