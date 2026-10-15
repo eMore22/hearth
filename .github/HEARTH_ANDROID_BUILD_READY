@@ -7,3 +7,5 @@ Final bundled internal-testing AAB request (2026-10-15).
 Source: main commit f2c26a6c66efa22cac130336ecce65bde12fabd4.
 Includes approved native Hearth splash, Profile navigation, Chief offline briefing, connected-home error handling and finance projection, Free/Home/Family value comparison and server billing diagnostic.
 Internal testing only; do not publicly launch without entitlement gate and physical-device smoke tests.
+
+Retest Android AAB with VERIFIED valid native splash asset at GitHub merge 33e32a530e4b5d27b43b3c8964c89cbbd9a1cf57. Prior build failed EAS Prebuild due malformed image; this is the corrected image artifact.
