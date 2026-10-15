@@ -206,55 +206,68 @@ IMPORTANT RULES:
         }
 
     def get_dashboard_summary(self, household_data: Dict) -> Dict:
-        summary = {
-            "documents":   self._get_document_snapshot(household_data.get("documents", [])),
-            "bills":       self._get_bill_snapshot(household_data.get("bills", [])),
-            "grocery":     self._get_grocery_snapshot(household_data.get("inventory", [])),
-            "maintenance": self._get_maintenance_snapshot(household_data.get("tasks", [])),
-            "health":      self._get_health_snapshot(household_data.get("health_events", [])),
-            "chief_message": "",
-        }
+        """A token-free dashboard based on dates in persisted records."""
+        from datetime import date
 
-        doc_count  = len(household_data.get("documents", []))
-        bill_count = len(household_data.get("bills", []))
-        task_count = len(household_data.get("tasks", []))
-        ha_alerts  = len(household_data.get("smart_home_alerts", []))
+        def days_until(value) -> int:
+            if not value:
+                return 9999
+            try:
+                return (date.fromisoformat(str(value)[:10]) - date.today()).days
+            except (ValueError, TypeError):
+                return 9999
 
-        prompt = (
-            f"Write a short warm one-sentence greeting for a household dashboard. "
-            f"Context: {doc_count} documents, {bill_count} bills, {task_count} tasks"
-            + (f", {ha_alerts} smart home alert(s) active" if ha_alerts else "")
-            + ". Keep it under 20 words and upbeat. No markdown."
+        documents = household_data.get("documents") or []
+        expiring = sorted(
+            (d for d in documents if days_until(d.get("expiry_date")) <= 30),
+            key=lambda d: days_until(d.get("expiry_date")),
         )
+        bills = [b for b in (household_data.get("bills") or []) if b.get("is_active", True)]
+        monthly = 0.0
+        household_currency = (household_data.get("household") or {}).get("currency")
+        for bill in bills:
+            if household_currency and bill.get("currency") not in (None, household_currency):
+                continue  # Never add incompatible currencies.
+            try:
+                amount = float(bill.get("amount") or 0)
+                cycle = str(bill.get("billing_cycle") or "").lower()
+                monthly += amount * (52 / 12 if cycle == "weekly" else
+                                     1 / 12 if cycle in ("annual", "yearly") else
+                                     1 if cycle in ("monthly", "month") else 0)
+            except (ValueError, TypeError):
+                continue
 
-        summary["chief_message"] = (f"{ha_alerts} smart-home alert(s) need attention." if ha_alerts else "Your home, organized in one place.")
-        self.log_action("dashboard_summary", "generated")
+        inventory = household_data.get("inventory") or []
+        maintenance = household_data.get("tasks") or []
+        medicines = household_data.get("medications") or []
+        alerts = household_data.get("smart_home_alerts") or []
+        summary = {
+            "documents": {
+                "total": len(documents), "expiring_soon": len(expiring),
+                "next_expiry": expiring[0].get("title") if expiring else None,
+            },
+            "bills": {
+                "total": len(bills), "monthly_spend": round(monthly, 2),
+                "largest_bill": max(bills, key=lambda b: float(b.get("amount") or 0)).get("provider")
+                if bills else None,
+            },
+            "grocery": {
+                "items": len(inventory),
+                "expiring_soon": len([i for i in inventory if days_until(i.get("expiry_date")) <= 3]),
+            },
+            "maintenance": {
+                "total_tasks": len(maintenance),
+                "due_this_week": len([t for t in maintenance if
+                    t.get("is_active", True) and days_until(t.get("next_due_date")) <= 7]),
+            },
+            "health": {
+                "recent_events": household_data.get("health_event_count", 0),
+                "active_medications": len([m for m in medicines if m.get("is_active", True)]),
+            },
+            "chief_message": (
+                f"{len(alerts)} recent smart-home alerts need review." if alerts else
+                f"{len(expiring)} documents need expiry review." if expiring else
+                "Your household overview is ready."
+            ),
+        }
         return summary
-
-    def _get_document_snapshot(self, documents: List) -> Dict:
-        expiring_soon = [d for d in documents if d.get("days_until_expiry", 999) <= 30]
-        return {
-            "total": len(documents),
-            "expiring_soon": len(expiring_soon),
-            "next_expiry": expiring_soon[0].get("title") if expiring_soon else None,
-        }
-
-    def _get_bill_snapshot(self, bills: List) -> Dict:
-        total   = sum(b.get("amount", 0) for b in bills)
-        largest = max(bills, key=lambda x: x.get("amount", 0)) if bills else None
-        return {
-            "total": len(bills),
-            "monthly_spend": round(total, 2),
-            "largest_bill": largest.get("provider") if largest else None,
-        }
-
-    def _get_grocery_snapshot(self, inventory: List) -> Dict:
-        expiring = [i for i in inventory if i.get("days_left", 999) <= 3]
-        return {"items": len(inventory), "expiring_soon": len(expiring)}
-
-    def _get_maintenance_snapshot(self, tasks: List) -> Dict:
-        upcoming = [t for t in tasks if t.get("days_until_due", 999) <= 7]
-        return {"total_tasks": len(tasks), "due_this_week": len(upcoming)}
-
-    def _get_health_snapshot(self, events: List) -> Dict:
-        return {"recent_events": len(events), "active_medications": 0}
