@@ -96,8 +96,8 @@ export default function SubscriptionScreen() {
     }
   };
 
-  const homePrice = homePackage?.product.priceString || 'Loading price…';
-  const familyPrice = familyPackage?.product.priceString || 'Loading price…';
+  const homePrice = homePackage?.product.priceString || (loading ? 'Loading price…' : 'Unavailable');
+  const familyPrice = familyPackage?.product.priceString || (loading ? 'Loading price…' : 'Unavailable');
 
   return (
     <View style={styles.root}>
