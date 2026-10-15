@@ -65,12 +65,19 @@ class SubscriptionTests(unittest.TestCase):
                 subscriptions.user_tier("unknown")
 
     def test_premium_routes_have_dependencies(self):
-        from app.main import app
-        from app.routers import chief_of_staff, auth
-        self.assertTrue(len(chief_of_staff.router.routes) > 0,
-                        "Chief router has no routes: " + repr(chief_of_staff))
-        self.assertTrue(len(auth.router.routes) > 0,
-                        "Auth router has no routes: " + repr(auth))
+        # Exercise a fresh ASGI import, not a possibly modified unittest
+        # module graph. This is the exact import shape used by uvicorn.
+        import subprocess
+        import sys
+        import json
+        code = (
+            "import json; from app.main import app; "
+            "print(json.dumps([{'path':r.path,'methods':list(r.methods),"
+            "'deps':[str(d.call.__name__) for d in getattr(getattr(r,'dependant',None),'dependencies',[])]} "
+            "for r in app.routes if hasattr(r,'methods')]))"
+        )
+        raw = subprocess.check_output([sys.executable, "-c", code], text=True)
+        routes = json.loads(raw.strip().splitlines()[-1])
         cases = [
             ("POST", "/api/chief/chat"),
             ("POST", "/api/household/invite"),
@@ -82,13 +89,10 @@ class SubscriptionTests(unittest.TestCase):
             ("POST", "/api/maintenance/diagnose"),
         ]
         for method, path in cases:
-            route = next((x for x in app.routes if getattr(x, "path", None) == path
-                          and method in getattr(x, "methods", set())), None)
-            self.assertIsNotNone(route, f"{path}; routes: {[(x.path, x.methods) for x in app.routes if hasattr(x, 'methods')]}")
-            self.assertTrue(any(
-                dependency.call and dependency.call.__name__ == "check"
-                for dependency in route.dependant.dependencies
-            ), path)
+            match = next((r for r in routes if r["path"] == path
+                          and method in r["methods"]), None)
+            self.assertIsNotNone(match, f"{path} missing. Available routes: {routes}")
+            self.assertIn("check", match["deps"], path)
 
 if __name__ == "__main__":
     unittest.main()
