@@ -51,7 +51,7 @@ def tier_from_customer(data: dict, *, now: datetime | None = None) -> Tier:
     entitlements = (data.get("subscriber") or {}).get("entitlements") or {}
     for name in ("family", "home"):
         entitlement = entitlements.get(name)
-        if not isinstance(entitlement, dict):
+        if not isinstance(entitlement, dict) or not entitlement:
             continue
         expiry = entitlement.get("expires_date")
         grace = entitlement.get("grace_period_expires_date")
