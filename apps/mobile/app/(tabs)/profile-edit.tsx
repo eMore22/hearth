@@ -24,7 +24,7 @@ export default function ProfileEditScreen() {
     Keyboard.dismiss();
     try {
       await updateProfile(trimmed);
-      Alert.alert('Profile updated', 'Your name has been saved.', [{ text: 'Done', onPress: () => router.back() }]);
+      Alert.alert('Profile updated', 'Your name has been saved.', [{ text: 'Done', onPress: () => router.replace('/(tabs)/profile') }]);
     } catch (e: any) {
       Alert.alert('Could not update profile', e?.message || 'Please try again.');
     }
