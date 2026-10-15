@@ -29,6 +29,22 @@ def _bounded(value: Any, limit: int = 18) -> Any:
 
 def make_chief_prompt(message: str, context: dict, conversation_history: list) -> str:
     facts = {key: _bounded(context[key]) for key in VISIBLE_KEYS if key in context}
+    # Reduce needless third-party disclosure: a question about bills or
+    # lighting must not upload family medication details or document summaries.
+    question = message.casefold()
+    health_requested = any(word in question for word in
+                           ("health", "medicine", "medication", "pill", "doctor",
+                            "prescription", "symptom", "appointment", "dose"))
+    if not health_requested:
+        facts["medications"] = {"tracked_count": len(context.get("medications") or [])}
+        facts["health_reminders"] = {"tracked_count": len(context.get("health_reminders") or [])}
+    document_requested = any(word in question for word in
+                             ("document", "insurance", "policy", "passport", "expiry",
+                              "expired", "warranty", "leak", "damage", "claim"))
+    if not document_requested and isinstance(facts.get("documents"), list):
+        for document in facts["documents"]:
+            if isinstance(document, dict):
+                document.pop("summary", None)
     history = [
         {"role": "user" if entry.get("role") == "user" else "assistant",
          "content": str(entry.get("content") or "")[:600]}
