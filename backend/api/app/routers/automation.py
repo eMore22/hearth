@@ -9,6 +9,7 @@ Handles:
   GET  /api/automation/events           — recent smart home events
 """
 import asyncio
+import secrets
 import re
 import traceback
 from datetime import datetime
@@ -107,7 +108,17 @@ def _get_suggested_actions(entity_id: str, device_class: str, new_state: str) ->
 async def receive_webhook(
     request: Request,
     x_hearth_household_id: Optional[str] = Header(None),
+    x_hearth_webhook_token: Optional[str] = Header(None),
 ):
+    # Never accept tenant-selectable webhook events without a shared secret.
+    # Disabled by default until a secret is configured in Render and HA.
+    from app.config import settings
+    if not settings.HA_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook authentication is not configured")
+    if not x_hearth_webhook_token or not secrets.compare_digest(
+        x_hearth_webhook_token, settings.HA_WEBHOOK_SECRET
+    ):
+        raise HTTPException(status_code=401, detail="Invalid webhook credentials")
     try:
         body = await request.json()
     except Exception:
