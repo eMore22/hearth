@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # Shared secret supplied only to trusted Home Assistant webhooks.
     HA_WEBHOOK_SECRET: str = ""
 
+    # Server-side RevenueCat key, NEVER EXPO_PUBLIC_. Gate is enabled only
+    # after purchase/restore validation in Google Play Internal Testing.
+    REVENUECAT_SECRET_API_KEY: str = ""
+    BILLING_ENFORCEMENT_ENABLED: bool = False
+
     # CORS
     ALLOWED_ORIGINS: List[str] = ["http://localhost:19006", "http://localhost:8081", "http://localhost:3000"]
 
