@@ -5,7 +5,7 @@ name: Build Hearth Android release AAB
 on:
   push:
     branches:
-      - fix/launch-hardening-2026-10-15
+      - main
     paths:
       - .github/HEARTH_ANDROID_BUILD_READY
   workflow_dispatch:
