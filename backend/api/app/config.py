@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str
 
     # Anthropic
-    ANTHROPIC_API_KEY: str
+    ANTHROPIC_API_KEY: str = ""
+    CLAUDE_MODEL: str = "claude-sonnet-4-6"
+    AI_ENABLED: bool = True
 
     # AWS
     AWS_ACCESS_KEY_ID: Optional[str] = None
