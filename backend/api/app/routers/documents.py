@@ -6,7 +6,8 @@ from app.agents.document_agent import DocumentAgent
 import uuid
 import traceback
 
-from app.services.subscriptions import require_tier
+from fastapi.concurrency import run_in_threadpool
+from app.services.subscriptions import require_tier, access_for, BillingUnavailable
 
 router = APIRouter()
 
@@ -61,10 +62,29 @@ async def upload_document(
         if mime_type not in ("image/jpeg", "image/png", "image/webp", "application/pdf"):
             raise HTTPException(status_code=415, detail="Unsupported document format")
 
-        agent = DocumentAgent(household_id=household_id, user_id=user["id"])
-        print(f"🤖 Running document extraction (mime_type={mime_type})...")
-        extracted = agent.extract_document(file_bytes, mime_type)
-        # Do not log sensitive extracted user records.
+        # Everyone can safely store a document without spending AI credits.
+        # Structured AI extraction is reserved for a RevenueCat-verified
+        # Home/Family subscriber; the phone never grants itself this access.
+        access = {"tier": "free"}
+        try:
+            access = await run_in_threadpool(access_for, user)
+        except BillingUnavailable:
+            pass
+        ai_analysis = access.get("tier") in ("home", "family") and access.get("verified")
+        extracted = {
+            "document_type": "other",
+            "title": (file.filename or "Uploaded Document")[:180],
+            "issuer": None,
+            "holder_name": member_name,
+            "issue_date": None,
+            "expiry_date": None,
+            "document_number": None,
+            "key_fields": {},
+            "summary": "Stored securely. Upgrade to Home to extract information automatically.",
+        }
+        if ai_analysis:
+            agent = DocumentAgent(household_id=household_id, user_id=user["id"])
+            extracted = await run_in_threadpool(agent.extract_document, file_bytes, mime_type)
 
         # Upload to Supabase Storage
         file_path = f"{household_id}/{uuid.uuid4()}/{file.filename}"
@@ -84,12 +104,12 @@ async def upload_document(
             "file_name": file.filename,
             **extracted
         }).execute()
-        print(f"✅ DB insert OK: {doc.data}")
+        print("✅ Document record stored")
 
         return {
             "document": doc.data[0],
             "extracted": extracted,
-            "message": f"Document uploaded and analysed: {extracted.get('title', 'Unknown')}"
+            "message": ("Document uploaded and analysed." if ai_analysis else "Document uploaded securely. Automatic analysis is a Home feature.")
         }
 
     except HTTPException:
