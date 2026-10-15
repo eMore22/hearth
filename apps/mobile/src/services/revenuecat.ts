@@ -1,60 +1,59 @@
 import { Platform } from 'react-native';
 import Purchases, { LOG_LEVEL } from 'react-native-purchases';
 
+// Only the public RevenueCat Android SDK key belongs in the client bundle.
 let configured = false;
+let configureInFlight: Promise<boolean> | null = null;
 let currentUserId: string | null = null;
 
-export const revenueCatService = {
-  configure: async (userId?: string) => {
-    if (configured || Platform.OS !== 'android') return;
+async function configureOnce(userId?: string): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
 
-    const apiKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY;
-
-    if (!apiKey) {
-      console.warn('RevenueCat Android API key is missing');
-      return;
+  if (!configured) {
+    if (!configureInFlight) {
+      configureInFlight = (async () => {
+        const apiKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY?.trim();
+        if (!apiKey || !apiKey.startsWith('goog_')) {
+          console.warn('RevenueCat public Android SDK key is missing or invalid');
+          return false;
+        }
+        try {
+          if (__DEV__) Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+          await Purchases.configure({ apiKey, appUserID: userId || undefined });
+          configured = true;
+          currentUserId = userId || null;
+          return true;
+        } catch (error) {
+          console.warn('RevenueCat initialization failed:', error);
+          return false;
+        }
+      })().finally(() => { configureInFlight = null; });
     }
 
-    try {
-      if (__DEV__) {
-        Purchases.setLogLevel(LOG_LEVEL.DEBUG);
-      }
+    if (!(await configureInFlight)) return false;
+  }
 
-      Purchases.configure({
-        apiKey,
-        appUserID: userId || undefined,
-      });
-
-      configured = true;
-      currentUserId = userId || null;
-
-      console.log('RevenueCat configured');
-    } catch (error) {
-      console.warn('RevenueCat configuration failed:', error);
-    }
-  },
-
-  identifyUser: async (userId: string) => {
-    if (!configured || Platform.OS !== 'android') return;
-    if (!userId || currentUserId === userId) return;
-
+  // A request may have configured the SDK anonymously before auth finished.
+  if (userId && currentUserId !== userId) {
     try {
       await Purchases.logIn(userId);
       currentUserId = userId;
-      console.log('RevenueCat user identified');
     } catch (error) {
-      console.warn('RevenueCat login failed:', error);
+      console.warn('RevenueCat user identification failed:', error);
+      return false;
     }
-  },
+  }
+  return true;
+}
 
+export const revenueCatService = {
+  configure: configureOnce,
+  identifyUser: (userId: string) => configureOnce(userId),
   clearUser: async () => {
-    if (!configured || Platform.OS !== 'android') return;
-    if (!currentUserId) return;
-
+    if (!configured || Platform.OS !== 'android' || !currentUserId) return;
     try {
       await Purchases.logOut();
       currentUserId = null;
-      console.log('RevenueCat user cleared');
     } catch (error) {
       console.warn('RevenueCat logout failed:', error);
     }
