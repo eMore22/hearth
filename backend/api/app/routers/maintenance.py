@@ -69,12 +69,15 @@ async def create_task(request: Request, current_user: dict = Depends(get_current
 @router.post("/tasks/{task_id}/complete")
 async def complete_task(task_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     supabase = get_supabase_admin()
+    household_id = current_user.get("household_id")
+    if not household_id:
+        raise HTTPException(status_code=403, detail="Household access required")
     try:
         body = await request.json()
     except Exception:
         body = {}
     try:
-        task_res = supabase.table("maintenance_tasks").select("*").eq("id", task_id).maybe_single().execute()
+        task_res = supabase.table("maintenance_tasks").select("*").eq("id", task_id).eq("household_id", household_id).maybe_single().execute()
         task = task_res.data
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
@@ -94,7 +97,7 @@ async def complete_task(task_id: str, request: Request, current_user: dict = Dep
         else:
             update_data["is_active"] = False  # One-off task — done, not recurring
 
-        supabase.table("maintenance_tasks").update(update_data).eq("id", task_id).execute()
+        supabase.table("maintenance_tasks").update(update_data).eq("id", task_id).eq("household_id", household_id).execute()
         return {"status": "completed"}
     except HTTPException:
         raise
