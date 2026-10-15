@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     # NVIDIA
     NVIDIA_API_KEY: str = ""
+    NVIDIA_REASONING_MODEL: str = ""
 
     # Shared secret supplied only to trusted Home Assistant webhooks.
     HA_WEBHOOK_SECRET: str = ""
