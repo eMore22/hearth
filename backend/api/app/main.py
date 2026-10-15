@@ -44,6 +44,7 @@ app.include_router(chief_of_staff.router, prefix="/api/chief",         tags=["Ch
 app.include_router(automation.router,     prefix="/api/automation",    tags=["Automation"])
 app.include_router(intake.router,         prefix="/api/intake",        tags=["Intake"])
 app.include_router(tasks.router,          prefix="/api/tasks",         tags=["Tasks"])
+app.include_router(billing.router,        prefix="/api/billing",       tags=["Billing"])
 
 
 @app.get("/")
