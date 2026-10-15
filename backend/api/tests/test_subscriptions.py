@@ -79,7 +79,7 @@ class SubscriptionTests(unittest.TestCase):
         for method, path in cases:
             route = next((x for x in app.routes if getattr(x, "path", None) == path
                           and method in getattr(x, "methods", set())), None)
-            self.assertIsNotNone(route, path)
+            self.assertIsNotNone(route, f"{path}; routes: {[(x.path, x.methods) for x in app.routes if hasattr(x, 'methods')]}")
             self.assertTrue(any(
                 dependency.call and dependency.call.__name__ == "check"
                 for dependency in route.dependant.dependencies
