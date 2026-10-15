@@ -6,11 +6,12 @@ from app.agents.chief_of_staff_agent import ChiefOfStaffAgent
 from app.services.ha_bridge import build_ha_bridge
 from app.services.analytics import log_event
 from app.services.household_context import load_household_context
+from app.services.subscriptions import require_tier
 
 router = APIRouter(tags=["chief_of_staff"])
 
 
-@router.post("/chat")
+@router.post("/chat", dependencies=[Depends(require_tier("home"))])
 async def chat(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
     household_id = current_user.get("household_id")
