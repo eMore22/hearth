@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 import certifi
 import jwt
 from jwt import PyJWKClient
@@ -24,10 +25,12 @@ security = HTTPBearer()
 _jwks_client: PyJWKClient | None = None
 
 
+@lru_cache(maxsize=1)
 def get_supabase() -> Client:
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
 
+@lru_cache(maxsize=1)
 def get_supabase_admin() -> Client:
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
 
