@@ -55,27 +55,25 @@ IMPORTANT RULES:
             "actions_taken": [],
         }
 
-        try:
-            response["message"] = self._ai_response_with_memory(
-                message=message,
-                category=category,
-                context=context,
-                conversation_history=conversation_history,
-            )
-        except Exception as e:
-            print(f"⚠️ Chief of Staff chat error: {e}")
-            response["message"] = "I'm having trouble processing that right now. Could you try rephrasing?"
-
-        # ── Device command detection ──
-        # Only attempt this for smart_home intent, and only if the frontend
-        # sent the household's device list. Matches simple natural-language
-        # commands ("close the garage door", "turn off kitchen light") to a
-        # known entity_id + HA action. Deliberately rule-based rather than
-        # another LLM call — keeps this fast and predictable.
-        if category == "smart_home":
-            device_command = self._detect_device_command(message, context.get("ha_devices") or [])
-            if device_command:
-                response["device_command"] = device_command
+        device_command = (
+            self._detect_device_command(message, context.get("ha_devices") or [])
+            if category == "smart_home" else None
+        )
+        if device_command:
+            response["device_command"] = device_command
+            response["message"] = "Sending the device command. I will report whether it succeeds."
+        else:
+            deterministic = self._deterministic_reply(message, category, context)
+            if deterministic is not None:
+                response["message"] = deterministic
+            else:
+                try:
+                    response["message"] = self._ai_response_with_memory(
+                        message=message, category=category, context=context,
+                        conversation_history=conversation_history,
+                    )
+                except Exception:
+                    response["message"] = self.AI_OFF_MESSAGE
 
         if category == "grocery":
             response["proactive_suggestions"].append("Generate weekly meal plan")
@@ -208,6 +206,34 @@ Respond as Hearth Chief of Staff. Rules:
 7. Household to-dos and AI-generated maintenance tasks are different lists — don't conflate them if the user asks about "tasks.\""""
 
         return self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=500)
+
+    def _deterministic_reply(self, message: str, category: str, context: Dict) -> Optional[str]:
+        """Handle common read-only requests without a model."""
+        msg = message.lower()
+        if category == "bills" and any(w in msg for w in ("due", "upcoming", "what bills", "show bills")):
+            bills = context.get("bills") or []
+            return ("Bills: " + "; ".join(
+                (str(b.get("provider") or b.get("name") or "Bill")
+                 + (f" due {b['due_date']}" if b.get("due_date") else ""))
+                for b in bills[:12])) if bills else "I don't see any bills in your household overview."
+        if category == "grocery" and any(w in msg for w in ("inventory", "pantry", "what groceries", "shopping list")):
+            items = context.get("inventory") or []
+            return ("Pantry: " + ", ".join(str(i.get("name") or i.get("item_name") or "Item")
+                                            for i in items[:20])) if items else "Your pantry is currently empty in Hearth."
+        if category == "documents" and any(w in msg for w in ("expiry", "expire", "expiring", "document list")):
+            alerts = context.get("alerts") or []
+            return ("Document alerts: " + "; ".join(str(x.get("message", "Review document")) for x in alerts[:5])
+                    if alerts else f"You have {len(context.get('documents') or [])} saved documents and no current expiry alerts.")
+        if category == "general" and any(w in msg for w in ("my tasks", "to do", "todo", "to-do")):
+            tasks = context.get("household_tasks") or []
+            return ("Household tasks: " + "; ".join(str(t.get("title", "Task")) for t in tasks[:12])
+                    if tasks else "I don't see any household tasks in your current overview.")
+        if category == "smart_home" and any(w in msg for w in ("status", "devices", "what is on", "connected")):
+            devices = context.get("ha_devices") or []
+            return ("Device status: " + "; ".join(
+                f"{d.get('friendly_name', 'Device')}: {d.get('last_state', 'unknown')}" for d in devices[:12])
+                    if devices else "No device states are loaded in your current overview.")
+        return None
 
     async def _classify_intent(self, message: str) -> str:
         """Prefer free deterministic routing for known household requests."""
