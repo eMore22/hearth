@@ -74,31 +74,64 @@ def make_chief_prompt(message: str, context: dict, conversation_history: list) -
 
 
 def offline_household_brief(context: dict) -> str:
-    """Still useful if the optional AI providers are out of credit."""
-    notes = []
-    alerts = context.get("smart_home_alerts") or []
-    if alerts:
-        notes.append(f"{len(alerts)} previously recorded smart-home alerts to review")
-    document_alerts = context.get("alerts") or []
-    if document_alerts:
-        notes.append(f"{len(document_alerts)} document expiry alerts")
+    """Grounded actionable overview that needs zero AI tokens."""
+    from datetime import date
+    today = date.today()
+    sources = context.get("source_status") or {}
+
+    def due(value):
+        try:
+            return (date.fromisoformat(str(value)[:10]) - today).days
+        except (ValueError, TypeError):
+            return None
+
+    def section(key, empty, build):
+        if sources.get(key) == "unavailable":
+            return "I couldn't check " + key.replace("_", " ") + "."
+        return build or empty
+
+    out = ["Household briefing from saved records (advanced AI is currently offline):"]
     bills = [b for b in context.get("bills") or [] if b.get("is_active", True)]
-    if bills:
-        notes.append(f"{len(bills)} tracked bills")
+    bill_due = sorted([(due(b.get("next_due_date")), b) for b in bills
+                       if due(b.get("next_due_date")) is not None],
+                      key=lambda x: x[0])
+    bill_lines = [
+        f"{b.get('name') or b.get('provider') or 'Bill'}: "
+        + ("overdue" if days < 0 else "due today" if days == 0 else f"due in {days} days")
+        for days, b in bill_due[:4] if days <= 30
+    ]
+    out.append(section("bills", "No tracked bills.", "Bills: " +
+                       "; ".join(bill_lines or [f"{len(bills)} tracked, none due within 30 days"])))
+    docs = context.get("documents") or []
+    expiring = sorted([(due(d.get("expiry_date")), d) for d in docs
+                       if due(d.get("expiry_date")) is not None], key=lambda x: x[0])
+    doc_lines = [f"{d.get('title') or 'Document'} ({'expired' if days < 0 else f'{days} days'})"
+                 for days, d in expiring[:3] if days <= 30]
+    out.append(section("documents", "No saved documents.", "Documents: " +
+                       ("; ".join(doc_lines) if doc_lines else f"{len(docs)} saved; no imminent expiry")))
+    items = context.get("inventory") or []
+    soon = [i.get("name") or "Item" for i in items if
+            due(i.get("expiry_date")) is not None and due(i.get("expiry_date")) <= 3]
+    out.append(section("groceries", "No recorded groceries.", "Groceries: " +
+                       f"{len(items)} items recorded" +
+                       (f"; check expiry for {', '.join(soon[:4])}" if soon else "")))
     tasks = [t for t in context.get("household_tasks") or [] if not t.get("is_completed")]
-    if tasks:
-        notes.append(f"{len(tasks)} outstanding household tasks")
-    integrations = context.get("integrations") or []
-    for integration in integrations:
-        if integration.get("name") == "Home Assistant":
-            status = "connected" if integration.get("connected") else "not connected"
-            notes.append(f"Home Assistant {status}")
-    missing = [key for key, state in (context.get("source_status") or {}).items()
-               if state == "unavailable"]
-    if missing:
-        notes.append("some sections could not be checked")
-    if not notes:
-        return ("Advanced AI is temporarily unavailable. Household modules still work; "
-                "I couldn't find any recent items in the available overview.")
-    return ("Advanced AI reasoning is temporarily unavailable. Last recorded household "
-            "overview: " + "; ".join(notes) + ".")
+    out.append(section("household_tasks", "No unfinished household tasks.",
+                       "Tasks: " + (", ".join(str(t.get("title") or "Task") for t in tasks[:4])
+                       if tasks else "none outstanding")))
+    maintenance = [t for t in context.get("tasks") or [] if t.get("is_active", True)]
+    out.append(section("maintenance", "No scheduled maintenance.", "Maintenance: " +
+                       (", ".join(str(t.get("title") or "Maintenance") for t in maintenance[:3])
+                       if maintenance else "none scheduled")))
+    ha = next((x for x in context.get("integrations") or []
+               if x.get("name") == "Home Assistant"), None)
+    if ha and ha.get("connected"):
+        out.append(f"Home Assistant: configured, {ha.get('devices', 0)} saved devices, "
+                   "live connection not verified. Last sync: " +
+                   str(ha.get("last_sync_at") or "unknown") + ".")
+    else:
+        out.append("Home Assistant: not configured.")
+    if context.get("smart_home_alerts"):
+        out.insert(1, f"Priority: {len(context['smart_home_alerts'])} recorded recent "
+                          "smart-home alerts require review.")
+    return "\n".join(out)
