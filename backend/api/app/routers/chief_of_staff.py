@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 from app.dependencies import get_current_user, get_supabase_admin
 from app.agents.chief_of_staff_agent import ChiefOfStaffAgent
 from app.services.ha_bridge import build_ha_bridge
 from app.services.analytics import log_event
+from app.services.household_context import load_household_context
 
 router = APIRouter(tags=["chief_of_staff"])
 
@@ -11,17 +12,29 @@ router = APIRouter(tags=["chief_of_staff"])
 async def chat(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
     household_id = current_user.get("household_id")
+    if not household_id:
+        raise HTTPException(status_code=403, detail="Create or join a household before using Chief")
+    message = str(body.get("message") or "").strip()
+    if not message or len(message) > 2000:
+        raise HTTPException(status_code=422, detail="Message must contain 1 to 2000 characters")
 
-    agent = ChiefOfStaffAgent(
-        household_id=household_id,
-        user_id=str(current_user["id"])
-    )
+    # IMPORTANT: never rely on a mobile-supplied state snapshot for either
+    # reasoning or device commands. It may be stale or client-controlled.
+    supabase = get_supabase_admin()
+    context = load_household_context(household_id, supabase)
+    try:
+        prior = (supabase.table("chat_messages").select("role,content")
+                 .eq("household_id", household_id)
+                 .order("created_at", desc=True).limit(20).execute().data or [])
+        prior.reverse()
+    except Exception:
+        prior = []
 
-    # process_chat is async — must be awaited directly
+    agent = ChiefOfStaffAgent(household_id=household_id, user_id=str(current_user["id"]))
     result = await agent.process_chat(
-        message=body.get("message", ""),
-        context=body.get("context", {}),
-        conversation_history=body.get("conversation_history", [])
+        message=message,
+        context=context,
+        conversation_history=prior,
     )
 
     # ── Device command execution ──
@@ -56,7 +69,7 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
             _log_chat_exchange(
                 household_id=household_id,
                 user_id=str(current_user["id"]),
-                user_message=body.get("message", ""),
+                user_message=message,
                 assistant_message=result.get("message", ""),
                 category=result.get("category"),
                 device_command=device_command,
@@ -122,15 +135,12 @@ async def clear_history(current_user: dict = Depends(get_current_user)):
 
 @router.post("/dashboard-summary")
 async def dashboard_summary(request: Request, current_user: dict = Depends(get_current_user)):
-    body = await request.json()
     household_id = current_user.get("household_id")
-
-    agent = ChiefOfStaffAgent(
-        household_id=household_id,
-        user_id=str(current_user["id"])
-    )
-    # get_dashboard_summary is sync — call directly
-    result = agent.get_dashboard_summary(body.get("household_data", {}))
+    if not household_id:
+        raise HTTPException(status_code=403, detail="Household access required")
+    data = load_household_context(household_id, get_supabase_admin())
+    agent = ChiefOfStaffAgent(household_id=household_id, user_id=str(current_user["id"]))
+    result = agent.get_dashboard_summary(data)
 
     if household_id:
         log_event(
