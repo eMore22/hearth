@@ -17,6 +17,10 @@ interface BillingState {
 
   hasHome: boolean;
   hasFamily: boolean;
+  serverTier: 'free' | 'home' | 'family' | null;
+  serverVerified: boolean;
+  serverEnforced: boolean;
+  serverCheckFailed: boolean;
 
   loading: boolean;
   purchasing: boolean;
@@ -45,6 +49,10 @@ export const useBillingStore = create<BillingState>((set) => ({
 
   hasHome: false,
   hasFamily: false,
+  serverTier: null,
+  serverVerified: false,
+  serverEnforced: false,
+  serverCheckFailed: false,
 
   loading: false,
   purchasing: false,
@@ -85,6 +93,15 @@ export const useBillingStore = create<BillingState>((set) => ({
         customerInfo,
         ...entitlementState(customerInfo),
       });
+      // Diagnostic only: the server is authoritative for paid feature gates.
+      // Never upgrade local entitlements from a server access response.
+      try {
+        const { data } = await api.get('/api/billing/access');
+        set({ serverTier: data.tier || 'free', serverVerified: !!data.verified,
+          serverEnforced: !!data.enforced, serverCheckFailed: false });
+      } catch {
+        set({ serverTier: null, serverVerified: false, serverCheckFailed: true });
+      }
     } catch (error: any) {
       set({
         error: 'Could not load subscription information. Please try again.',
@@ -103,7 +120,13 @@ export const useBillingStore = create<BillingState>((set) => ({
       const { customerInfo } = await Purchases.purchasePackage(pkg);
       // Never trust a purchase claim from the phone: refresh the server's
       // short cached lookup against RevenueCat for the authenticated user.
-      await api.post('/api/billing/refresh').catch(() => undefined);
+      try {
+        const { data } = await api.post('/api/billing/refresh');
+        set({ serverTier: data.tier || 'free', serverVerified: !!data.verified,
+          serverEnforced: !!data.enforced, serverCheckFailed: false });
+      } catch {
+        set({ serverTier: null, serverVerified: false, serverCheckFailed: true });
+      }
 
       set({
         customerInfo,
@@ -164,6 +187,10 @@ export const useBillingStore = create<BillingState>((set) => ({
       customerInfo: null,
       hasHome: false,
       hasFamily: false,
+      serverTier: null,
+      serverVerified: false,
+      serverEnforced: false,
+      serverCheckFailed: false,
       loading: false,
       purchasing: false,
       restoring: false,
