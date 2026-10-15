@@ -66,6 +66,11 @@ class SubscriptionTests(unittest.TestCase):
 
     def test_premium_routes_have_dependencies(self):
         from app.main import app
+        from app.routers import chief_of_staff, auth
+        self.assertTrue(len(chief_of_staff.router.routes) > 0,
+                        "Chief router has no routes: " + repr(chief_of_staff))
+        self.assertTrue(len(auth.router.routes) > 0,
+                        "Auth router has no routes: " + repr(auth))
         cases = [
             ("POST", "/api/chief/chat"),
             ("POST", "/api/household/invite"),
