@@ -1,5 +1,7 @@
 name: Hearth release checks
 on:
+  push:
+    branches: [fix/launch-hardening-2026-10-15]
   pull_request:
     branches: [main]
   workflow_dispatch:
