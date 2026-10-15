@@ -65,28 +65,10 @@ class SubscriptionTests(unittest.TestCase):
                 subscriptions.user_tier("unknown")
 
     def test_premium_routes_have_dependencies(self):
-        # Exercise a fresh ASGI import, not a possibly modified unittest
-        # module graph. This is the exact import shape used by uvicorn.
-        import subprocess
-        import sys
-        import json
-        code = (
-            "import json; from app.main import app; "
-            "from app.routers import auth, chief_of_staff; "
-            "before=len(app.routes); child=len(auth.router.routes); "
-            "app.include_router(auth.router,prefix='/diagnostic'); "
-            "print(json.dumps({'before':before,'child':child,"
-            "'after':len(app.routes),'route_types':[(type(r).__name__,r.path,str(getattr(r,'methods',None))) for r in app.routes], 'paths':[{'path':r.path,"
-            "'methods':list(r.methods),'deps':[str(d.call.__name__) "
-            "for d in getattr(getattr(r,'dependant',None),'dependencies',[])]} "
-            "for r in app.routes if hasattr(r,'methods')]}))"
-        )
-        raw = subprocess.check_output([sys.executable, "-c", code], text=True)
-        info = json.loads(raw.strip().splitlines()[-1])
-        self.assertGreater(info['child'], 0)
-        self.assertGreater(info['after'], info['before'],
-                           f"App router did not accept child routes: {info}")
-        routes = info['paths']
+        # FastAPI >=0.137 uses lazy _IncludedRouter tree nodes. Directly
+        # walking app.routes no longer produces each prefixed API route.
+        from fastapi.routing import iter_route_contexts
+        from app.main import app
         cases = [
             ("POST", "/api/chief/chat"),
             ("POST", "/api/household/invite"),
@@ -97,11 +79,15 @@ class SubscriptionTests(unittest.TestCase):
             ("POST", "/api/bills/negotiation-script"),
             ("POST", "/api/maintenance/diagnose"),
         ]
+        routes = list(iter_route_contexts(app.routes))
         for method, path in cases:
-            match = next((r for r in routes if r["path"] == path
-                          and method in r["methods"]), None)
-            self.assertIsNotNone(match, f"{path} missing. Available routes: {info}")
-            self.assertIn("check", match["deps"], path)
+            found = next((ctx for ctx in routes if ctx.path == path
+                          and method in (ctx.methods or [])), None)
+            self.assertIsNotNone(found, path)
+            self.assertTrue(any(
+                dep.call and dep.call.__name__ == "check"
+                for dep in found.route.dependant.dependencies
+            ), path)
 
 if __name__ == "__main__":
     unittest.main()
