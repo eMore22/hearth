@@ -269,8 +269,8 @@ Respond as Hearth Chief of Staff. Rules:
         msg = " ".join(message.lower().split())
         # Only unambiguous imperative instructions can control equipment.
         match = re.match(
-            r"^(?:please\\s+|can you\\s+|could you\\s+|hey hearth[,]?\\s+)*"
-            r"(unlock|lock|open|close|shut|turn on|turn off|switch on|switch off)\\b", msg
+            r"^(?:please\s+|can you\s+|could you\s+|hey hearth[,]?\s+)*"
+            r"(unlock|lock|open|close|shut|turn on|turn off|switch on|switch off)\b", msg
         )
         if not match:
             return None
