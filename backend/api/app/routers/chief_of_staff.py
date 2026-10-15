@@ -37,6 +37,10 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
             action=device_command.get("action"),
             supabase=get_supabase_admin(),
         )
+        if result["action_result"].get("status") == "sent":
+            result["message"] = "Command sent to Home Assistant. Check the device state to confirm it completed."
+        else:
+            result["message"] = "I could not complete that device command. Please check your Home Assistant connection."
 
     # ── Logging for traction measurement ──
     # Two different tables, two different purposes:
@@ -148,6 +152,21 @@ async def _execute_device_command(household_id: str, entity_id: str, action: str
     """
     if not entity_id or not action:
         return {"status": "failed", "error": "Missing entity_id or action"}
+
+    # The model/client must not be able to command an arbitrary HA entity.
+    device = (supabase.table("ha_devices").select("domain, is_actionable")
+              .eq("household_id", household_id).eq("entity_id", entity_id)
+              .maybe_single().execute())
+    if not device.data or not device.data.get("is_actionable"):
+        return {"status": "failed", "error": "Device unavailable in household"}
+    domain = device.data.get("domain")
+    allowed = {
+        "switch": {"turn_on", "turn_off"}, "light": {"turn_on", "turn_off"},
+        "fan": {"turn_on", "turn_off"}, "input_boolean": {"turn_on", "turn_off"},
+        "lock": {"lock", "unlock"}, "cover": {"open", "close"},
+    }
+    if action not in allowed.get(domain, set()):
+        return {"status": "failed", "error": "Unsupported action for this device"}
 
     conn = supabase.table("ha_connections")\
         .select("ha_instance_url, ha_access_token")\
