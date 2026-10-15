@@ -62,8 +62,10 @@ async def complete_task(task_id: str, current_user: dict = Depends(get_current_u
         if not result.data:
             raise HTTPException(status_code=404, detail="Task not found")
         return result.data[0]
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Task operation failed")
 
 
 @router.delete("/{task_id}")
@@ -77,5 +79,7 @@ async def delete_task(task_id: str, current_user: dict = Depends(get_current_use
         if not result.data:
             raise HTTPException(status_code=404, detail="Task not found")
         return {"status": "deleted"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Task operation failed")
