@@ -31,6 +31,12 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    if (error.response?.status === 402) {
+      error.message = 'This feature requires Hearth Home or Family. Open Profile → Subscription to upgrade.';
+    }
+    if (error.response?.status === 503 && String((error.response?.data as any)?.detail || '').includes('subscription')) {
+      error.message = 'We could not verify your subscription. Please try again shortly.';
+    }
     if (error.response?.status === 401) {
       await removeToken();
       await removeUser();

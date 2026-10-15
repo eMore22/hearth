@@ -1,3 +1,6 @@
+import { revenueCatService } from '../services/revenuecat';
+import api from '../services/api';
+import { useAuthStore } from './authStore';
 import { create } from 'zustand';
 import Purchases, {
   CustomerInfo,
@@ -52,6 +55,12 @@ export const useBillingStore = create<BillingState>((set) => ({
     set({ loading: true, error: null });
 
     try {
+      const userId = useAuthStore.getState().user?.id;
+      const ready = await revenueCatService.configure(userId ? String(userId) : undefined);
+      if (!ready) {
+        set({ offering: null, homePackage: null, familyPackage: null, error: 'Subscriptions are temporarily unavailable. Please try again later.' });
+        return;
+      }
       const [offerings, customerInfo] = await Promise.all([
         Purchases.getOfferings(),
         Purchases.getCustomerInfo(),
@@ -78,9 +87,7 @@ export const useBillingStore = create<BillingState>((set) => ({
       });
     } catch (error: any) {
       set({
-        error:
-          error?.message ||
-          'Could not load subscription information.',
+        error: 'Could not load subscription information. Please try again.',
       });
     } finally {
       set({ loading: false });
@@ -91,7 +98,12 @@ export const useBillingStore = create<BillingState>((set) => ({
     set({ purchasing: true, error: null });
 
     try {
+      const userId = useAuthStore.getState().user?.id;
+      if (!userId || !(await revenueCatService.configure(String(userId)))) throw new Error('Billing unavailable');
       const { customerInfo } = await Purchases.purchasePackage(pkg);
+      // Never trust a purchase claim from the phone: refresh the server's
+      // short cached lookup against RevenueCat for the authenticated user.
+      await api.post('/api/billing/refresh').catch(() => undefined);
 
       set({
         customerInfo,
@@ -102,9 +114,7 @@ export const useBillingStore = create<BillingState>((set) => ({
     } catch (error: any) {
       if (!error?.userCancelled) {
         set({
-          error:
-            error?.message ||
-            'Could not complete the purchase.',
+          error: 'Could not complete the purchase. Please try again.',
         });
       }
 
@@ -118,7 +128,10 @@ export const useBillingStore = create<BillingState>((set) => ({
     set({ restoring: true, error: null });
 
     try {
+      const userId = useAuthStore.getState().user?.id;
+      if (!userId || !(await revenueCatService.configure(String(userId)))) throw new Error('Billing unavailable');
       const customerInfo = await Purchases.restorePurchases();
+      await api.post('/api/billing/refresh').catch(() => undefined);
 
       set({
         customerInfo,
@@ -128,9 +141,7 @@ export const useBillingStore = create<BillingState>((set) => ({
       return true;
     } catch (error: any) {
       set({
-        error:
-          error?.message ||
-          'Could not restore purchases.',
+        error: 'Could not restore purchases. Please try again.',
       });
 
       return false;

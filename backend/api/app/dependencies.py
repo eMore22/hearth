@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 import certifi
 import jwt
 from jwt import PyJWKClient
@@ -28,6 +29,7 @@ def get_supabase() -> Client:
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
 
+@lru_cache(maxsize=1)
 def get_supabase_admin() -> Client:
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
 
@@ -127,12 +129,34 @@ async def get_current_user(
     household_id = None
     try:
         member = supabase.table("household_members")\
-            .select("household_id")\
+            .select("household_id,role")\
             .eq("user_id", user_id)\
             .maybe_single()\
             .execute()
         if member and member.data:
             household_id = member.data.get("household_id")
+            # Family membership is part of the paid Family entitlement.
+            # The owner must have Family; a member cannot buy Home to
+            # bypass another household owner's sharing tier.
+            if (settings.BILLING_ENFORCEMENT_ENABLED
+                    and member.data.get("role") != "owner"):
+                from fastapi.concurrency import run_in_threadpool
+                from app.services.subscriptions import user_tier, BillingUnavailable
+                owner = (supabase.table("households").select("created_by")
+                         .eq("id", household_id).maybe_single().execute())
+                owner_id = (owner.data or {}).get("created_by")
+                if not owner_id:
+                    raise HTTPException(status_code=403, detail="Household owner unavailable")
+                try:
+                    family_tier = await run_in_threadpool(user_tier, str(owner_id))
+                except BillingUnavailable:
+                    raise HTTPException(status_code=503,
+                                        detail="Household subscription verification is temporarily unavailable.")
+                if family_tier != "family":
+                    raise HTTPException(status_code=402,
+                                        detail="Household owner needs Hearth Family to share access.")
+    except HTTPException:
+        raise
     except Exception:
         pass
 

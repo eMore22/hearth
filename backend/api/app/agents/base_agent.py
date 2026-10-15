@@ -3,8 +3,7 @@ import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, Optional
-from anthropic import Anthropic
-from app.config import settings
+from app.services.ai_gateway import get_ai_gateway, AIUnavailable
 from app.dependencies import get_supabase_admin
 
 
@@ -17,21 +16,15 @@ class BaseHouseholdAgent(ABC):
     def __init__(self, household_id: str, user_id: str):
         self.household_id = household_id
         self.user_id = user_id
-        self.client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        self.gateway = get_ai_gateway()
         self.context: Dict[str, Any] = {}
         self.action_log: list = []
         self._nvidia_client = None
 
     @property
     def nvidia_client(self):
-        """Return shared NVIDIA client, initialising on first use."""
-        if self._nvidia_client is None:
-            try:
-                from app.services.nvidia_client import get_nvidia_client
-                self._nvidia_client = get_nvidia_client()
-            except Exception:
-                self._nvidia_client = None
-        return self._nvidia_client
+        """Legacy agent access is still routed through the shared AI gateway."""
+        return self.gateway.nvidia_client
 
     @staticmethod
     def _extract_json(text: str) -> str:
@@ -121,110 +114,42 @@ class BaseHouseholdAgent(ABC):
     def run(self, input_data: Any) -> Any:
         pass
 
-    # ── HEAVY: Claude for complex reasoning ──────────────────────────────────
-    def ask_claude(
-        self,
-        prompt: str,
-        system: Optional[str] = None,
-        max_tokens: int = 1024
-    ) -> str:
-        """
-        Use Claude for complex tasks.
-        Falls back to NVIDIA if credits run out.
-        """
-        messages = [{"role": "user", "content": prompt}]
-        kwargs = {
-            "model": "claude-sonnet-4-6",
-            "max_tokens": max_tokens,
-            "messages": messages,
-        }
-        if system:
-            kwargs["system"] = system
+    # All providers, retries, timeouts and circuit breakers live in ai_gateway.
+    AI_OFF_MESSAGE = (
+        "Advanced AI is temporarily unavailable. I can still help you manage "
+        "bills, documents, groceries, tasks and smart home devices."
+    )
 
+    def ask_claude(self, prompt: str, system: Optional[str] = None,
+                   max_tokens: int = 1024) -> str:
         try:
-            response = self.client.messages.create(**kwargs)
-            self.log_action("claude_call", "success", {"max_tokens": max_tokens})
-            return response.content[0].text
-        except Exception as e:
-            print(f"⚠️ Claude failed: {str(e)[:120]}. Falling back to NVIDIA...")
-            return self.ask_light(prompt, max_tokens=max_tokens)
+            return self.gateway.generate(prompt, system=system, heavy=True,
+                                         max_tokens=max_tokens)
+        except AIUnavailable:
+            return self.AI_OFF_MESSAGE
 
-    # ── LIGHT: NVIDIA for fast cheap tasks ───────────────────────────────────
-    def ask_light(
-        self,
-        prompt: str,
-        max_tokens: int = 512,
-        temperature: float = 0.3
-    ) -> str:
-        """
-        Use NVIDIA for lightweight tasks.
-        Falls back to Claude if NVIDIA fails.
-        """
-        if not self.nvidia_client:
-            return self.ask_claude(prompt, max_tokens=max_tokens)
-
+    def ask_light(self, prompt: str, max_tokens: int = 512,
+                  temperature: float = 0.3) -> str:
         try:
-            result = self.nvidia_client.complete(
-                task="simple_chat",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=max_tokens,
-                temperature=temperature
-            )
-            self.log_action("nvidia_call", "success")
-            return result or json.dumps({"error": "Empty response from NVIDIA"})
-        except Exception as e:
-            print(f"⚠️ NVIDIA failed: {e}. Falling back to Claude...")
-            try:
-                messages = [{"role": "user", "content": prompt}]
-                response = self.client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=max_tokens,
-                    messages=messages,
-                )
-                return response.content[0].text
-            except Exception:
-                return json.dumps({"error": "Both AI providers temporarily unavailable"})
+            return self.gateway.generate(prompt, max_tokens=max_tokens,
+                                         temperature=temperature, heavy=False)
+        except AIUnavailable:
+            return self.AI_OFF_MESSAGE
 
-    # ── SMART ROUTER ─────────────────────────────────────────────────────────
-    def ask(
-        self,
-        prompt: str,
-        heavy: bool = False,
-        system: Optional[str] = None,
-        max_tokens: int = 800
-    ) -> str:
-        """
-        Smart router — pick the right model automatically.
-        heavy=True  → Claude  (reasoning, memory, quality output)
-        heavy=False → NVIDIA  (speed, cost efficiency)
-        """
-        if heavy:
-            return self.ask_claude(prompt, system=system, max_tokens=max_tokens)
-        else:
-            return self.ask_light(prompt, max_tokens=max_tokens)
-
-    # ── LEGACY: direct NVIDIA call ────────────────────────────────────────────
-    def ask_nvidia(
-        self,
-        task: str,
-        messages: list,
-        max_tokens: int = 1024,
-        temperature: float = 0.3
-    ) -> str:
-        """Direct NVIDIA call for specific tasks (vision, OCR, rerank)."""
+    def ask(self, prompt: str, heavy: bool = False,
+            system: Optional[str] = None, max_tokens: int = 800) -> str:
         try:
-            if self.nvidia_client:
-                result = self.nvidia_client.complete(
-                    task=task,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature
-                )
-                if result:
-                    return result
-        except Exception as e:
-            print(f"⚠️ NVIDIA direct call failed: {e}")
-        return json.dumps({"error": "NVIDIA client unavailable"})
+            return self.gateway.generate(prompt, heavy=heavy, system=system,
+                                         max_tokens=max_tokens)
+        except AIUnavailable:
+            return self.AI_OFF_MESSAGE
+
+    def ask_nvidia(self, task: str, messages: list, max_tokens: int = 1024,
+                   temperature: float = 0.3) -> str:
+        try:
+            return self.gateway.nvidia_complete(task, messages, max_tokens, temperature)
+        except AIUnavailable:
+            return self.AI_OFF_MESSAGE
 
     def log_action(
         self,

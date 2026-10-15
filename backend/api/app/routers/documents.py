@@ -6,6 +6,9 @@ from app.agents.document_agent import DocumentAgent
 import uuid
 import traceback
 
+from fastapi.concurrency import run_in_threadpool
+from app.services.subscriptions import require_tier, access_for, BillingUnavailable
+
 router = APIRouter()
 
 
@@ -47,28 +50,50 @@ async def upload_document(
             raise HTTPException(status_code=400, detail="Create a household first")
 
         supabase = get_supabase_admin()
-        file_bytes = await file.read()
+        file_bytes = await file.read(20 * 1024 * 1024 + 1)
+        if not file_bytes or len(file_bytes) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Document size must be 1 byte to 20 MB")
         print(f"📁 File read — size: {len(file_bytes)} bytes")
 
         # Real content type from the upload, not assumed — this is what
         # lets DocumentAgent route PDFs to its native document path instead
         # of forcing everything through image extraction.
         mime_type = file.content_type or "image/jpeg"
+        if mime_type not in ("image/jpeg", "image/png", "image/webp", "application/pdf"):
+            raise HTTPException(status_code=415, detail="Unsupported document format")
 
-        agent = DocumentAgent(household_id=household_id, user_id=user["id"])
-        print(f"🤖 Running document extraction (mime_type={mime_type})...")
-        extracted = agent.extract_document(file_bytes, mime_type)
-        print(f"✅ Extracted: {extracted}")
+        # Everyone can safely store a document without spending AI credits.
+        # Structured AI extraction is reserved for a RevenueCat-verified
+        # Home/Family subscriber; the phone never grants itself this access.
+        access = {"tier": "free"}
+        try:
+            access = await run_in_threadpool(access_for, user)
+        except BillingUnavailable:
+            pass
+        ai_analysis = access.get("tier") in ("home", "family") and access.get("verified")
+        extracted = {
+            "document_type": "other",
+            "title": (file.filename or "Uploaded Document")[:180],
+            "issuer": None,
+            "holder_name": member_name,
+            "issue_date": None,
+            "expiry_date": None,
+            "document_number": None,
+            "key_fields": {},
+            "summary": "Stored securely. Upgrade to Home to extract information automatically.",
+        }
+        if ai_analysis:
+            agent = DocumentAgent(household_id=household_id, user_id=user["id"])
+            extracted = await run_in_threadpool(agent.extract_document, file_bytes, mime_type)
 
         # Upload to Supabase Storage
         file_path = f"{household_id}/{uuid.uuid4()}/{file.filename}"
         file_url = None
         try:
             supabase.storage.from_("documents").upload(file_path, file_bytes)
-            file_url = supabase.storage.from_("documents").get_public_url(file_path)
-            print(f"☁️ Storage upload OK: {file_url}")
+            file_url = f"storage://documents/{file_path}"
         except Exception as storage_error:
-            print(f"⚠️ Storage upload failed (non-fatal): {storage_error}")
+            raise HTTPException(status_code=503, detail="Could not store the document securely") from storage_error
 
         print("💾 Inserting into DB...")
         doc = supabase.table("documents").insert({
@@ -79,20 +104,18 @@ async def upload_document(
             "file_name": file.filename,
             **extracted
         }).execute()
-        print(f"✅ DB insert OK: {doc.data}")
+        print("✅ Document record stored")
 
         return {
             "document": doc.data[0],
             "extracted": extracted,
-            "message": f"Document uploaded and analysed: {extracted.get('title', 'Unknown')}"
+            "message": ("Document uploaded and analysed." if ai_analysis else "Document uploaded securely. Automatic analysis is a Home feature.")
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ UPLOAD ERROR: {str(e)}")
-        traceback.print_exc()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail="Could not upload document") from e
 
 
 @router.get("/")
@@ -110,12 +133,30 @@ async def list_documents(
             .eq("household_id", household_id)\
             .order("expiry_date", desc=False)\
             .execute()
-        return docs.data or []
+        records = docs.data or []
+        for record in records:
+            ref = record.get("file_url") or ""
+            # Legacy builds saved a public-style URL, but the bucket is
+            # private. Sign a household-scoped storage path for either format.
+            legacy_prefix = "/storage/v1/object/public/documents/"
+            path = None
+            if ref.startswith("storage://documents/"):
+                path = ref[len("storage://documents/"):]
+            elif legacy_prefix in ref:
+                from urllib.parse import urlsplit
+                path = urlsplit(ref).path.split(legacy_prefix, 1)[-1]
+            if path:
+                try:
+                    signed = supabase.storage.from_("documents").create_signed_url(path, 3600)
+                    record["file_url"] = (signed.get("signedURL") or signed.get("signedUrl") or signed.get("signed_url")) if isinstance(signed, dict) else None
+                except Exception:
+                    record["file_url"] = None
+        return records
     except Exception:
         return []
 
 
-@router.post("/ask")
+@router.post("/ask", dependencies=[Depends(require_tier("home"))])
 async def ask_question(
     payload: AskDocumentQuestion,
     user=Depends(get_current_user),
@@ -165,7 +206,16 @@ async def delete_document(
 ):
     supabase = get_supabase_admin()
     try:
-        supabase.table("documents").delete().eq("id", document_id).execute()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        household_id = get_household_id(user)
+        if not household_id:
+            raise HTTPException(status_code=403, detail="No household access")
+        deleted = (supabase.table("documents")
+                   .delete().eq("id", document_id)
+                   .eq("household_id", household_id).execute())
+        if not deleted.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Could not delete document")
     return {"message": "Document deleted"}

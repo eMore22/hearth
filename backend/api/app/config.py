@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str
 
     # Anthropic
-    ANTHROPIC_API_KEY: str
+    ANTHROPIC_API_KEY: str = ""
+    CLAUDE_MODEL: str = "claude-sonnet-4-6"
+    AI_ENABLED: bool = True
 
     # AWS
     AWS_ACCESS_KEY_ID: Optional[str] = None
@@ -28,6 +30,14 @@ class Settings(BaseSettings):
 
     # NVIDIA
     NVIDIA_API_KEY: str = ""
+
+    # Shared secret supplied only to trusted Home Assistant webhooks.
+    HA_WEBHOOK_SECRET: str = ""
+
+    # Server-side RevenueCat key, NEVER EXPO_PUBLIC_. Gate is enabled only
+    # after purchase/restore validation in Google Play Internal Testing.
+    REVENUECAT_SECRET_API_KEY: str = ""
+    BILLING_ENFORCEMENT_ENABLED: bool = False
 
     # CORS
     ALLOWED_ORIGINS: List[str] = ["http://localhost:19006", "http://localhost:8081", "http://localhost:3000"]

@@ -1,13 +1,8 @@
-from app.services.nvidia_client import get_nvidia_client
+from app.services.ai_gateway import get_ai_gateway, AIUnavailable
 
 def perform_ocr(image_bytes: bytes) -> str:
-    """
-    Extract text from an image using NVIDIA OCR.
-    Falls back to empty string on failure.
-    """
+    """Optional vision enhancement; core document storage does not require it."""
     try:
-        client = get_nvidia_client()
-        return client.ocr(image_bytes)
-    except Exception as e:
-        print(f"OCR failed: {e}")
+        return get_ai_gateway().nvidia_ocr(image_bytes)
+    except AIUnavailable:
         return ""

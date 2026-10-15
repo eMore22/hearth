@@ -9,6 +9,7 @@ Handles:
   GET  /api/automation/events           — recent smart home events
 """
 import asyncio
+import secrets
 import re
 import traceback
 from datetime import datetime
@@ -18,6 +19,8 @@ from pydantic import BaseModel
 from app.dependencies import get_current_user, get_supabase_admin
 from app.services.ha_bridge import build_ha_bridge, HABridgeService
 from app.services.analytics import log_event
+
+from app.services.subscriptions import require_tier
 
 router = APIRouter(tags=["automation"])
 
@@ -107,7 +110,17 @@ def _get_suggested_actions(entity_id: str, device_class: str, new_state: str) ->
 async def receive_webhook(
     request: Request,
     x_hearth_household_id: Optional[str] = Header(None),
+    x_hearth_webhook_token: Optional[str] = Header(None),
 ):
+    # Never accept tenant-selectable webhook events without a shared secret.
+    # Disabled by default until a secret is configured in Render and HA.
+    from app.config import settings
+    if not settings.HA_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook authentication is not configured")
+    if not x_hearth_webhook_token or not secrets.compare_digest(
+        x_hearth_webhook_token, settings.HA_WEBHOOK_SECRET
+    ):
+        raise HTTPException(status_code=401, detail="Invalid webhook credentials")
     try:
         body = await request.json()
     except Exception:
@@ -183,7 +196,7 @@ async def receive_webhook(
 
 # ── Connect ───────────────────────────────────────────────────────────────────
 
-@router.post("/connect")
+@router.post("/connect", dependencies=[Depends(require_tier("home"))])
 async def connect_ha(
     payload: ConnectHARequest,
     current_user: dict = Depends(get_current_user),
@@ -191,6 +204,23 @@ async def connect_ha(
     household_id = current_user.get("household_id")
     if not household_id:
         raise HTTPException(status_code=400, detail="Create a household first")
+
+    # Render must never fetch loopback / RFC1918 / cloud metadata endpoints
+    # through a user-supplied Home Assistant URL.
+    from urllib.parse import urlsplit
+    import ipaddress
+    url = urlsplit(payload.ha_instance_url)
+    host = url.hostname or ""
+    if (url.scheme != "https" or not host or url.username or url.password
+            or host == "localhost" or host.endswith(".local")
+            or "." not in host):
+        raise HTTPException(status_code=400, detail="Use a public HTTPS Home Assistant URL")
+    try:
+        address = ipaddress.ip_address(host)
+        if not address.is_global:
+            raise HTTPException(status_code=400, detail="Private Home Assistant URLs are not allowed")
+    except ValueError:
+        pass
 
     bridge = build_ha_bridge(payload.ha_instance_url, payload.ha_access_token)
     is_reachable = await bridge.ping()
@@ -347,6 +377,22 @@ async def execute_action(
     if not conn or not conn.data:
         raise HTTPException(status_code=400, detail="Home Assistant not connected")
 
+    # Do not dispatch arbitrary entity IDs supplied by a client.
+    target = (supabase.table("ha_devices").select("domain, is_actionable")
+              .eq("household_id", household_id).eq("entity_id", payload.entity_id)
+              .maybe_single().execute())
+    if not target.data or not target.data.get("is_actionable"):
+        raise HTTPException(status_code=404, detail="Device not found in this household")
+    domain = target.data.get("domain")
+    allowed = {
+        "switch": {"turn_on", "turn_off"}, "light": {"turn_on", "turn_off"},
+        "fan": {"turn_on", "turn_off"}, "input_boolean": {"turn_on", "turn_off"},
+        "climate": {"turn_on", "turn_off"}, "lock": {"lock", "unlock", "turn_on", "turn_off"},
+        "cover": {"open", "close", "turn_on", "turn_off"},
+    }
+    if payload.action not in allowed.get(domain, set()):
+        raise HTTPException(status_code=400, detail="Unsupported action for this device")
+
     bridge = build_ha_bridge(conn.data["ha_instance_url"], conn.data["ha_access_token"])
 
     action_row = supabase.table("ha_actions").insert({
@@ -417,6 +463,9 @@ async def execute_action(
             ):
                 break
 
+        # A service call being accepted does not prove that hardware switched.
+        # Report the observed state separately so the app can avoid a false success.
+        confirmed = bool(entity_state and entity_state.get("state") == expected_state)
         updated_device = None
         if entity_state:
             attrs = entity_state.get("attributes", {})
@@ -465,6 +514,8 @@ async def execute_action(
             "action": resolved_action,
             "requested_action": payload.action,
             "device": updated_device,
+            "confirmed": confirmed,
+            "observed_state": entity_state.get("state") if entity_state else None,
         }
 
     except HTTPException:

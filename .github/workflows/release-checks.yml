@@ -1,0 +1,42 @@
+name: Hearth release checks
+on:
+  push:
+    branches: [fix/launch-hardening-2026-10-15]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: https://example.supabase.co
+      SUPABASE_KEY: placeholder
+      SUPABASE_SERVICE_KEY: placeholder
+      DATABASE_URL: postgresql://localhost:5432/hearth
+      ANTHROPIC_API_KEY: ""
+      NVIDIA_API_KEY: ""
+      AI_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m compileall -q backend/api/app
+      - run: pip install -r backend/api/requirements.txt
+      - name: Hearth deterministic and provider-outage tests
+        run: PYTHONPATH=backend/api python -m unittest discover -s backend/api/tests -p 'test_*.py' -v
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: TypeScript type check
+        run: npx tsc --noEmit --project apps/mobile/tsconfig.json
+      - name: Verify Expo project configuration
+        run: cd apps/mobile && npx expo config --type public --json > /dev/null

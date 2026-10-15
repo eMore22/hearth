@@ -48,7 +48,7 @@ async def unregister_token(
     """Remove a push token — call on sign out so the device stops receiving pushes."""
     supabase = get_supabase_admin()
     try:
-        supabase.table("push_tokens").delete().eq("token", token).execute()
+        supabase.table("push_tokens").delete().eq("token", token).eq("user_id", current_user["id"]).execute()
         return {"status": "unregistered"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

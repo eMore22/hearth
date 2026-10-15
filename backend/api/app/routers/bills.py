@@ -5,6 +5,8 @@ from app.dependencies import get_current_user, get_supabase_admin
 from app.agents.bill_agent import BillAgent
 from app.services.analytics import log_event
 
+from app.services.subscriptions import require_tier
+
 router = APIRouter(tags=["bills"])
 
 
@@ -113,7 +115,7 @@ async def delete_bill(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/analyze")
+@router.post("/analyze", dependencies=[Depends(require_tier("home"))])
 async def analyze_bill(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
     agent = BillAgent(
@@ -123,7 +125,7 @@ async def analyze_bill(request: Request, current_user: dict = Depends(get_curren
     return agent.run({"action": "analyze_bill", "bill_data": body})
 
 
-@router.post("/detect-unused")
+@router.post("/detect-unused", dependencies=[Depends(require_tier("home"))])
 async def detect_unused(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
     household_id = current_user.get("household_id")
@@ -149,7 +151,7 @@ async def detect_unused(request: Request, current_user: dict = Depends(get_curre
     return result
 
 
-@router.post("/negotiation-script")
+@router.post("/negotiation-script", dependencies=[Depends(require_tier("home"))])
 async def negotiation_script(request: Request, current_user: dict = Depends(get_current_user)):
     body = await request.json()
     agent = BillAgent(

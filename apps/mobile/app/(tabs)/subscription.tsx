@@ -42,7 +42,7 @@ export default function SubscriptionScreen() {
     ? 'Hearth HQ Family'
     : hasHome
       ? 'Hearth HQ Home'
-      : 'No active plan';
+      : 'Hearth Free';
 
   const purchasePlan = async (
     pkg: typeof homePackage,
@@ -96,8 +96,8 @@ export default function SubscriptionScreen() {
     }
   };
 
-  const homePrice = homePackage?.product.priceString || 'Loading price…';
-  const familyPrice = familyPackage?.product.priceString || 'Loading price…';
+  const homePrice = homePackage?.product.priceString || (loading ? 'Loading price…' : 'Unavailable');
+  const familyPrice = familyPackage?.product.priceString || (loading ? 'Loading price…' : 'Unavailable');
 
   return (
     <View style={styles.root}>
@@ -129,7 +129,7 @@ export default function SubscriptionScreen() {
                   ? 'Family includes all Hearth HQ Home access.'
                   : hasHome
                     ? 'Your core Hearth HQ household tools are active.'
-                    : 'Choose a plan below to unlock Hearth HQ subscription features.'}
+                    : 'Keep core bills, documents, groceries, reminders and household tasks free. Upgrade for advanced Chief, AI tools and connected home features.'}
               </Text>
             </View>
 

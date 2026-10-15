@@ -42,28 +42,44 @@ async def create_task(payload: CreateTaskRequest, current_user: dict = Depends(g
             "due_at": payload.due_at,
         }).execute()
         return result.data[0] if result.data else {}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Task operation failed")
 
 
 @router.post("/{task_id}/complete")
 async def complete_task(task_id: str, current_user: dict = Depends(get_current_user)):
     supabase = get_supabase_admin()
+    household_id = current_user.get("household_id")
+    if not household_id:
+        raise HTTPException(status_code=403, detail="Household access required")
     try:
         result = supabase.table("tasks").update({
             "is_completed": True,
             "completed_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", task_id).execute()
-        return result.data[0] if result.data else {}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        }).eq("id", task_id).eq("household_id", household_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Task operation failed")
 
 
 @router.delete("/{task_id}")
 async def delete_task(task_id: str, current_user: dict = Depends(get_current_user)):
     supabase = get_supabase_admin()
+    household_id = current_user.get("household_id")
+    if not household_id:
+        raise HTTPException(status_code=403, detail="Household access required")
     try:
-        supabase.table("tasks").delete().eq("id", task_id).execute()
+        result = supabase.table("tasks").delete().eq("id", task_id).eq("household_id", household_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Task not found")
         return {"status": "deleted"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Task operation failed")

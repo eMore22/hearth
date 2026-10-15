@@ -1,3 +1,4 @@
+import { clearLocalHouseholdData } from '../lib/clearHouseholdData';
 import { create } from 'zustand';
 import { authService } from '../services/api';
 import {
@@ -54,7 +55,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       await setToken(access_token);
       await setUser(user);
-
+      clearLocalHouseholdData();
       set({ session: access_token, user });
     } catch (err: any) {
       const message = err.response?.data?.detail || 'Login failed';
@@ -84,6 +85,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await removeToken();
       await removeUser();
+      clearLocalHouseholdData();
       set({ session: null, user: null });
     } finally {
       set({ loading: false });

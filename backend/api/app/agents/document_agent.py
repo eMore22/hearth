@@ -2,6 +2,7 @@ import json
 from datetime import datetime, date
 from typing import Any, Dict, Optional
 from app.agents.base_agent import BaseHouseholdAgent
+from app.config import settings
 
 
 class DocumentAgent(BaseHouseholdAgent):
@@ -36,11 +37,7 @@ Return ONLY valid JSON with exactly these fields:
   "summary": "one sentence plain English summary"
 }"""
 
-    CLAUDE_MODELS = [
-        "claude-opus-4-5",
-        "claude-3-5-sonnet-20241022",
-        "claude-3-haiku-20240307",
-    ]
+    CLAUDE_MODELS = [settings.CLAUDE_MODEL]
 
     def run(self, input_data: Any) -> Any:
         action = input_data.get("action")
@@ -74,7 +71,7 @@ Return ONLY valid JSON with exactly these fields:
             return self._safe_fallback()
 
         # ── 1. Try Claude Vision (images only) ────────────────────────────
-        result = self._try_claude_vision(file_b64)
+        result = self._try_claude_vision(file_b64, mime_type)
         if result:
             print(f"✅ Claude Vision extracted: {result.get('title')}")
             return result
@@ -94,7 +91,7 @@ Return ONLY valid JSON with exactly these fields:
         for model in self.CLAUDE_MODELS:
             try:
                 print(f"🤖 Trying Claude PDF extraction: {model}")
-                response = self.client.messages.create(
+                response = self.gateway.claude_messages(
                     model=model,
                     max_tokens=1024,
                     system=self.SYSTEM_PROMPT,
@@ -129,12 +126,12 @@ Return ONLY valid JSON with exactly these fields:
                 break
         return None
 
-    def _try_claude_vision(self, img_b64: str) -> Optional[Dict]:
+    def _try_claude_vision(self, img_b64: str, mime_type: str = "image/jpeg") -> Optional[Dict]:
         """Try each Claude model in CLAUDE_MODELS until one works."""
         for model in self.CLAUDE_MODELS:
             try:
                 print(f"🤖 Trying Claude Vision model: {model}")
-                response = self.client.messages.create(
+                response = self.gateway.claude_messages(
                     model=model,
                     max_tokens=1024,
                     system=self.SYSTEM_PROMPT,
@@ -145,7 +142,7 @@ Return ONLY valid JSON with exactly these fields:
                                 "type": "image",
                                 "source": {
                                     "type": "base64",
-                                    "media_type": "image/jpeg",
+                                    "media_type": mime_type,
                                     "data": img_b64,
                                 },
                             },
@@ -172,11 +169,8 @@ Return ONLY valid JSON with exactly these fields:
     def _try_nvidia_vision(self, image_bytes: bytes) -> Optional[Dict]:
         """Use NVIDIA phi-3-vision to OCR the document, then parse with Claude text."""
         try:
-            if not self.nvidia_client:
-                return None
-
             print("🤖 Trying NVIDIA Vision OCR...")
-            ocr_text = self.nvidia_client.ocr(image_bytes)
+            ocr_text = self.gateway.nvidia_ocr(image_bytes)
             if not ocr_text or len(ocr_text.strip()) < 20:
                 print("⚠️ NVIDIA OCR returned too little text")
                 return None

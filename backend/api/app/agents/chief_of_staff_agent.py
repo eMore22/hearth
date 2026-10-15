@@ -6,6 +6,7 @@ from app.agents.bill_agent import BillAgent
 from app.agents.grocery_agent import GroceryAgent
 from app.agents.maintenance_agent import MaintenanceAgent
 from app.agents.health_agent import HealthAgent
+from app.services.household_reasoning import make_chief_prompt, offline_household_brief
 
 
 class ChiefOfStaffAgent(BaseHouseholdAgent):
@@ -55,27 +56,26 @@ IMPORTANT RULES:
             "actions_taken": [],
         }
 
-        try:
-            response["message"] = self._ai_response_with_memory(
-                message=message,
-                category=category,
-                context=context,
-                conversation_history=conversation_history,
-            )
-        except Exception as e:
-            print(f"⚠️ Chief of Staff chat error: {e}")
-            response["message"] = "I'm having trouble processing that right now. Could you try rephrasing?"
-
-        # ── Device command detection ──
-        # Only attempt this for smart_home intent, and only if the frontend
-        # sent the household's device list. Matches simple natural-language
-        # commands ("close the garage door", "turn off kitchen light") to a
-        # known entity_id + HA action. Deliberately rule-based rather than
-        # another LLM call — keeps this fast and predictable.
-        if category == "smart_home":
-            device_command = self._detect_device_command(message, context.get("ha_devices") or [])
-            if device_command:
-                response["device_command"] = device_command
+        device_command = (
+            self._detect_device_command(message, context.get("ha_devices") or [])
+            if category == "smart_home" else None
+        )
+        if device_command:
+            response["device_command"] = device_command
+            response["message"] = "Sending the device command. I will report whether it succeeds."
+        else:
+            deterministic = self._deterministic_reply(message, category, context)
+            if deterministic is not None:
+                response["message"] = deterministic
+            else:
+                try:
+                    from fastapi.concurrency import run_in_threadpool
+                    response["message"] = await run_in_threadpool(
+                        self._ai_response_with_memory,
+                        message, category, context, conversation_history,
+                    )
+                except Exception:
+                    response["message"] = offline_household_brief(context)
 
         if category == "grocery":
             response["proactive_suggestions"].append("Generate weekly meal plan")
@@ -90,144 +90,72 @@ IMPORTANT RULES:
         return response
 
     def _ai_response_with_memory(
-        self,
-        message: str,
-        category: str,
-        context: Dict,
-        conversation_history: List,
+        self, message: str, category: str, context: Dict, conversation_history: List,
     ) -> str:
-        # Build conversation history text
-        history_text = ""
-        if conversation_history:
-            history_lines = []
-            for msg in conversation_history[-15:]:
-                role = "User" if msg.get("role") == "user" else "Hearth"
-                history_lines.append(f"{role}: {msg.get('content', '')}")
-            history_text = "\n".join(history_lines)
+        prompt = make_chief_prompt(message, context, conversation_history)
+        answer = self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=720)
+        return offline_household_brief(context) if answer == self.AI_OFF_MESSAGE else answer
 
-        # ── Build household context summary ──
-        context_parts = []
-
-        # Documents
-        if context.get("documents"):
-            context_parts.append(f"{len(context['documents'])} documents in vault")
-
-        # Document expiry alerts
-        alerts = context.get("alerts") or []
-        urgent_alerts = [a for a in alerts if a.get("urgency") in ("expired", "critical", "urgent")]
-        if urgent_alerts:
-            alert_lines = "; ".join(
-                a.get("message", "") for a in urgent_alerts[:5] if a.get("message")
-            )
-            if alert_lines:
-                context_parts.append(f"URGENT document alerts: {alert_lines}")
-
-        # Bills
-        if context.get("bills"):
-            total = sum(b.get("amount", 0) for b in context["bills"])
-            context_parts.append(f"{len(context['bills'])} active bills (${total:,.0f}/month)")
-
-        # Maintenance tasks (AI-generated recurring upkeep, not household to-dos)
-        tasks = context.get("tasks") or []
-        if tasks:
-            pending = [t for t in tasks if not t.get("completed")]
-            context_parts.append(f"{len(pending)} pending maintenance tasks")
-
-        # Inventory
-        if context.get("inventory"):
-            context_parts.append(f"{len(context['inventory'])} grocery items")
-
-        # Meal plan
-        meal_plan = context.get("meal_plan")
-        if meal_plan and meal_plan.get("days"):
-            context_parts.append(f"This week's meal plan is already set ({len(meal_plan['days'])} days planned)")
-
-        # Grocery budget
-        grocery_budget = context.get("grocery_budget")
-        if grocery_budget:
-            context_parts.append(f"Weekly grocery budget: {grocery_budget}")
-
-        # Medications
-        if context.get("medications"):
-            context_parts.append(f"{len(context['medications'])} medications tracked")
-
-        # Household to-dos (manually created tasks — distinct from the
-        # AI-generated maintenance tasks above)
-        household_tasks = context.get("household_tasks") or []
-        if household_tasks:
-            task_lines = "; ".join(
-                t.get("title", "") + (f" (due {t['due_at']})" if t.get("due_at") else "")
-                for t in household_tasks[:5] if t.get("title")
-            )
-            if task_lines:
-                context_parts.append(f"{len(household_tasks)} household to-do(s) pending: {task_lines}")
-
-        # Recent health checks
-        recent_health_checks = context.get("recent_health_checks") or []
-        if recent_health_checks:
-            check_lines = "; ".join(
-                f"{c.get('symptoms', '')} ({c.get('level', 'unspecified')})"
-                for c in recent_health_checks if c.get("symptoms")
-            )
-            if check_lines:
-                context_parts.append(f"Recent health checks: {check_lines}")
-
-        # ── Smart home context — highest priority ──
-        smart_home_alerts = context.get("smart_home_alerts") or []
-        if smart_home_alerts:
-            ha_lines = []
-            for alert in smart_home_alerts[:5]:
-                entity   = alert.get("entity", "device")
-                msg_text = alert.get("message", "")
-                state    = alert.get("new_state", "")
-                ha_lines.append(f"{entity} is {state}: {msg_text}")
-            context_parts.append(
-                f"ACTIVE SMART HOME ALERTS ({len(smart_home_alerts)}): "
-                + " | ".join(ha_lines)
-            )
-        elif context.get("smart_home_connected"):
-            device_count = context.get("smart_home_device_count", 0)
-            context_parts.append(f"Smart home connected ({device_count} devices, no active alerts)")
-
-        household_summary = ", ".join(context_parts) if context_parts else "No household data loaded yet"
-
-        prompt = f"""CONVERSATION HISTORY:
-{history_text if history_text else "This is the start of the conversation."}
-
-HOUSEHOLD OVERVIEW: {household_summary}
-
-CURRENT MESSAGE FROM USER: {message}
-
-Respond as Hearth Chief of Staff. Rules:
-1. Remember anything the user told you earlier.
-2. SMART HOME ALERTS are highest priority — mention them first if the user asks what needs attention.
-3. Cross-reference smart home events with documents when relevant (e.g. leak detected → check insurance policy in vault).
-4. Give a warm, concise, plain text response — no markdown, no asterisks, no bullet points.
-5. Never repeat information unnecessarily.
-6. Build naturally on the conversation.
-7. Household to-dos and AI-generated maintenance tasks are different lists — don't conflate them if the user asks about "tasks.\""""
-
-        return self.ask_claude(prompt, system=self.SYSTEM_PROMPT, max_tokens=500)
+    def _deterministic_reply(self, message: str, category: str, context: Dict) -> Optional[str]:
+        """Handle common read-only requests without a model."""
+        msg = message.lower()
+        if category == "bills" and any(w in msg for w in ("due", "upcoming", "what bills", "show bills")):
+            if (context.get("source_status") or {}).get("bills") == "unavailable":
+                return "I couldn't check the bill records just now. Try again shortly."
+            bills = context.get("bills") or []
+            return ("Bills: " + "; ".join(
+                (str(b.get("provider") or b.get("name") or "Bill")
+                 + (f" due {b['due_date']}" if b.get("due_date") else ""))
+                for b in bills[:12])) if bills else "I don't see any bills in your household overview."
+        if category == "grocery" and any(w in msg for w in ("inventory", "pantry", "what groceries", "shopping list")):
+            if (context.get("source_status") or {}).get("groceries") == "unavailable":
+                return "I couldn't check your grocery records just now. Try again shortly."
+            items = context.get("inventory") or []
+            return ("Pantry: " + ", ".join(str(i.get("name") or i.get("item_name") or "Item")
+                                            for i in items[:20])) if items else "Your pantry is currently empty in Hearth."
+        if category == "documents" and any(w in msg for w in ("expiry", "expire", "expiring", "document list")):
+            if (context.get("source_status") or {}).get("documents") == "unavailable":
+                return "I couldn't check your document vault just now. Try again shortly."
+            alerts = context.get("alerts") or []
+            return ("Document alerts: " + "; ".join(str(x.get("message", "Review document")) for x in alerts[:5])
+                    if alerts else f"You have {len(context.get('documents') or [])} saved documents and no current expiry alerts.")
+        if category == "general" and any(w in msg for w in ("my tasks", "to do", "todo", "to-do")):
+            tasks = context.get("household_tasks") or []
+            return ("Household tasks: " + "; ".join(str(t.get("title", "Task")) for t in tasks[:12])
+                    if tasks else "I don't see any household tasks in your current overview.")
+        if any(w in msg for w in ("integrations", "integration status", "what is connected", "connected services")):
+            integrations = context.get("integrations") or []
+            return ("Integrations: " + "; ".join(
+                f"{item.get('name')}: {'configured (not live-verified)' if item.get('connected') else 'not configured'}"
+                + (f", last sync {item['last_sync_at']}" if item.get("last_sync_at") else "")
+                for item in integrations)) if integrations else "Integration status is not available."
+        if category == "smart_home" and any(w in msg for w in ("status", "devices", "what is on", "connected")):
+            if (context.get("source_status") or {}).get("ha_devices") == "unavailable":
+                return "I couldn't read Home Assistant device states just now. Try again shortly."
+            devices = context.get("ha_devices") or []
+            return ("Device status: " + "; ".join(
+                f"{d.get('friendly_name', 'Device')}: last known {d.get('last_state', 'unknown')}"
+                + (f" at {d['last_state_at']}" if d.get("last_state_at") else "")
+                for d in devices[:12])
+                    if devices else "No device states are loaded in your current overview.")
+        return None
 
     async def _classify_intent(self, message: str) -> str:
-        try:
-            if self.nvidia_client:
-                return self.nvidia_client.classify_intent(message)
-        except Exception:
-            pass
-
+        """Prefer free deterministic routing for known household requests."""
         msg = message.lower()
-        if any(w in msg for w in ["smart home", "sensor", "leak", "door", "lock", "device", "garage", "valve"]):
+        if any(w in msg for w in ("integration", "connected services")):
+            return "integrations"
+        if any(w in msg for w in ("smart home", "sensor", "leak", "door", "lock", "device", "garage", "valve", "light", "switch", "temperature")):
             return "smart_home"
-        if any(w in msg for w in ["document", "passport", "insurance", "expire", "warranty"]):
+        if any(w in msg for w in ("document", "passport", "insurance", "expire", "warranty")):
             return "documents"
-        if any(w in msg for w in ["bill", "subscription", "payment", "rent"]):
+        if any(w in msg for w in ("bill", "subscription", "payment", "rent")):
             return "bills"
-        if any(w in msg for w in ["meal", "food", "grocery", "cook", "shopping"]):
+        if any(w in msg for w in ("meal", "food", "grocery", "cook", "shopping", "pantry", "inventory")):
             return "grocery"
-        if any(w in msg for w in ["fix", "repair", "maintenance", "broken"]):
+        if any(w in msg for w in ("fix", "repair", "maintenance", "broken")):
             return "maintenance"
-        if any(w in msg for w in ["sick", "health", "doctor", "medication"]):
+        if any(w in msg for w in ("sick", "health", "doctor", "medication")):
             return "health"
         return "general"
 
@@ -244,44 +172,29 @@ Respond as Hearth Chief of Staff. Rules:
         if not devices:
             return None
 
-        msg = message.lower()
-
-        ACTION_VERBS = [
-            (["close", "shut"],            "close"),
-            (["open"],                     "open"),
-            (["lock"],                     "lock"),
-            (["unlock"],                   "unlock"),
-            (["turn off", "switch off"],   "turn_off"),
-            (["turn on", "switch on"],     "turn_on"),
+        import re
+        msg = " ".join(message.lower().split())
+        # Only unambiguous imperative instructions can control equipment.
+        match = re.match(
+            r"^(?:please\s+|can you\s+|could you\s+|hey hearth[,]?\s+)*"
+            r"(unlock|lock|open|close|shut|turn on|turn off|switch on|switch off)\b", msg
+        )
+        if not match:
+            return None
+        detected_action = {
+            "unlock": "unlock", "lock": "lock", "open": "open",
+            "close": "close", "shut": "close", "turn on": "turn_on",
+            "switch on": "turn_on", "turn off": "turn_off", "switch off": "turn_off",
+        }[match.group(1)]
+        matches = [
+            device for device in devices
+            if device.get("is_actionable")
+            and (device.get("friendly_name") or "").strip()
+            and (device.get("friendly_name") or "").lower() in msg
         ]
-
-        detected_action = None
-        for phrases, action in ACTION_VERBS:
-            if any(p in msg for p in phrases):
-                detected_action = action
-                break
-
-        if not detected_action:
+        if len(matches) != 1:
             return None
-
-        best_match = None
-        best_score = 0
-        for device in devices:
-            name = (device.get("friendly_name") or "").lower()
-            if not name:
-                continue
-            name_words = set(name.split())
-            msg_words = set(msg.split())
-            overlap = len(name_words & msg_words)
-            if overlap > best_score:
-                best_score = overlap
-                best_match = device
-
-        if not best_match or best_score == 0:
-            return None
-
-        if not best_match.get("is_actionable"):
-            return None
+        best_match = matches[0]
 
         domain = best_match.get("domain", "")
         VALID_ACTIONS_BY_DOMAIN = {
@@ -291,7 +204,7 @@ Respond as Hearth Chief of Staff. Rules:
             "light":  {"turn_on", "turn_off"},
             "fan":    {"turn_on", "turn_off"},
         }
-        valid_actions = VALID_ACTIONS_BY_DOMAIN.get(domain, {"turn_on", "turn_off"})
+        valid_actions = VALID_ACTIONS_BY_DOMAIN.get(domain, set())
         if detected_action not in valid_actions:
             return None
 
@@ -302,55 +215,68 @@ Respond as Hearth Chief of Staff. Rules:
         }
 
     def get_dashboard_summary(self, household_data: Dict) -> Dict:
-        summary = {
-            "documents":   self._get_document_snapshot(household_data.get("documents", [])),
-            "bills":       self._get_bill_snapshot(household_data.get("bills", [])),
-            "grocery":     self._get_grocery_snapshot(household_data.get("inventory", [])),
-            "maintenance": self._get_maintenance_snapshot(household_data.get("tasks", [])),
-            "health":      self._get_health_snapshot(household_data.get("health_events", [])),
-            "chief_message": "",
-        }
+        """A token-free dashboard based on dates in persisted records."""
+        from datetime import date
 
-        doc_count  = len(household_data.get("documents", []))
-        bill_count = len(household_data.get("bills", []))
-        task_count = len(household_data.get("tasks", []))
-        ha_alerts  = len(household_data.get("smart_home_alerts", []))
+        def days_until(value) -> int:
+            if not value:
+                return 9999
+            try:
+                return (date.fromisoformat(str(value)[:10]) - date.today()).days
+            except (ValueError, TypeError):
+                return 9999
 
-        prompt = (
-            f"Write a short warm one-sentence greeting for a household dashboard. "
-            f"Context: {doc_count} documents, {bill_count} bills, {task_count} tasks"
-            + (f", {ha_alerts} smart home alert(s) active" if ha_alerts else "")
-            + ". Keep it under 20 words and upbeat. No markdown."
+        documents = household_data.get("documents") or []
+        expiring = sorted(
+            (d for d in documents if days_until(d.get("expiry_date")) <= 30),
+            key=lambda d: days_until(d.get("expiry_date")),
         )
+        bills = [b for b in (household_data.get("bills") or []) if b.get("is_active", True)]
+        monthly = 0.0
+        household_currency = (household_data.get("household") or {}).get("currency")
+        for bill in bills:
+            if household_currency and bill.get("currency") not in (None, household_currency):
+                continue  # Never add incompatible currencies.
+            try:
+                amount = float(bill.get("amount") or 0)
+                cycle = str(bill.get("billing_cycle") or "").lower()
+                monthly += amount * (52 / 12 if cycle == "weekly" else
+                                     1 / 12 if cycle in ("annual", "yearly") else
+                                     1 if cycle in ("monthly", "month") else 0)
+            except (ValueError, TypeError):
+                continue
 
-        summary["chief_message"] = self.ask_light(prompt, max_tokens=60)
-        self.log_action("dashboard_summary", "generated")
+        inventory = household_data.get("inventory") or []
+        maintenance = household_data.get("tasks") or []
+        medicines = household_data.get("medications") or []
+        alerts = household_data.get("smart_home_alerts") or []
+        summary = {
+            "documents": {
+                "total": len(documents), "expiring_soon": len(expiring),
+                "next_expiry": expiring[0].get("title") if expiring else None,
+            },
+            "bills": {
+                "total": len(bills), "monthly_spend": round(monthly, 2),
+                "largest_bill": max(bills, key=lambda b: float(b.get("amount") or 0)).get("provider")
+                if bills else None,
+            },
+            "grocery": {
+                "items": len(inventory),
+                "expiring_soon": len([i for i in inventory if days_until(i.get("expiry_date")) <= 3]),
+            },
+            "maintenance": {
+                "total_tasks": len(maintenance),
+                "due_this_week": len([t for t in maintenance if
+                    t.get("is_active", True) and days_until(t.get("next_due_date")) <= 7]),
+            },
+            "health": {
+                "recent_events": household_data.get("health_event_count", 0),
+                "active_medications": len([m for m in medicines if m.get("is_active", True)]),
+            },
+            "chief_message": (
+                f"{len(alerts)} recent smart-home alerts need review." if alerts else
+                f"{len(expiring)} documents need expiry review." if expiring else
+                "Your household overview is ready."
+            ),
+        }
         return summary
-
-    def _get_document_snapshot(self, documents: List) -> Dict:
-        expiring_soon = [d for d in documents if d.get("days_until_expiry", 999) <= 30]
-        return {
-            "total": len(documents),
-            "expiring_soon": len(expiring_soon),
-            "next_expiry": expiring_soon[0].get("title") if expiring_soon else None,
-        }
-
-    def _get_bill_snapshot(self, bills: List) -> Dict:
-        total   = sum(b.get("amount", 0) for b in bills)
-        largest = max(bills, key=lambda x: x.get("amount", 0)) if bills else None
-        return {
-            "total": len(bills),
-            "monthly_spend": round(total, 2),
-            "largest_bill": largest.get("provider") if largest else None,
-        }
-
-    def _get_grocery_snapshot(self, inventory: List) -> Dict:
-        expiring = [i for i in inventory if i.get("days_left", 999) <= 3]
-        return {"items": len(inventory), "expiring_soon": len(expiring)}
-
-    def _get_maintenance_snapshot(self, tasks: List) -> Dict:
-        upcoming = [t for t in tasks if t.get("days_until_due", 999) <= 7]
-        return {"total_tasks": len(tasks), "due_this_week": len(upcoming)}
-
-    def _get_health_snapshot(self, events: List) -> Dict:
-        return {"recent_events": len(events), "active_medications": 0}
