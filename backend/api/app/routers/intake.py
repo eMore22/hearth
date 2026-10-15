@@ -45,11 +45,15 @@ async def unified_scan(
             raise HTTPException(status_code=400, detail="Create a household first")
 
         supabase    = get_supabase_admin()
-        image_bytes = await file.read()
+        image_bytes = await file.read(20 * 1024 * 1024 + 1)
+        if not image_bytes or len(image_bytes) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Scan size must be between 1 byte and 20 MB")
+        if file.content_type not in ("image/jpeg", "image/png", "image/webp", "application/pdf"):
+            raise HTTPException(status_code=415, detail="Unsupported scan format")
         print(f"📁 File read — {len(image_bytes)} bytes")
 
         agent     = DocumentAgent(household_id=household_id, user_id=user["id"])
-        extracted = agent.extract_document(image_bytes)
+        extracted = agent.extract_document(image_bytes, file.content_type or "image/jpeg")
         print(f"✅ Extracted: doc_type={extracted.get('document_type')}, title={extracted.get('title')}")
 
         doc_type = extracted.get("document_type", "other")
@@ -87,7 +91,7 @@ async def unified_scan(
             metadata={
                 "document_type":     doc_type,
                 "routed_to":         destination_label,
-                "extraction_method": "claude_vision",
+                "extraction_method": "vision_or_fallback",
             },
         )
 
@@ -206,9 +210,9 @@ async def _route_to_destination(
     file_url  = None
     try:
         supabase.storage.from_("documents").upload(file_path, image_bytes)
-        file_url = supabase.storage.from_("documents").get_public_url(file_path)
+        file_url = f"storage://documents/{file_path}"
     except Exception as e:
-        print(f"⚠️ Storage upload failed (non-fatal): {e}")
+        raise HTTPException(status_code=503, detail="Could not securely save the scan") from e
 
     # ── Bills routing ──────────────────────────────────────────────────────
     if category in ("utility_bill", "subscription"):
