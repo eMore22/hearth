@@ -1,0 +1,46 @@
+name: Build Hearth Android release AAB
+# Release build is explicitly gated: only the build-ready marker commit starts it.
+# Keep the marker absent until Expo token, EAS environment, subscription
+# configuration, and Play signing credentials have been verified.
+on:
+  push:
+    branches:
+      - fix/launch-hardening-2026-10-15
+    paths:
+      - .github/HEARTH_ANDROID_BUILD_READY
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-aab:
+    name: Build production-signed Android AAB
+    runs-on: ubuntu-latest
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Check Expo access
+        shell: bash
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::EXPO_TOKEN must be stored in GitHub repository Actions secrets (not in source code)."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify TypeScript
+        run: npx tsc --noEmit --project apps/mobile/tsconfig.json
+      - name: Build signed Android app bundle
+        working-directory: apps/mobile
+        run: eas build --platform android --profile production --non-interactive --wait
