@@ -8,6 +8,9 @@ export interface Bill {
   amount: number;
   billing_cycle: string;
   category: string;
+  next_due_date?: string | null;
+  currency?: string | null;
+  is_active?: boolean;
   last_used?: string;
   notes?: string;
   created_at: string;
@@ -23,6 +26,10 @@ export interface UnusedSubscription {
 export interface MonthlyReport {
   month: string;
   total_spent: number;
+  currency?: string;
+  estimated_monthly_total?: number;
+  is_estimate?: boolean;
+  change_available?: boolean;
   change_from_last_month: number;
   biggest_increases: Array<{ provider: string; increase: number }>;
   summary: string;

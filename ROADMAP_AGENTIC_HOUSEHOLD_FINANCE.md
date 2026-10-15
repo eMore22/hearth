@@ -1,9 +1,12 @@
 # Hearth household finance — controlled autonomy roadmap
 
-Status: **Design only. No payment credentials or execution enabled.**
+Status: **Phase 1 partially implemented. Bank access and payment execution are not enabled.**
 
-## Phase 1: Budgeting and insights (next)
-- Deterministic recurring-bill schedule, categories, upcoming balances, local currency; no model tokens.
+## Phase 1: Budgeting and insights (in progress)
+- [x] Offline monthly recurring-obligation projection from tracked bills, with billing cycle and currency isolation.
+- [x] Manual next-due date entry and real upcoming bill preview.
+- [ ] Budget caps, transaction-level histories and payment confirmation; the projection is NOT verified spending.
+- [ ] Additional due-date reminders and recurring date advancement when marked paid.
 - Expense import and deduplication with household scoping and audit log.
 - Chief recommends payment reminders and savings opportunities with explicit source references.
 - User sees proposed actions; Hearth cannot transfer money or cancel services.

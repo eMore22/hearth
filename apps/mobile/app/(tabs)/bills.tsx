@@ -48,6 +48,8 @@ export default function BillsScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [provider, setProvider] = useState('');
   const [amount, setAmount] = useState('');
+  const [nextDueDate, setNextDueDate] = useState('');
+  const [billingCycle, setBillingCycle] = useState('monthly');
   const [saving, setSaving] = useState(false);
   const [showUnused, setShowUnused] = useState(false);
   const [negotiation, setNegotiation] = useState<any | null>(null);
@@ -59,9 +61,12 @@ export default function BillsScreen() {
   }, []);
 
   const currency = getCurrencySymbol(household?.currency);
-  const total = monthlyReport?.total_spent ?? bills.reduce((sum, b) => sum + Number(b.amount || 0), 0);
+  // This is a projection from recurring bills, never bank-confirmed spending.
+  const total = monthlyReport?.estimated_monthly_total ?? monthlyReport?.total_spent;
   const visible = useMemo(() => filter === 'All' ? bills : bills.filter(b => categoryFor(b.category, b.provider) === filter), [bills, filter]);
-  const upcoming = bills.find(b => Number(b.amount || 0) > 0);
+  const upcoming = useMemo(() => bills
+    .filter(b => b.next_due_date && /^\d{4}-\d{2}-\d{2}$/.test(b.next_due_date))
+    .sort((a, b) => String(a.next_due_date).localeCompare(String(b.next_due_date)))[0], [bills]);
 
   const add = async () => {
     if (!provider.trim() || !amount.trim()) {
@@ -73,11 +78,19 @@ export default function BillsScreen() {
       Alert.alert('Invalid amount', 'Enter a valid bill amount.');
       return;
     }
+    const enteredDue = nextDueDate.trim();
+    if (enteredDue && (!/^\d{4}-\d{2}-\d{2}$/.test(enteredDue) ||
+      Number.isNaN(Date.parse(enteredDue)))) {
+      Alert.alert('Check payment date', 'Enter the next due date as YYYY-MM-DD.');
+      return;
+    }
     Keyboard.dismiss();
     setSaving(true);
     try {
-      await createBill({ provider: provider.trim(), amount: n, billing_cycle: 'monthly', category: 'utility' });
-      setProvider(''); setAmount(''); setShowAdd(false);
+      await createBill({ provider: provider.trim(), amount: n, billing_cycle: billingCycle,
+        next_due_date: enteredDue || undefined, category: 'utility' });
+      await fetchMonthlyReport().catch(() => undefined);
+      setProvider(''); setAmount(''); setNextDueDate(''); setBillingCycle('monthly'); setShowAdd(false);
     } catch (e: any) {
       Alert.alert('Could not add bill', e?.message || 'Please try again.');
     } finally { setSaving(false); }
@@ -91,7 +104,7 @@ export default function BillsScreen() {
 
   const removeBill = (bill: any) => Alert.alert('Delete bill?', `Remove ${bill.provider} from Hearth HQ?`, [
     { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: async () => { try { await deleteBill(bill.id); } catch (e: any) { Alert.alert('Could not delete', e?.message || 'Please try again.'); } } },
+    { text: 'Delete', style: 'destructive', onPress: async () => { try { await deleteBill(bill.id); await fetchMonthlyReport().catch(() => undefined); } catch (e: any) { Alert.alert('Could not delete', e?.message || 'Please try again.'); } } },
   ]);
 
   const getScript = async (provider: string) => {
@@ -107,9 +120,9 @@ export default function BillsScreen() {
         <View style={styles.body}>
           <View style={styles.summaryRow}>
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Monthly total</Text>
-              <Text style={styles.summaryAmount}>{currency}{Number(total || 0).toLocaleString()}</Text>
-              <Text style={styles.summarySub}>{bills.length} active</Text>
+              <Text style={styles.summaryLabel}>Est. monthly obligations</Text>
+              <Text style={styles.summaryAmount}>{total == null ? '—' : `${getCurrencySymbol(monthlyReport?.currency || household?.currency)}${Number(total).toLocaleString()}`}</Text>
+              <Text style={styles.summarySub}>{bills.length} tracked · Not bank verified</Text>
             </View>
             <TouchableOpacity style={styles.scanCard} onPress={findUnused} activeOpacity={0.82}>
               <View style={styles.scanIcon}><Ionicons name="sparkles-outline" size={20} color={H.purple} /></View>
@@ -135,8 +148,7 @@ export default function BillsScreen() {
           {upcoming && (
             <View style={styles.upcomingCard}>
               <IconBadge icon="flash-outline" bg={H.violetBg} color={H.violet} size={48} />
-              <View style={styles.flex}><Text style={styles.eyebrow}>UPCOMING PAYMENT</Text><Text style={styles.upcomingTitle}>{upcoming.provider}</Text><Text style={styles.upcomingSub}>{upcoming.billing_cycle} · {currency}{Number(upcoming.amount || 0).toLocaleString()}</Text></View>
-              <View style={styles.pay}><Text style={styles.payText}>View</Text></View>
+              <View style={styles.flex}><Text style={styles.eyebrow}>NEXT TRACKED PAYMENT</Text><Text style={styles.upcomingTitle}>{upcoming.provider}</Text><Text style={styles.upcomingSub}>Due {upcoming.next_due_date} · {currency}{Number(upcoming.amount || 0).toLocaleString()}</Text></View>
             </View>
           )}
 
@@ -149,7 +161,7 @@ export default function BillsScreen() {
                 <IconBadge icon={m.icon} bg={m.bg} color={m.fg} size={44} />
                 <View style={styles.flex}>
                   <Text style={styles.rowTitle}>{bill.provider}</Text>
-                  <Text style={styles.rowMeta}>{currency}{Number(bill.amount || 0).toLocaleString()} · {bill.billing_cycle}</Text>
+                  <Text style={styles.rowMeta}>{currency}{Number(bill.amount || 0).toLocaleString()} · {bill.billing_cycle}{bill.next_due_date ? ` · Due ${bill.next_due_date}` : ''}</Text>
                 </View>
                 <View style={[styles.status, { backgroundColor: categoryFor(bill.category, bill.provider) === 'Subscriptions' ? H.greenBg : '#F0EBFF' }]}><Text style={[styles.statusText, { color: categoryFor(bill.category, bill.provider) === 'Subscriptions' ? H.green : H.purple }]}>Active</Text></View>
                 <TouchableOpacity onPress={() => removeBill(bill)} hitSlop={8}><Ionicons name="trash-outline" size={18} color={H.red} /></TouchableOpacity>
@@ -171,6 +183,16 @@ export default function BillsScreen() {
             <Text style={styles.modalSub}>Hearth HQ will add it to your household overview.</Text>
             <TextInput value={provider} onChangeText={setProvider} placeholder="Provider" placeholderTextColor={H.muted2} style={styles.input} />
             <TextInput value={amount} onChangeText={setAmount} placeholder="Amount" placeholderTextColor={H.muted2} keyboardType="decimal-pad" style={styles.input} />
+            <TextInput value={nextDueDate} onChangeText={setNextDueDate} placeholder="Next due date (YYYY-MM-DD), optional" placeholderTextColor={H.muted2} style={styles.input} />
+            <Text style={{ color: H.muted, fontSize: 12, fontWeight: '700', marginBottom: 8 }}>Repeat every</Text>
+            <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
+              {(['weekly', 'monthly', 'quarterly', 'yearly'] as const).map(cycle => (
+                <TouchableOpacity key={cycle} onPress={() => setBillingCycle(cycle)}
+                  style={{ flex: 1, backgroundColor: billingCycle === cycle ? H.navy : '#F0F0F1', borderRadius: 12, alignItems: 'center', paddingVertical: 11 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: billingCycle === cycle ? '#fff' : H.navy }}>{cycle[0].toUpperCase() + cycle.slice(1)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <TouchableOpacity style={[styles.save, saving && { opacity: 0.6 }]} onPress={add} disabled={saving}><Text style={styles.saveText}>{saving ? 'Adding…' : 'Add bill'}</Text></TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
