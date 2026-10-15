@@ -71,7 +71,7 @@ Return ONLY valid JSON with exactly these fields:
             return self._safe_fallback()
 
         # ── 1. Try Claude Vision (images only) ────────────────────────────
-        result = self._try_claude_vision(file_b64)
+        result = self._try_claude_vision(file_b64, mime_type)
         if result:
             print(f"✅ Claude Vision extracted: {result.get('title')}")
             return result
@@ -126,7 +126,7 @@ Return ONLY valid JSON with exactly these fields:
                 break
         return None
 
-    def _try_claude_vision(self, img_b64: str) -> Optional[Dict]:
+    def _try_claude_vision(self, img_b64: str, mime_type: str = "image/jpeg") -> Optional[Dict]:
         """Try each Claude model in CLAUDE_MODELS until one works."""
         for model in self.CLAUDE_MODELS:
             try:
@@ -142,7 +142,7 @@ Return ONLY valid JSON with exactly these fields:
                                 "type": "image",
                                 "source": {
                                     "type": "base64",
-                                    "media_type": "image/jpeg",
+                                    "media_type": mime_type,
                                     "data": img_b64,
                                 },
                             },
