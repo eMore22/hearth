@@ -80,6 +80,26 @@ class AIGateway:
             logger.warning("Hearth AI vision temporarily unavailable (%s)", type(exc).__name__)
             raise AIUnavailable("NVIDIA vision unavailable") from exc
 
+    def nvidia_embed(self, texts: list) -> list:
+        try:
+            client = self.nvidia_client
+            if client is None:
+                raise AIUnavailable("Embeddings unavailable")
+            return client.embed(texts)
+        except Exception as exc:
+            self._blocked_until["nvidia"] = time.monotonic() + 60.0
+            raise AIUnavailable("Embeddings unavailable") from exc
+
+    def nvidia_detect_pii(self, value: str) -> list:
+        try:
+            client = self.nvidia_client
+            if client is None:
+                raise AIUnavailable("PII provider unavailable")
+            return client.detect_pii(value)
+        except Exception as exc:
+            self._blocked_until["nvidia"] = time.monotonic() + 60.0
+            raise AIUnavailable("PII provider unavailable") from exc
+
     def generate(self, prompt: str, *, system: Optional[str] = None, heavy: bool = False,
                  max_tokens: int = 800, temperature: float = 0.3) -> str:
         messages = [{"role": "user", "content": prompt}]
