@@ -47,28 +47,31 @@ async def upload_document(
             raise HTTPException(status_code=400, detail="Create a household first")
 
         supabase = get_supabase_admin()
-        file_bytes = await file.read()
+        file_bytes = await file.read(20 * 1024 * 1024 + 1)
+        if not file_bytes or len(file_bytes) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Document size must be 1 byte to 20 MB")
         print(f"📁 File read — size: {len(file_bytes)} bytes")
 
         # Real content type from the upload, not assumed — this is what
         # lets DocumentAgent route PDFs to its native document path instead
         # of forcing everything through image extraction.
         mime_type = file.content_type or "image/jpeg"
+        if mime_type not in ("image/jpeg", "image/png", "image/webp", "application/pdf"):
+            raise HTTPException(status_code=415, detail="Unsupported document format")
 
         agent = DocumentAgent(household_id=household_id, user_id=user["id"])
         print(f"🤖 Running document extraction (mime_type={mime_type})...")
         extracted = agent.extract_document(file_bytes, mime_type)
-        print(f"✅ Extracted: {extracted}")
+        # Do not log sensitive extracted user records.
 
         # Upload to Supabase Storage
         file_path = f"{household_id}/{uuid.uuid4()}/{file.filename}"
         file_url = None
         try:
             supabase.storage.from_("documents").upload(file_path, file_bytes)
-            file_url = supabase.storage.from_("documents").get_public_url(file_path)
-            print(f"☁️ Storage upload OK: {file_url}")
+            file_url = f"storage://documents/{file_path}"
         except Exception as storage_error:
-            print(f"⚠️ Storage upload failed (non-fatal): {storage_error}")
+            raise HTTPException(status_code=503, detail="Could not store the document securely") from storage_error
 
         print("💾 Inserting into DB...")
         doc = supabase.table("documents").insert({
@@ -90,9 +93,7 @@ async def upload_document(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ UPLOAD ERROR: {str(e)}")
-        traceback.print_exc()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail="Could not upload document") from e
 
 
 @router.get("/")
@@ -110,7 +111,16 @@ async def list_documents(
             .eq("household_id", household_id)\
             .order("expiry_date", desc=False)\
             .execute()
-        return docs.data or []
+        records = docs.data or []
+        for record in records:
+            ref = record.get("file_url") or ""
+            if ref.startswith("storage://documents/"):
+                try:
+                    signed = supabase.storage.from_("documents").create_signed_url(ref[len("storage://documents/"):], 3600)
+                    record["file_url"] = (signed.get("signedURL") or signed.get("signedUrl") or signed.get("signed_url")) if isinstance(signed, dict) else None
+                except Exception:
+                    record["file_url"] = None
+        return records
     except Exception:
         return []
 
