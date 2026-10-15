@@ -37,7 +37,7 @@ export default function IntegrationsScreen() {
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 44 }}>
-        <ScreenHeader title="Integrations" subtitle="Connect the services that make Hearth HQ proactive." />
+        <ScreenHeader backTo="/(tabs)/profile" title="Integrations" subtitle="Connect the services that make Hearth HQ proactive." />
         <View style={styles.body}>
           <View style={[styles.integrationCard, status.connected && styles.integrationConnected]}>
             <View style={styles.integrationTop}><View style={[styles.logo, { backgroundColor: H.blueBg }]}><Ionicons name="home-outline" size={24} color={H.blue} /></View><View style={styles.flex}><Text style={styles.name}>Home Assistant</Text><Text style={styles.desc}>Smart-home devices, sensors and automations</Text></View>{status.connected ? <View style={styles.statusPill}><Text style={styles.statusText}>Connected</Text></View> : null}</View>
