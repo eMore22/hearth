@@ -181,12 +181,21 @@ async def monthly_report(current_user: dict = Depends(get_current_user)):
             bills = result.data or []
         except Exception:
             pass
-    agent = BillAgent(
-        household_id=household_id,
-        user_id=str(current_user["id"])
-    )
+    # The figure represents expected recurring obligations, not confirmed
+    # bank transactions. Do not combine NGN and USD in one total.
+    household_currency = None
+    if household_id:
+        try:
+            household_record = (get_supabase_admin().table("households")
+                                .select("currency").eq("id", household_id)
+                                .maybe_single().execute().data or {})
+            household_currency = household_record.get("currency")
+        except Exception:
+            pass
+    agent = BillAgent(household_id=household_id, user_id=str(current_user["id"]))
     return agent.run({
         "action": "monthly_report",
         "bills": bills,
-        "previous_month_bills": []
+        "previous_month_bills": [],
+        "currency": household_currency,
     })
