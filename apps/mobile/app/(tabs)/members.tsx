@@ -42,7 +42,7 @@ export default function MembersScreen() {
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 40 }}>
-        <ScreenHeader title="Household members" subtitle="The people Hearth HQ can organise around." />
+        <ScreenHeader backTo="/(tabs)/profile" title="Household members" subtitle="The people Hearth HQ can organise around." />
         <View style={styles.body}>
           <View style={styles.inviteCard}>
             <View style={styles.inviteIcon}><Ionicons name="person-add-outline" size={22} color={H.purple} /></View>
