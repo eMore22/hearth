@@ -119,6 +119,9 @@ async def update_household(
         if not member or not member.data:
             raise HTTPException(status_code=403, detail="Not a member of this household")
 
+        if member.data.get("role") != "owner":
+            raise HTTPException(status_code=403, detail="Only the household owner can change settings")
+
         update_data = {k: v for k, v in payload.dict().items() if v is not None}
         if not update_data:
             raise HTTPException(status_code=400, detail="No fields to update")
@@ -190,13 +193,17 @@ async def invite_member(
 
     try:
         member_row = supabase.table("household_members")\
-            .select("household_id")\
+            .select("household_id, role")\
             .eq("user_id", user["id"])\
             .limit(1)\
             .execute()
 
         if not member_row.data:
             raise HTTPException(status_code=404, detail="No household found")
+        if member_row.data[0].get("role") != "owner":
+            raise HTTPException(status_code=403, detail="Only owners can invite members")
+        if payload.role != "member":
+            raise HTTPException(status_code=400, detail="Only member invitations are supported")
 
         household_id = member_row.data[0]["household_id"]
 
