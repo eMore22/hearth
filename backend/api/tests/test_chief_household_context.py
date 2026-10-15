@@ -42,7 +42,7 @@ class FakeDB:
                                 "last_sync_at": "2026-10-15T09:30:00Z",
                                 "ha_access_token": "DO-NOT-LEAK"}],
             "ha_devices": [{"household_id": "mine", "entity_id": "switch.main_valve",
-                            "friendly_name": "Main Water Valve", "last_state": "off",
+                            "friendly_name": "Main Water Valve", "domain": "switch", "last_state": "off",
                             "is_actionable": True, "last_state_at": "2026-10-15T09:30:00Z"}],
             "household_tasks": [],
             "documents": [
