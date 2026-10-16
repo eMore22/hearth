@@ -6,13 +6,13 @@ from app.services.nvidia_client import NvidiaClient
 
 class NvidiaHostedModelsTests(unittest.TestCase):
     def test_reasoning_uses_free_hosted_model(self):
-        client = object.__new__(NvidiaClient)
+        client = NvidiaClient("test-key")
         with patch("app.services.nvidia_client.settings.NVIDIA_REASONING_MODEL", ""):
             self.assertEqual(client.get_model("reasoning"), "nvidia/nemotron-3-super-120b-a12b")
             self.assertEqual(client.get_model("intent"), "mistralai/mistral-nemotron")
 
     def test_reasoning_override_is_allowed(self):
-        client = object.__new__(NvidiaClient)
+        client = NvidiaClient("test-key")
         with patch("app.services.nvidia_client.settings.NVIDIA_REASONING_MODEL", "catalog/custom"):
             self.assertEqual(client.get_model("reasoning"), "catalog/custom")
             self.assertEqual(client.get_model("intent"), "mistralai/mistral-nemotron")
