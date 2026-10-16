@@ -103,7 +103,9 @@ class AIGateway:
     def generate(self, prompt: str, *, system: Optional[str] = None, heavy: bool = False,
                  max_tokens: int = 800, temperature: float = 0.3) -> str:
         messages = [{"role": "user", "content": prompt}]
-        providers = ("claude", "nvidia") if heavy else ("nvidia", "claude")
+        # Prefer the free hosted NVIDIA route for household reasoning too.
+        # Claude remains an optional fallback, never a requirement.
+        providers = ("nvidia", "claude")
         for provider in providers:
             try:
                 if provider == "claude":
