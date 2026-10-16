@@ -31,8 +31,14 @@ export default function ChiefScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const { messages, isTyping, fetchHistory, sendMessage, clearMessages } = useChiefOfStaffStore();
   const [text, setText] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   useEffect(() => { fetchHistory(); }, []);
+  useEffect(() => {
+    const shown = Keyboard.addListener('keyboardDidShow', () => { setKeyboardVisible(true); scrollRef.current?.scrollToEnd({ animated: true }); });
+    const hidden = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { shown.remove(); hidden.remove(); };
+  }, []);
   useEffect(() => {
     const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
     return () => clearTimeout(t);
@@ -65,7 +71,7 @@ export default function ChiefScreen() {
   ]);
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
         <View style={styles.brandWrap}>
@@ -96,7 +102,7 @@ export default function ChiefScreen() {
               <View key={msg.id} style={[styles.messageWrap, msg.role === 'user' ? styles.userWrap : styles.assistantWrap]}>
                 {msg.role !== 'user' && <View style={styles.assistantAvatar}><Ionicons name="sparkles" size={14} color={H.purple} /></View>}
                 <View style={[styles.message, msg.role === 'user' ? styles.userMessage : styles.assistantMessage]}>
-                  <Text style={[styles.messageText, msg.role === 'user' ? styles.userText : styles.assistantText]}>{msg.content}</Text>
+                  <Text style={[styles.messageText, msg.role === 'user' ? styles.userText : styles.assistantText]}>{msg.role === 'user' ? msg.content : msg.content.replace(/\*\*(.*?)\*\*/g, '$1').replace(/(^|\n)#{1,3}\s*/g, '$1').replace(/\*(.*?)\*/g, '$1')}</Text>
                   {!!msg.action_result && <View style={styles.actionResult}><Ionicons name={msg.action_result.status === 'confirmed' ? 'checkmark-circle' : 'alert-circle'} size={14} color={msg.action_result.status === 'confirmed' ? H.green : msg.action_result.status === 'sent' ? H.muted : H.red} /><Text style={[styles.actionResultText, { color: msg.action_result.status === 'confirmed' ? H.green : msg.action_result.status === 'sent' ? H.muted : H.red }]}>{msg.action_result.status === 'confirmed' ? 'Device confirmed' : msg.action_result.status === 'sent' ? 'Command sent. Check device state.' : 'Action failed'}</Text></View>}
                 </View>
                 {!!msg.proactive_suggestions?.length && (
@@ -111,7 +117,7 @@ export default function ChiefScreen() {
         )}
       </ScrollView>
 
-      <View style={[styles.composerWrap, { paddingBottom: Math.max(insets.bottom, 8) + 3 }]}>
+      <View style={[styles.composerWrap, { paddingBottom: keyboardVisible ? 5 : Math.max(insets.bottom, 8) + 3 }]}>
         <View style={styles.composer}>
           <TextInput value={text} onChangeText={setText} onSubmitEditing={() => send()} placeholder="Ask about your household..." placeholderTextColor={H.muted2} style={styles.input} multiline returnKeyType="send" blurOnSubmit />
           <TouchableOpacity style={[styles.send, (!text.trim() || isTyping) && styles.sendDisabled]} onPress={() => send()} disabled={!text.trim() || isTyping} activeOpacity={0.8}><Ionicons name="arrow-up" size={20} color="#fff" /></TouchableOpacity>
