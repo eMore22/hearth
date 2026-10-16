@@ -140,7 +140,7 @@ export default function Dashboard() {
   const firstName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
   const currency = getCurrencySymbol(household?.currency);
   const urgentDoc = alerts.find(a => ['expired', 'critical', 'urgent'].includes(a.urgency));
-  const homeEvent = events.find((e: any) => e.alert_sent && e.attributes?.chief_message);
+  const homeEvent = events.find((e: any) => e.alert_sent && e.attributes?.chief_message && e.created_at && (Date.now() - new Date(e.created_at).getTime()) >= 0 && (Date.now() - new Date(e.created_at).getTime()) < 24 * 60 * 60 * 1000);
   const nextTask = tasks.find(t => !t.is_completed);
   const nextBill = bills.find(b => Number(b.amount || 0) > 0);
   const groceryCount = shoppingList?.total_items || inventory.length;
@@ -312,7 +312,7 @@ export default function Dashboard() {
                 <Text style={styles.attentionSub} numberOfLines={2}>{(homeEvent as any).attributes?.chief_message || 'Check the kitchen for a possible leak.'}</Text>
                 <View style={[styles.miniChip, { backgroundColor: '#FFF0D8' }]}>
                   <Ionicons name="water-outline" size={12} color={H.amber} />
-                  <Text style={[styles.miniChipText, { color: H.amber }]}>Detected  ·  just now</Text>
+                  <Text style={[styles.miniChipText, { color: H.amber }]}>Recorded alert  ·  last 24h</Text>
                 </View>
               </View>
               {(homeEvent as any).attributes?.suggested_actions?.length ? (
