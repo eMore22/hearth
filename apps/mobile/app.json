@@ -63,7 +63,16 @@
           "cameraPermission": "Hearth HQ needs camera access to scan your documents."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26,
+            "compileSdkVersion": 36
+          }
+        }
+      ]
     ],
     "scheme": "hearth",
     "extra": {
