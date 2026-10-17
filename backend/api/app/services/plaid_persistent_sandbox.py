@@ -59,6 +59,26 @@ async def _plaid(client: httpx.AsyncClient, path: str, data: dict) -> dict:
         # Plaid errors and client request bodies can include sensitive fields.
         raise SandboxBankError("Plaid Sandbox request failed") from None
 
+async def _remove_sandbox_item(client: httpx.AsyncClient, access_token: str) -> None:
+    """Revoke a Sandbox Item, accepting an already-removed Item on retry."""
+    try:
+        response = await client.post("/item/remove", json={
+            **_auth_payload(), "access_token": access_token})
+        if response.status_code >= 400:
+            # Only an explicit 'item absent' response can be treated as a
+            # successful retry. Never log a provider response or token.
+            try:
+                already_removed = response.json().get("error_code") == "ITEM_NOT_FOUND"
+            except (ValueError, TypeError, AttributeError):
+                already_removed = False
+            if not already_removed:
+                raise SandboxBankError("Sandbox provider revocation unavailable")
+            return
+        response.raise_for_status()
+    except (httpx.HTTPError, ValueError):
+        raise SandboxBankError("Sandbox provider revocation unavailable") from None
+
+
 def _minor(amount) -> int | None:
     if amount is None:
         return None
@@ -223,16 +243,18 @@ async def disconnect_sandbox_bank(*, connection_id: str, owner_id: str, househol
     async with httpx.AsyncClient(base_url=ENDPOINT,timeout=20.0) as client:
         # If Plaid is unreachable, keep encrypted credentials so revocation
         # can be retried. Local consent remains revoked the entire time.
-        await _plaid(client, "/item/remove", {"access_token": token})
+        await _remove_sandbox_item(client, token)
 
     def complete_cleanup():
-        # Cascading FK deletes remove transactions with each sandbox account.
-        db.table("finance_accounts").delete().eq("connection_id",connection_id).eq(
-            "owner_user_id",owner_id).eq("household_id",household_id).execute()
-        db.table("finance_sandbox_tokens").delete().eq("connection_id",connection_id).execute()
-        db.table("finance_connections").update({"status": "revoked"}).eq(
-            "id",connection_id).eq("owner_user_id",owner_id).eq(
-            "household_id",household_id).execute()
+        # A single PostgreSQL transaction removes accounts, transactions and
+        # ciphertext, then finalizes revocation. Partial cleanup cannot commit.
+        response = db.rpc("finance_finalize_sandbox_disconnect", {
+            "p_connection_id": connection_id,
+            "p_owner_user_id": owner_id,
+            "p_household_id": household_id,
+        }).execute()
+        if response.data is not True:
+            raise SandboxBankError("Sandbox cleanup was not confirmed")
     try:
         await run_in_threadpool(complete_cleanup)
     except Exception:
