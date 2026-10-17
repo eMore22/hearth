@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBillStore } from '../../src/stores/billStore';
 import { H } from '../../src/theme/hearthDesign';
+import PlaidSandboxPreview from '../../src/components/finance/PlaidSandboxPreview';
 
 const monthlyEquivalent = (amount: number, cycle: string) => {
   switch ((cycle || '').toLowerCase()) {
@@ -50,6 +51,8 @@ export default function HouseholdFinance() {
         <View style={styles.status}><Ionicons name="lock-closed-outline" size={17} color={H.muted} /><Text style={styles.statusTitle}>Bank accounts are not connected</Text></View>
         <Text style={styles.body}>Hearth does not have access to your bank balance or transactions. Secure, consent-based read-only bank syncing is being prepared. You will always choose whether to connect a bank.</Text>
       </View>
+
+      <PlaidSandboxPreview />
 
       <Text style={styles.heading}>Estimated monthly commitments</Text>
       <Text style={styles.note}>Calculated only from manually tracked bills. This is not an account balance or confirmed bank spending.</Text>
