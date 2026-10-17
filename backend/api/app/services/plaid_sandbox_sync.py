@@ -3,6 +3,7 @@
 The cursor is advanced only after all pages are applied. Provider IDs are
 unique per account, so retrying a partially saved batch is idempotent.
 """
+from datetime import datetime
 from app.dependencies import get_supabase_admin
 from fastapi.concurrency import run_in_threadpool
 from app.services.plaid_persistent_sandbox import (
