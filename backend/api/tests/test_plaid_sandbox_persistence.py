@@ -109,5 +109,74 @@ class SandboxTransactionTests(unittest.IsolatedAsyncioTestCase):
             await connect_sandbox_bank(public_token="public-sandbox-test",
                 owner_id="u",household_id="h",consent_acknowledged=False)
 
+
+class AtomicSandboxSyncTests(unittest.TestCase):
+    def test_transaction_sync_uses_one_rpc_with_expected_cursor(self):
+        from app.services.plaid_sandbox_sync import _apply_changes
+        db = MagicMock()
+        db.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+            {"id": "local-1", "provider_account_ref": "plaid-1"}]
+        db.rpc.return_value.execute.return_value.data = {"transaction_updates": 1, "removed_count": 0}
+        changes = {
+            "added": [{
+                "transaction_id": "tx-1", "account_id": "plaid-1", "amount": 12.99,
+                "iso_currency_code": "CAD", "date": "2026-10-17", "pending": False
+            }], "modified": [], "removed": [], "next_cursor": "next"
+        }
+        with patch("app.services.plaid_sandbox_sync._get_owned_connection", return_value={
+            "status": "linked",
+            "consent_expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            "consent_revoked_at": None
+        }):
+            result = _apply_changes(db, connection_id="c", owner_id="u",
+                                    household_id="h", expected_cursor="previous",
+                                    changes=changes)
+        self.assertEqual(result["transaction_updates"], 1)
+        rpc_name, rpc_payload = db.rpc.call_args.args
+        self.assertEqual(rpc_name, "finance_apply_sandbox_changes")
+        self.assertEqual(rpc_payload["p_expected_cursor"], "previous")
+        self.assertEqual(rpc_payload["p_next_cursor"], "next")
+        self.assertEqual(len(rpc_payload["p_upserts"]), 1)
+        self.assertEqual(rpc_payload["p_upserts"][0]["amount_minor"], -1299)
+
+    def test_failed_atomic_sync_fails_closed(self):
+        from app.services.plaid_sandbox_sync import _apply_changes
+        db = MagicMock()
+        db.rpc.return_value.execute.side_effect = RuntimeError("database unavailable")
+        with patch("app.services.plaid_sandbox_sync._get_owned_connection", return_value={
+            "status": "linked",
+            "consent_expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            "consent_revoked_at": None
+        }):
+            with self.assertRaises(SandboxBankError):
+                _apply_changes(db, connection_id="c", owner_id="u", household_id="h",
+                               expected_cursor=None, changes={
+                                   "added": [], "modified": [], "removed": [],
+                                   "next_cursor": "next"
+                               })
+        db.rpc.assert_called_once()
+
+
+class SandboxRevocationRetries(unittest.IsolatedAsyncioTestCase):
+    async def test_already_removed_item_is_safe_to_retry(self):
+        from app.services.plaid_persistent_sandbox import _remove_sandbox_item
+        response = MagicMock(status_code=400)
+        response.json.return_value = {"error_code": "ITEM_NOT_FOUND"}
+        client = MagicMock()
+        client.post = AsyncMock(return_value=response)
+        with patch.dict(os.environ, {"PLAID_CLIENT_ID": "test", "PLAID_SANDBOX_SECRET": "test"}):
+            await _remove_sandbox_item(client, "access-sandbox-example")
+
+    async def test_unexpected_provider_error_keeps_retry_pending(self):
+        from app.services.plaid_persistent_sandbox import _remove_sandbox_item
+        response = MagicMock(status_code=400)
+        response.json.return_value = {"error_code": "RATE_LIMIT_EXCEEDED"}
+        client = MagicMock()
+        client.post = AsyncMock(return_value=response)
+        with patch.dict(os.environ, {"PLAID_CLIENT_ID": "test", "PLAID_SANDBOX_SECRET": "test"}):
+            with self.assertRaises(SandboxBankError):
+                await _remove_sandbox_item(client, "access-sandbox-example")
+
+
 if __name__ == "__main__":
     unittest.main()
