@@ -1,8 +1,10 @@
 """Read-only finance discovery routes. Never initiate transfers or solicit bank credentials."""
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from app.dependencies import get_current_user, get_supabase_admin
 from app.services.finance_guardrails import proposal_status
 from app.services.plaid_sandbox import create_sandbox_link_token, PlaidSandboxUnavailable
+from app.services.plaid_preview import preview_sandbox_accounts, PlaidPreviewUnavailable
 
 router = APIRouter(tags=["finance"])
 
@@ -46,3 +48,16 @@ async def sandbox_link_token(current_user: dict = Depends(get_current_user)):
     except PlaidSandboxUnavailable:
         raise HTTPException(status_code=503, detail="Plaid Sandbox is not configured or temporarily unavailable")
     return {"link_token": token, "environment": "sandbox", "country": "CA"}
+
+class SandboxPreviewRequest(BaseModel):
+    public_token: str = Field(min_length=1, max_length=512)
+
+@router.post("/sandbox/plaid/preview")
+async def sandbox_account_preview(payload: SandboxPreviewRequest, current_user: dict = Depends(get_current_user)):
+    _identity(current_user)
+    try:
+        accounts = await preview_sandbox_accounts(payload.public_token)
+    except PlaidPreviewUnavailable:
+        raise HTTPException(status_code=503, detail="Sandbox preview unavailable or test Item cleanup failed")
+    return {"accounts": accounts, "environment": "sandbox", "persistent_connection": False,
+            "item_revoked": True, "payments_enabled": False}
