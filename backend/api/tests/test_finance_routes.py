@@ -24,5 +24,20 @@ class FinanceRoutesTests(unittest.TestCase):
         with patch.dict("os.environ",{"PLAID_SANDBOX_DEMO_ENABLED":"true","PLAID_SANDBOX_TESTER_USER_IDS":"test-user"}):
             self.assertEqual(_sandbox_tester(user),"test-user")
 
+
+    def test_general_accounts_exclude_plaid_sandbox(self):
+        from unittest.mock import MagicMock
+        from app.routers.finance import list_accounts
+        db = MagicMock()
+        query = db.table.return_value.select.return_value
+        # Supabase query-builder methods return themselves for chaining.
+        for method in ("eq", "neq", "is_", "gt", "limit", "in_"):
+            getattr(query, method).return_value = query
+        query.execute.return_value.data = []
+        with patch("app.routers.finance.get_supabase_admin", return_value=db):
+            result = list_accounts(current_user={"id": "test-user", "household_id": "test-home"})
+        self.assertEqual(result["accounts"], [])
+        query.neq.assert_called_once_with("provider", "plaid")
+
 if __name__=="__main__":
     unittest.main()
