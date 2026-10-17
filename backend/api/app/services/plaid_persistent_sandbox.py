@@ -200,31 +200,43 @@ async def disconnect_sandbox_bank(*, connection_id: str, owner_id: str, househol
     record = await run_in_threadpool(_get_owned_connection,db,connection_id,owner_id,household_id)
     if record.get("status") == "revoked":
         return {"connection_id": connection_id, "status": "revoked"}
+
+    def revoke_local_consent():
+        # Revoke locally FIRST. Even a provider outage must prevent new reads.
+        now = datetime.now(timezone.utc).isoformat()
+        db.table("finance_connections").update({
+            "status": "error", "consent_revoked_at": now
+        }).eq("id",connection_id).eq("owner_user_id",owner_id).eq(
+            "household_id",household_id).execute()
+        if not record.get("consent_revoked_at"):
+            db.table("finance_consent_events").insert({
+                "connection_id": connection_id, "household_id": household_id,
+                "owner_user_id": owner_id, "event_type": "revoked", "scopes": []
+            }).execute()
+    try:
+        await run_in_threadpool(revoke_local_consent)
+    except Exception:
+        raise SandboxBankError("Could not revoke local access") from None
+
     ciphertext, _ = await run_in_threadpool(_get_cipher,db,connection_id)
     token = decrypt_sandbox_token(ciphertext)
     async with httpx.AsyncClient(base_url=ENDPOINT,timeout=20.0) as client:
+        # If Plaid is unreachable, keep encrypted credentials so revocation
+        # can be retried. Local consent remains revoked the entire time.
         await _plaid(client, "/item/remove", {"access_token": token})
-    # Only mark disconnected if Plaid confirms item removal.
-    def finish():
-        db.table("finance_connections").update({
-            "status": "revoked", "consent_revoked_at": datetime.now(timezone.utc).isoformat()
-        }).eq("id",connection_id).eq("owner_user_id",owner_id).eq("household_id",household_id).execute()
-        db.table("finance_sandbox_tokens").delete().eq("connection_id",connection_id).execute()
-        db.table("finance_consent_events").insert({
-            "connection_id": connection_id, "household_id": household_id,
-            "owner_user_id": owner_id, "event_type": "revoked", "scopes": []
-        }).execute()
-        db.table("finance_transactions").delete().eq("owner_user_id",owner_id).eq(
-            "household_id",household_id).in_("account_id",[
-                a["id"] for a in (db.table("finance_accounts").select("id").eq(
-                    "connection_id",connection_id).execute().data or [])]).execute() if False else None
-        # Remove all locally stored transactions via account cascading deletes.
+
+    def complete_cleanup():
+        # Cascading FK deletes remove transactions with each sandbox account.
         db.table("finance_accounts").delete().eq("connection_id",connection_id).eq(
             "owner_user_id",owner_id).eq("household_id",household_id).execute()
+        db.table("finance_sandbox_tokens").delete().eq("connection_id",connection_id).execute()
+        db.table("finance_connections").update({"status": "revoked"}).eq(
+            "id",connection_id).eq("owner_user_id",owner_id).eq(
+            "household_id",household_id).execute()
     try:
-        await run_in_threadpool(finish)
+        await run_in_threadpool(complete_cleanup)
     except Exception:
-        raise SandboxBankError("Bank was revoked; local cleanup must be retried") from None
+        raise SandboxBankError("Provider revoked; local cleanup needs operator review") from None
     return {"connection_id": connection_id, "status": "revoked"}
 
 def list_owned_sandbox_connections(*, owner_id: str, household_id: str) -> list[dict]:
