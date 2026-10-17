@@ -140,7 +140,7 @@ export default function Dashboard() {
   const firstName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
   const currency = getCurrencySymbol(household?.currency);
   const urgentDoc = alerts.find(a => ['expired', 'critical', 'urgent'].includes(a.urgency));
-  const homeEvent = events.find((e: any) => e.alert_sent && e.attributes?.chief_message);
+  const homeEvent = events.find((e: any) => e.alert_sent && e.attributes?.chief_message && e.created_at && (Date.now() - new Date(e.created_at).getTime()) >= 0 && (Date.now() - new Date(e.created_at).getTime()) < 24 * 60 * 60 * 1000);
   const nextTask = tasks.find(t => !t.is_completed);
   const nextBill = bills.find(b => Number(b.amount || 0) > 0);
   const groceryCount = shoppingList?.total_items || inventory.length;
@@ -267,10 +267,10 @@ export default function Dashboard() {
 
           <View style={styles.heroCopy}>
             <Text style={styles.greeting}>{greeting()},</Text>
-            <Text style={styles.name}>{firstName} <Text style={styles.wave}>ð</Text></Text>
-            <Text style={styles.meta}>{dateLabel()}  Â·  {locationLabel}</Text>
+            <Text style={styles.name}>{firstName} <Text style={styles.wave}>👋</Text></Text>
+            <Text style={styles.meta}>{dateLabel()}   ·   {locationLabel}</Text>
             <Text style={styles.heroSub}>
-              {attentionCount ? `Hereâs what needs your attention today.` : `Everything looks good. Youâre all caught up.`}
+              {attentionCount ? `Here's what needs your attention today.` : `Everything looks good. You're all caught up.`}
             </Text>
           </View>
         </ImageBackground>
@@ -282,7 +282,7 @@ export default function Dashboard() {
               {attentionCount > 0 && <View style={styles.count}><Text style={styles.countText}>{attentionCount}</Text></View>}
             </View>
             <TouchableOpacity onPress={() => router.push('/(tabs)/activity')} activeOpacity={0.7}>
-              <Text style={styles.viewAll}>{attentionCount ? 'View all' : 'Activity'}  âº</Text>
+              <Text style={styles.viewAll}>{attentionCount ? 'View all' : 'Activity'}  ›</Text>
             </TouchableOpacity>
           </View>
 
@@ -295,7 +295,7 @@ export default function Dashboard() {
                 <Text style={styles.attentionSub} numberOfLines={2}>{urgentDoc.message}</Text>
                 <View style={[styles.miniChip, { backgroundColor: '#FCE5E8' }]}>
                   <Ionicons name="calendar-outline" size={12} color={H.red} />
-                  <Text style={[styles.miniChipText, { color: H.red }]}>Expired Â· review now</Text>
+                  <Text style={[styles.miniChipText, { color: H.red }]}>Expired  ·  review now</Text>
                 </View>
               </View>
               <View style={[styles.primaryAction, { backgroundColor: H.red }]}><Text style={styles.primaryActionText}>Renew</Text></View>
@@ -312,12 +312,12 @@ export default function Dashboard() {
                 <Text style={styles.attentionSub} numberOfLines={2}>{(homeEvent as any).attributes?.chief_message || 'Check the kitchen for a possible leak.'}</Text>
                 <View style={[styles.miniChip, { backgroundColor: '#FFF0D8' }]}>
                   <Ionicons name="water-outline" size={12} color={H.amber} />
-                  <Text style={[styles.miniChipText, { color: H.amber }]}>Detected Â· just now</Text>
+                  <Text style={[styles.miniChipText, { color: H.amber }]}>Recorded alert  ·  last 24h</Text>
                 </View>
               </View>
               {(homeEvent as any).attributes?.suggested_actions?.length ? (
                 <TouchableOpacity style={[styles.secondaryAction, { backgroundColor: '#F8EAD5' }]} onPress={(e) => { e.stopPropagation?.(); runHAAction((homeEvent as any).attributes.suggested_actions[0]); }} disabled={!!actionLoading}>
-                  <Text style={[styles.secondaryActionText, { color: '#6F4312' }]}>{actionLoading ? 'Workingâ¦' : (homeEvent as any).attributes.suggested_actions[0].label || 'Take action'}</Text>
+                  <Text style={[styles.secondaryActionText, { color: '#6F4312' }]}>{actionLoading ? 'Working…' : (homeEvent as any).attributes.suggested_actions[0].label || 'Take action'}</Text>
                 </TouchableOpacity>
               ) : <View style={[styles.secondaryAction, { backgroundColor: '#F8EAD5' }]}><Text style={[styles.secondaryActionText, { color: '#6F4312' }]}>View</Text></View>}
               <Ionicons name="chevron-forward" size={18} color={H.muted2} />
@@ -382,7 +382,7 @@ export default function Dashboard() {
 
           <View style={[styles.sectionHead, { marginTop: 26 }]}>
             <Text style={styles.sectionTitle}>Today</Text>
-            <View style={styles.todayActions}><TouchableOpacity onPress={() => setShowAddTask(true)} style={styles.addTaskMini}><Ionicons name="add" size={16} color={H.purple} /><Text style={styles.addTaskMiniText}>Task</Text></TouchableOpacity><TouchableOpacity onPress={() => router.push('/(tabs)/activity')} activeOpacity={0.7}><Text style={styles.viewAll}>View schedule  âº</Text></TouchableOpacity></View>
+            <View style={styles.todayActions}><TouchableOpacity onPress={() => setShowAddTask(true)} style={styles.addTaskMini}><Ionicons name="add" size={16} color={H.purple} /><Text style={styles.addTaskMiniText}>Task</Text></TouchableOpacity><TouchableOpacity onPress={() => router.push('/(tabs)/activity')} activeOpacity={0.7}><Text style={styles.viewAll}>View schedule  ›</Text></TouchableOpacity></View>
           </View>
 
           <View style={styles.timelineWrap}>
@@ -403,7 +403,7 @@ export default function Dashboard() {
                 <View style={[styles.timelineDot, { backgroundColor: H.purple }]} />
                 <View style={styles.sideTimeSpacer} />
                 <View style={[styles.todayIcon, { backgroundColor: H.violetBg }]}><Ionicons name="card-outline" size={20} color={H.violet} /></View>
-                <View style={styles.flex}><Text style={styles.todayTitle}>{nextBill.provider}</Text><Text style={styles.todaySub}>{nextBill.billing_cycle} Â· {currency}{Number(nextBill.amount || 0).toLocaleString()}</Text></View>
+                <View style={styles.flex}><Text style={styles.todayTitle}>{nextBill.provider}</Text><Text style={styles.todaySub}>{nextBill.billing_cycle}  ·  {currency}{Number(nextBill.amount || 0).toLocaleString()}</Text></View>
                 <View style={[styles.softAction, { backgroundColor: '#EFEAFF' }]}><Text style={[styles.softActionText, { color: H.purple }]}>View</Text></View>
                 <Ionicons name="chevron-forward" size={18} color={H.muted2} />
               </TouchableOpacity>

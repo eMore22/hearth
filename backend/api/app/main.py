@@ -16,6 +16,7 @@ from app.routers import (
     intake,
     tasks,
     billing,
+    finance,
 )
 
 app = FastAPI(
@@ -45,6 +46,7 @@ app.include_router(automation.router,     prefix="/api/automation",    tags=["Au
 app.include_router(intake.router,         prefix="/api/intake",        tags=["Intake"])
 app.include_router(tasks.router,          prefix="/api/tasks",         tags=["Tasks"])
 app.include_router(billing.router,        prefix="/api/billing",       tags=["Billing"])
+app.include_router(finance.router,        prefix="/api/finance",       tags=["Finance"])
 
 
 @app.get("/")

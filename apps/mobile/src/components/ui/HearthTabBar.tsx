@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Keyboard, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,12 @@ const modules = [
 export default function HearthTabBar({ state, navigation }: any) {
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const go = (route: string) => {
     setOpen(false);
@@ -58,6 +64,7 @@ export default function HearthTabBar({ state, navigation }: any) {
     </View>
   );
 
+  if (keyboardVisible) return null;
   return <>{renderBar()}<Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}><View style={styles.modalRoot}><Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Close household menu"/><View style={[styles.menuRail,{bottom:88+Math.max(insets.bottom,7)}]} pointerEvents="box-none"><View style={styles.menuPanel}><Text style={styles.menuEyebrow}>HOUSEHOLD</Text><Text style={styles.menuTitle}>Where do you want to go?</Text>{modules.map(item=><TouchableOpacity key={item.label} style={styles.menuRow} onPress={()=>go(item.route)} activeOpacity={0.82} accessibilityRole="button" accessibilityLabel={`Open ${item.label}`}><View style={[styles.menuIcon,{backgroundColor:item.bg}]}><Ionicons name={item.icon} size={21} color={item.fg}/></View><Text style={styles.menuLabel}>{item.label}</Text><Ionicons name="chevron-forward" size={19} color={H.muted2}/></TouchableOpacity>)}</View><View style={styles.railTail}/></View>{renderBar(true)}</View></Modal></>;
 }
 

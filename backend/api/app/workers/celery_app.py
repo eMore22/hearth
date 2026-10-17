@@ -16,6 +16,7 @@ celery_app = Celery(
         "app.workers.maintenance_scheduler",
         "app.workers.health_reminder",
         "app.workers.task_reminder",
+        "app.workers.finance_sandbox_cleanup",
     ],
 )
 
@@ -65,6 +66,10 @@ celery_app.conf.beat_schedule = {
     "hourly-health-reminders": {
         "task": "health.daily_reminders",
         "schedule": crontab(minute=35),
+    },
+    "hourly-finance-sandbox-expiry": {
+        "task": "finance.expire_sandbox_connections",
+        "schedule": crontab(minute=42),
     },
     "check-due-tasks": {
         "task": "tasks.check_due_tasks",
