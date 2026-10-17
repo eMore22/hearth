@@ -3,7 +3,6 @@
 The cursor is advanced only after all pages are applied. Provider IDs are
 unique per account, so retrying a partially saved batch is idempotent.
 """
-from datetime import datetime, timezone
 from app.dependencies import get_supabase_admin
 from fastapi.concurrency import run_in_threadpool
 from app.services.plaid_persistent_sandbox import (
@@ -79,50 +78,55 @@ def _normalize_transaction(tx: dict, local_account: dict,
     }
 
 def _apply_changes(db, *, connection_id: str, owner_id: str, household_id: str,
-                   changes: dict) -> dict:
-    # A remote fetch may overlap a user disconnect. Re-check consent before any write.
-    _assert_live_consent(_get_owned_connection(db,connection_id,owner_id,household_id))
+                   expected_cursor: str | None, changes: dict) -> dict:
+    """Atomically apply transactions and cursor, serialized with revocation."""
+    _assert_live_consent(_get_owned_connection(db, connection_id, owner_id, household_id))
     try:
         accounts = (db.table("finance_accounts").select("id,provider_account_ref")
-            .eq("connection_id",connection_id).eq("owner_user_id",owner_id)
-            .eq("household_id",household_id).limit(40).execute().data or [])
+            .eq("connection_id", connection_id).eq("owner_user_id", owner_id)
+            .eq("household_id", household_id).limit(40).execute().data or [])
         by_provider_id = {item["provider_account_ref"]: item for item in accounts}
-        count = 0
+        upserts = {}
         for group in ("added", "modified"):
-            rows = []
             for tx in changes[group]:
                 local_account = by_provider_id.get(tx.get("account_id"))
                 if not local_account:
                     continue
                 normalized = _normalize_transaction(tx, local_account, household_id, owner_id)
                 if normalized:
-                    rows.append(normalized)
-            if rows:
-                db.table("finance_transactions").upsert(
-                    rows,on_conflict="account_id,provider_transaction_ref").execute()
-                count += len(rows)
-        # Removed transactions are identified by original Plaid account & tx ID.
+                    key = (normalized["account_id"], normalized["provider_transaction_ref"])
+                    upserts[key] = {field: normalized[field] for field in (
+                        "account_id", "provider_transaction_ref", "amount_minor",
+                        "currency", "booked_at", "description", "merchant", "category")}
+        removals = {}
         for removed in changes["removed"]:
             account = by_provider_id.get(removed.get("account_id"))
-            if account and removed.get("transaction_id"):
-                db.table("finance_transactions").delete().eq(
-                    "account_id",account["id"]).eq("household_id",household_id).eq(
-                    "owner_user_id",owner_id).eq(
-                    "provider_transaction_ref",removed["transaction_id"]).execute()
-        # This is intentionally LAST. If a prior database write fails, the
-        # previous cursor stays in place and the update can be replayed.
-        db.table("finance_sandbox_tokens").update({
-            "transaction_cursor": changes["next_cursor"],
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }).eq("connection_id",connection_id).execute()
-        db.table("finance_connections").update({
-            "last_synced_at": datetime.now(timezone.utc).isoformat()
-        }).eq("id",connection_id).eq("owner_user_id",owner_id).eq(
-            "household_id",household_id).execute()
-        return {"connection_id": connection_id, "transaction_updates": count,
-                "removed_count": len(changes["removed"]),
-                "sandbox": True, "payments_enabled": False}
+            transaction_id = removed.get("transaction_id")
+            if account and transaction_id:
+                key = (account["id"], str(transaction_id))
+                removals[key] = {"account_id": key[0], "provider_transaction_ref": key[1]}
+        for key in removals:
+            upserts.pop(key, None)
+        response = db.rpc("finance_apply_sandbox_changes", {
+            "p_connection_id": connection_id,
+            "p_owner_user_id": owner_id,
+            "p_household_id": household_id,
+            "p_expected_cursor": expected_cursor,
+            "p_next_cursor": changes["next_cursor"],
+            "p_upserts": list(upserts.values()),
+            "p_removals": list(removals.values()),
+        }).execute()
+        result = response.data
+        if not isinstance(result, dict):
+            raise SandboxBankError("Invalid Sandbox sync confirmation")
+        return {
+            "connection_id": connection_id,
+            "transaction_updates": int(result["transaction_updates"]),
+            "removed_count": int(result["removed_count"]),
+            "sandbox": True, "payments_enabled": False,
+        }
     except Exception:
+        # Any failure of the transactional RPC leaves the cursor unchanged.
         raise SandboxBankError("Sandbox transaction persistence failed") from None
 
 async def sync_sandbox_transactions(*, connection_id: str, owner_id: str,
@@ -136,7 +140,7 @@ async def sync_sandbox_transactions(*, connection_id: str, owner_id: str,
         changes = await fetch_transaction_changes(client,access_token,cursor)
     return await run_in_threadpool(_apply_changes,db,
         connection_id=connection_id,owner_id=owner_id,household_id=household_id,
-        changes=changes)
+        expected_cursor=cursor, changes=changes)
 
 def list_sandbox_transactions(*, connection_id: str, owner_id: str,
                               household_id: str) -> list[dict]:
