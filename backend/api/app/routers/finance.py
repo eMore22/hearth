@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.dependencies import get_current_user, get_supabase_admin
 from app.services.finance_guardrails import proposal_status
+from app.services.plaid_sandbox import create_sandbox_link_token, PlaidSandboxUnavailable
 
 router = APIRouter(tags=["finance"])
 
@@ -36,3 +37,12 @@ def list_accounts(current_user: dict = Depends(get_current_user)):
 def payment_availability(current_user: dict = Depends(get_current_user)):
     _identity(current_user)
     return {"available": False, "reason": "Live payments are not enabled"}
+
+@router.post("/sandbox/plaid/link-token")
+async def sandbox_link_token(current_user: dict = Depends(get_current_user)):
+    user_id, _ = _identity(current_user)
+    try:
+        token = await create_sandbox_link_token(user_id=user_id)
+    except PlaidSandboxUnavailable:
+        raise HTTPException(status_code=503, detail="Plaid Sandbox is not configured or temporarily unavailable")
+    return {"link_token": token, "environment": "sandbox", "country": "CA"}
