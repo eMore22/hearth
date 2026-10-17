@@ -88,6 +88,9 @@ export default function PlaidSandboxPreview() {
     }
   }, [busy, finish]);
 
+  // Internal Google Play testers only; production users never see a demo bank CTA.
+  if (process.env.EXPO_PUBLIC_PLAID_SANDBOX_DEMO !== 'true') return null;
+
   return (
     <View style={styles.shell}>
       <View style={styles.heading}>
