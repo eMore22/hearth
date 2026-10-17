@@ -71,6 +71,7 @@ export default function PlaidSandboxPreview() {
       const { createPlaidLinkSession } = await import('react-native-plaid-link-sdk');
       const session = await createPlaidLinkSession({
         token: response.data.link_token,
+        onEvent: () => { /* Intentionally no bank-event analytics or sensitive logging. */ },
         onSuccess: (result) => {
           void finish(result.publicToken);
         },
