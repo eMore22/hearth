@@ -36,6 +36,10 @@ def list_accounts(current_user: dict = Depends(get_current_user)):
         # Revoked or expired connections must not leak even stale balances.
         active = (db.table("finance_connections").select("id")
                   .eq("owner_user_id", user_id).eq("household_id", household_id)
+                  # Sandbox items are exclusively accessible through the explicit,
+                  # feature-gated, tester-allowlisted /sandbox/plaid routes.
+                  # Never surface them through the ordinary Finance account API.
+                  .neq("provider", "plaid")
                   .eq("status", "linked").is_("consent_revoked_at", "null")
                   .gt("consent_expires_at", datetime.now(timezone.utc).isoformat())
                   .limit(30).execute().data or [])
