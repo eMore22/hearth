@@ -1,5 +1,6 @@
--- Hearth Finance data foundation, review-only migration.
--- Apply in staging after verification; DO NOT enable bank linking/payments.
+-- Hearth Finance data foundation for internal Sandbox testing.
+-- On the existing Supabase project, permit only server-side allowlisted
+-- Plaid Sandbox tests. Real bank linking and payments remain disabled.
 -- These records are PERSONAL to user_id, even within a Family household.
 -- Direct API writes are forbidden: backend service role must enforce auth and consent.
 
