@@ -40,3 +40,5 @@ jobs:
         run: npx tsc --noEmit --project apps/mobile/tsconfig.json
       - name: Verify Expo project configuration
         run: cd apps/mobile && npx expo config --type public --json > /dev/null
+      - name: Verify native Android config and Plaid autolinking setup
+        run: cd apps/mobile && npx expo prebuild --platform android --no-install --clean
