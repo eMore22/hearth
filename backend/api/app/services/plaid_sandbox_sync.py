@@ -80,6 +80,8 @@ def _normalize_transaction(tx: dict, local_account: dict,
 
 def _apply_changes(db, *, connection_id: str, owner_id: str, household_id: str,
                    changes: dict) -> dict:
+    # A remote fetch may overlap a user disconnect. Re-check consent before any write.
+    _assert_live_consent(_get_owned_connection(db,connection_id,owner_id,household_id))
     try:
         accounts = (db.table("finance_accounts").select("id,provider_account_ref")
             .eq("connection_id",connection_id).eq("owner_user_id",owner_id)
