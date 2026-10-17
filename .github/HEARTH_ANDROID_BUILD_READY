@@ -9,3 +9,5 @@ Includes approved native Hearth splash, Profile navigation, Chief offline briefi
 Internal testing only; do not publicly launch without entitlement gate and physical-device smoke tests.
 
 Retest Android AAB with VERIFIED valid native splash asset at GitHub merge 33e32a530e4b5d27b43b3c8964c89cbbd9a1cf57. Prior build failed EAS Prebuild due malformed image; this is the corrected image artifact.
+
+2026-10-17: Build new signed Google Play internal-testing AAB from main with Plaid Sandbox UI enabled (internalTest profile). Finance schema and read-only Sandbox guardrails deployed; API allows only explicitly approved tester IDs. No real money movement. Previous release CI passed; physical-device validation remains required.
