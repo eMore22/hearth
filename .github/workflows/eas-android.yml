@@ -1,4 +1,4 @@
-name: Build Hearth Android release AAB
+name: Build Hearth Android internal-test AAB
 # Release build is explicitly gated: only the build-ready marker commit starts it.
 # Keep the marker absent until Expo token, EAS environment, subscription
 # configuration, and Play signing credentials have been verified.
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   android-aab:
-    name: Build production-signed Android AAB
+    name: Build Google Play internal-test AAB
     runs-on: ubuntu-latest
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -43,4 +43,4 @@ jobs:
         run: npx tsc --noEmit --project apps/mobile/tsconfig.json
       - name: Build signed Android app bundle
         working-directory: apps/mobile
-        run: eas build --platform android --profile production --non-interactive --wait
+        run: eas build --platform android --profile internalTest --non-interactive --wait
