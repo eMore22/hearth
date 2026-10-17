@@ -1,4 +1,5 @@
 """Read-only finance discovery routes. Never initiate transfers or solicit bank credentials."""
+import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from app.dependencies import get_current_user, get_supabase_admin
@@ -40,9 +41,16 @@ def payment_availability(current_user: dict = Depends(get_current_user)):
     _identity(current_user)
     return {"available": False, "reason": "Live payments are not enabled"}
 
+def _sandbox_tester(user: dict) -> str:
+    user_id, _ = _identity(user)
+    allowed = {v.strip() for v in os.getenv("PLAID_SANDBOX_TESTER_USER_IDS", "").split(",") if v.strip()}
+    if os.getenv("PLAID_SANDBOX_DEMO_ENABLED", "").lower() != "true" or user_id not in allowed:
+        raise HTTPException(status_code=404, detail="Sandbox demo unavailable")
+    return user_id
+
 @router.post("/sandbox/plaid/link-token")
 async def sandbox_link_token(current_user: dict = Depends(get_current_user)):
-    user_id, _ = _identity(current_user)
+    user_id = _sandbox_tester(current_user)
     try:
         token = await create_sandbox_link_token(user_id=user_id)
     except PlaidSandboxUnavailable:
@@ -54,7 +62,7 @@ class SandboxPreviewRequest(BaseModel):
 
 @router.post("/sandbox/plaid/preview")
 async def sandbox_account_preview(payload: SandboxPreviewRequest, current_user: dict = Depends(get_current_user)):
-    _identity(current_user)
+    _sandbox_tester(current_user)
     try:
         accounts = await preview_sandbox_accounts(payload.public_token)
     except PlaidPreviewUnavailable:
