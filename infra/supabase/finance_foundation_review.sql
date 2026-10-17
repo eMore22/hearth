@@ -130,3 +130,135 @@ revoke all on public.finance_sandbox_tokens from anon,authenticated;
 revoke all on public.finance_consent_events from anon,authenticated;
 -- No policies: service-role backend only, least privilege at application layer.
 -- Never place real bank access tokens in these public tables.
+
+
+-- Internal Sandbox synchronization is atomic: account changes, removals, and
+-- the Plaid cursor are committed in the SAME PostgreSQL transaction.
+-- Locking finance_connections serializes updates against consent revocation,
+-- while the expected cursor prevents racing sync jobs from overwriting changes.
+-- Only the server's service_role can invoke these functions.
+create or replace function public.finance_apply_sandbox_changes(
+  p_connection_id uuid, p_owner_user_id uuid, p_household_id uuid,
+  p_expected_cursor text, p_next_cursor text,
+  p_upserts jsonb, p_removals jsonb
+) returns jsonb
+language plpgsql security invoker
+set search_path = public, pg_temp
+as $$
+declare
+  v_connection public.finance_connections%rowtype;
+  v_cursor text;
+  v_upsert_count integer := 0;
+  v_remove_count integer := 0;
+begin
+  select * into v_connection from public.finance_connections
+    where id = p_connection_id and owner_user_id = p_owner_user_id
+      and household_id = p_household_id and provider = 'plaid'
+      and country_code = 'CA'
+    for update;
+  if not found or v_connection.status <> 'linked'
+    or v_connection.consent_revoked_at is not null
+    or v_connection.consent_expires_at is null
+    or v_connection.consent_expires_at <= now() then
+    raise exception 'Sandbox consent unavailable' using errcode = 'P0001';
+  end if;
+
+  select transaction_cursor into v_cursor from public.finance_sandbox_tokens
+    where connection_id = p_connection_id for update;
+  if not found or v_cursor is distinct from p_expected_cursor
+     or p_next_cursor is null then
+    raise exception 'Sandbox sync cursor conflict' using errcode = 'P0001';
+  end if;
+
+  insert into public.finance_transactions(
+    account_id, household_id, owner_user_id, provider_transaction_ref,
+    amount_minor, currency, booked_at, description, merchant, category
+  )
+  select a.id, p_household_id, p_owner_user_id,
+    x.provider_transaction_ref, x.amount_minor, 'CAD', x.booked_at,
+    coalesce(x.description,''), x.merchant, x.category
+  from jsonb_to_recordset(coalesce(p_upserts,'[]'::jsonb)) as x(
+    account_id uuid, provider_transaction_ref text, amount_minor bigint,
+    currency text, booked_at timestamptz, description text,
+    merchant text, category text
+  )
+  join public.finance_accounts a on a.id = x.account_id
+    and a.connection_id = p_connection_id and a.owner_user_id = p_owner_user_id
+    and a.household_id = p_household_id
+  where x.currency = 'CAD'
+    and x.provider_transaction_ref is not null
+    and length(x.provider_transaction_ref) > 0
+  on conflict (account_id, provider_transaction_ref) do update set
+    amount_minor = excluded.amount_minor,
+    currency = excluded.currency,
+    booked_at = excluded.booked_at,
+    description = excluded.description,
+    merchant = excluded.merchant,
+    category = excluded.category;
+  get diagnostics v_upsert_count = row_count;
+
+  delete from public.finance_transactions t
+  using jsonb_to_recordset(coalesce(p_removals,'[]'::jsonb)) as x(
+    account_id uuid, provider_transaction_ref text
+  ), public.finance_accounts a
+  where t.account_id = x.account_id
+    and t.provider_transaction_ref = x.provider_transaction_ref
+    and a.id = t.account_id and a.connection_id = p_connection_id
+    and a.owner_user_id = p_owner_user_id and a.household_id = p_household_id;
+  get diagnostics v_remove_count = row_count;
+
+  update public.finance_sandbox_tokens
+    set transaction_cursor = p_next_cursor, updated_at = now()
+    where connection_id = p_connection_id;
+  update public.finance_connections set last_synced_at = now(),
+    updated_at = now() where id = p_connection_id;
+  return jsonb_build_object(
+    'transaction_updates', v_upsert_count, 'removed_count', v_remove_count
+  );
+end;
+$$;
+
+-- Never delete an Item's ciphertext until remote /item/remove succeeds.
+-- Completing local erasure is one transaction so partial failures are retryable.
+create or replace function public.finance_finalize_sandbox_disconnect(
+  p_connection_id uuid, p_owner_user_id uuid, p_household_id uuid
+) returns boolean
+language plpgsql security invoker
+set search_path = public, pg_temp
+as $$
+declare
+  v_connection public.finance_connections%rowtype;
+begin
+  select * into v_connection from public.finance_connections
+    where id = p_connection_id and owner_user_id = p_owner_user_id
+      and household_id = p_household_id and provider = 'plaid'
+      and country_code = 'CA'
+    for update;
+  if not found then
+    raise exception 'Sandbox connection not found' using errcode = 'P0001';
+  end if;
+  if v_connection.status = 'revoked' then
+    return true;
+  end if;
+  if v_connection.consent_revoked_at is null
+     or v_connection.status <> 'error' then
+    raise exception 'Sandbox consent must be revoked first' using errcode = 'P0001';
+  end if;
+
+  delete from public.finance_accounts where connection_id = p_connection_id
+    and owner_user_id = p_owner_user_id and household_id = p_household_id;
+  delete from public.finance_sandbox_tokens where connection_id = p_connection_id;
+  update public.finance_connections set status = 'revoked', updated_at = now()
+    where id = p_connection_id;
+  return true;
+end;
+$$;
+
+revoke all on function public.finance_apply_sandbox_changes(
+  uuid,uuid,uuid,text,text,jsonb,jsonb) from PUBLIC, anon, authenticated;
+revoke all on function public.finance_finalize_sandbox_disconnect(
+  uuid,uuid,uuid) from PUBLIC, anon, authenticated;
+grant execute on function public.finance_apply_sandbox_changes(
+  uuid,uuid,uuid,text,text,jsonb,jsonb) to service_role;
+grant execute on function public.finance_finalize_sandbox_disconnect(
+  uuid,uuid,uuid) to service_role;
