@@ -1,5 +1,6 @@
 """Read-only finance discovery routes. Never initiate transfers or solicit bank credentials."""
 import os
+from datetime import datetime, timezone
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -32,10 +33,19 @@ def list_accounts(current_user: dict = Depends(get_current_user)):
     user_id, household_id = _identity(current_user)
     db = get_supabase_admin()
     try:
+        # Revoked or expired connections must not leak even stale balances.
+        active = (db.table("finance_connections").select("id")
+                  .eq("owner_user_id", user_id).eq("household_id", household_id)
+                  .eq("status", "linked").is_("consent_revoked_at", "null")
+                  .gt("consent_expires_at", datetime.now(timezone.utc).isoformat())
+                  .limit(30).execute().data or [])
+        ids = [item["id"] for item in active]
+        if not ids:
+            return {"accounts": [], "live_sync_enabled": False}
         result = (db.table("finance_accounts")
                   .select("id,display_name,masked_account,currency,balance_minor,balance_updated_at")
                   .eq("owner_user_id",user_id).eq("household_id",household_id)
-                  .limit(30).execute())
+                  .in_("connection_id",ids).limit(30).execute())
     except Exception:
         # The review-only finance migration may not be applied yet.
         raise HTTPException(status_code=503,detail="Bank accounts are not available yet")
