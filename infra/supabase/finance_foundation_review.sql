@@ -14,6 +14,7 @@ create table if not exists public.finance_connections (
  consent_scopes text[] not null default '{}',
  consent_granted_at timestamptz,
  consent_revoked_at timestamptz,
+ consent_expires_at timestamptz,
  last_synced_at timestamptz,
  created_at timestamptz not null default now(),
  updated_at timestamptz not null default now(),
@@ -93,13 +94,39 @@ create index if not exists finance_proposals_owner_idx
 -- Deny all direct reads/writes to both anonymous and authenticated API roles.
 -- The backend is the ONLY gateway, and must check Supabase JWT identity and
 -- the household membership relationship for each request.
+-- Server-only encrypted SANDBOX access-token vault.
+-- No bank plaintext/access secrets or raw account numbers are stored.
+create table if not exists public.finance_sandbox_tokens (
+ connection_id uuid primary key references public.finance_connections(id) on delete cascade,
+ encrypted_access_token text not null,
+ transaction_cursor text,
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now()
+);
+create table if not exists public.finance_consent_events (
+ id uuid primary key default gen_random_uuid(),
+ connection_id uuid not null references public.finance_connections(id) on delete cascade,
+ household_id uuid not null,
+ owner_user_id uuid not null,
+ event_type text not null check(event_type in ('granted','revoked','expired','sync_requested')),
+ scopes text[] not null default '{}',
+ recorded_at timestamptz not null default now(),
+ foreign key (connection_id,household_id,owner_user_id)
+   references public.finance_connections(id,household_id,owner_user_id) on delete cascade
+);
+create index if not exists finance_consent_events_owner on public.finance_consent_events(owner_user_id,recorded_at desc);
+
 alter table public.finance_connections enable row level security;
 alter table public.finance_accounts enable row level security;
 alter table public.finance_transactions enable row level security;
 alter table public.finance_payment_proposals enable row level security;
+alter table public.finance_sandbox_tokens enable row level security;
+alter table public.finance_consent_events enable row level security;
 revoke all on public.finance_connections from anon,authenticated;
 revoke all on public.finance_accounts from anon,authenticated;
 revoke all on public.finance_transactions from anon,authenticated;
 revoke all on public.finance_payment_proposals from anon,authenticated;
+revoke all on public.finance_sandbox_tokens from anon,authenticated;
+revoke all on public.finance_consent_events from anon,authenticated;
 -- No policies: service-role backend only, least privilege at application layer.
 -- Never place real bank access tokens in these public tables.
