@@ -1,11 +1,16 @@
 """Read-only finance discovery routes. Never initiate transfers or solicit bank credentials."""
 import os
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from app.dependencies import get_current_user, get_supabase_admin
 from app.services.finance_guardrails import proposal_status
 from app.services.plaid_sandbox import create_sandbox_link_token, PlaidSandboxUnavailable
 from app.services.plaid_preview import preview_sandbox_accounts, PlaidPreviewUnavailable
+from app.services.plaid_persistent_sandbox import (SandboxBankError, connect_sandbox_bank,
+    disconnect_sandbox_bank, list_owned_sandbox_connections)
+from app.services.plaid_sandbox_sync import (sync_sandbox_transactions,
+    list_sandbox_transactions)
 
 router = APIRouter(tags=["finance"])
 
@@ -69,3 +74,62 @@ async def sandbox_account_preview(payload: SandboxPreviewRequest, current_user: 
         raise HTTPException(status_code=503, detail="Sandbox preview unavailable or test Item cleanup failed")
     return {"accounts": accounts, "environment": "sandbox", "persistent_connection": False,
             "item_revoked": True, "payments_enabled": False}
+
+class SandboxConnectRequest(BaseModel):
+    public_token: str = Field(min_length=1, max_length=512)
+    consent_acknowledged: bool = False
+
+@router.post("/sandbox/plaid/connections")
+async def sandbox_connect(payload: SandboxConnectRequest, current_user: dict = Depends(get_current_user)):
+    user_id = _sandbox_tester(current_user)
+    _, household_id = _identity(current_user)
+    try:
+        return await connect_sandbox_bank(public_token=payload.public_token,
+            owner_id=user_id, household_id=household_id,
+            consent_acknowledged=payload.consent_acknowledged)
+    except SandboxBankError:
+        raise HTTPException(status_code=503, detail="Sandbox bank connection could not be saved safely")
+
+@router.get("/sandbox/plaid/connections")
+async def sandbox_connections(current_user: dict = Depends(get_current_user)):
+    from fastapi.concurrency import run_in_threadpool
+    user_id = _sandbox_tester(current_user)
+    _, household_id = _identity(current_user)
+    try:
+        connections = await run_in_threadpool(list_owned_sandbox_connections,
+            owner_id=user_id, household_id=household_id)
+    except SandboxBankError:
+        raise HTTPException(status_code=503, detail="Sandbox connections unavailable")
+    return {"connections": connections, "environment": "sandbox"}
+
+@router.post("/sandbox/plaid/connections/{connection_id}/sync")
+async def sandbox_sync(connection_id: UUID, current_user: dict = Depends(get_current_user)):
+    user_id = _sandbox_tester(current_user)
+    _, household_id = _identity(current_user)
+    try:
+        return await sync_sandbox_transactions(connection_id=str(connection_id),
+            owner_id=user_id, household_id=household_id)
+    except SandboxBankError:
+        raise HTTPException(status_code=503, detail="Sandbox sync unavailable; verify consent and provider status")
+
+@router.get("/sandbox/plaid/connections/{connection_id}/transactions")
+async def sandbox_transactions(connection_id: UUID, current_user: dict = Depends(get_current_user)):
+    from fastapi.concurrency import run_in_threadpool
+    user_id = _sandbox_tester(current_user)
+    _, household_id = _identity(current_user)
+    try:
+        rows = await run_in_threadpool(list_sandbox_transactions,
+            connection_id=str(connection_id), owner_id=user_id, household_id=household_id)
+    except SandboxBankError:
+        raise HTTPException(status_code=503, detail="Sandbox transaction data is unavailable")
+    return {"transactions": rows, "environment": "sandbox"}
+
+@router.delete("/sandbox/plaid/connections/{connection_id}")
+async def sandbox_disconnect(connection_id: UUID, current_user: dict = Depends(get_current_user)):
+    user_id = _sandbox_tester(current_user)
+    _, household_id = _identity(current_user)
+    try:
+        return await disconnect_sandbox_bank(connection_id=str(connection_id),
+            owner_id=user_id, household_id=household_id)
+    except SandboxBankError:
+        raise HTTPException(status_code=503, detail="Sandbox disconnect could not be confirmed; please retry")
