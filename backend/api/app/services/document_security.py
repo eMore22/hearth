@@ -82,3 +82,13 @@ def clean_extraction(extracted: dict, fallback_filename: str) -> dict:
         if isinstance(fields, dict) else {}
     )
     return result
+
+
+def document_visible(record: dict, user_id: str) -> bool:
+    """Personal documents stay with uploader; sharing is explicit."""
+    return (str(record.get("uploaded_by") or "") == str(user_id)
+            or record.get("visibility") == "household")
+
+
+def document_mutable(record: dict, user_id: str) -> bool:
+    return str(record.get("uploaded_by") or "") == str(user_id)
