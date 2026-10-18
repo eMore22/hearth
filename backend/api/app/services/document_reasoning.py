@@ -53,6 +53,17 @@ def document_reply(question: str, context: dict) -> str:
         timeline.append((delta, f"{name}: {due.isoformat()} ({status})"))
     timeline.sort(key=lambda item: item[0])
 
+    if any(w in msg for w in ("who issued", "issuer", "which provider", "insurance company")):
+        names = [f"{str(d.get('title') or 'Document')[:75]}: " +
+                 (str(d.get('issuer'))[:100] if d.get("issuer") else "issuer not recorded")
+                 for d in selected[:8]]
+        return "Issuers in saved document metadata: " + "; ".join(names) + "."
+    if any(w in msg for w in ("whose", "belongs to", "holder", "who owns")):
+        names = [f"{str(d.get('title') or 'Document')[:75]}: " +
+                 (str(d.get('holder_name'))[:100] if d.get("holder_name") else "holder not recorded")
+                 for d in selected[:8]]
+        return "Holders in saved document metadata: " + "; ".join(names) + "."
+
     if any(w in msg for w in ("cover", "coverage", "claim", "terms", "eligible")):
         return ("Hearth has " + str(len(selected)) + " matching saved document(s), but saved "
                 "metadata cannot confirm coverage or eligibility. Open the original policy "
