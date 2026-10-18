@@ -9,9 +9,20 @@ from app.services.mono_sandbox import sandbox_ready, MonoSandboxError, list_inst
 from app.routers.nigeria_sandbox import require_tester, capabilities as mono_capabilities
 from app.routers.utilities import check_meter, TestMeterRequest
 from app.agents.chief_of_staff_agent import ChiefOfStaffAgent
+from app.services.utility_provider_catalog import utility_provider_capabilities
 
 
 class UtilityUnitTests(unittest.TestCase):
+    def test_canada_green_button_is_catalog_not_fake_connected_meter(self):
+        canada = utility_provider_capabilities("CA")
+        nigeria = utility_provider_capabilities("NG")
+        self.assertTrue(canada["household_shared_bills"])
+        self.assertFalse(canada["bank_balances_shared"])
+        self.assertFalse(canada["provider_automatic_pull_enabled"])
+        self.assertTrue(any("Green Button" in item["name"] for item in canada["provider_connections"]))
+        self.assertTrue(all(not item["automatic_pull_enabled"] for item in canada["provider_connections"]))
+        self.assertTrue(all(not item["automatic_pull_enabled"] for item in nigeria["provider_connections"]))
+
     def test_manual_bills_no_currency_conversion_or_inactive(self):
         overview = summarize_utilities([
             {"name": "Electricity", "category": "electricity", "amount": 8000,
@@ -99,7 +110,8 @@ class MonoPrivacyTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(mono_capabilities(current_user=user)["bank_linking_enabled"])
         with patch.dict("os.environ", {"MONO_SANDBOX_DEMO_ENABLED": "true",
                                        "MONO_SANDBOX_TESTER_USER_IDS": "tester"}):
-            self.assertEqual(require_tester(user), "tester")
+            with patch("app.routers.nigeria_sandbox.require_household_owner", return_value=("tester","house")):
+                self.assertEqual(require_tester(user), "tester")
 
 
 if __name__ == "__main__":

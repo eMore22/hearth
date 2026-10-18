@@ -22,7 +22,8 @@ class FinanceRoutesTests(unittest.TestCase):
             with self.assertRaises(HTTPException):
                 _sandbox_tester(user)
         with patch.dict("os.environ",{"PLAID_SANDBOX_DEMO_ENABLED":"true","PLAID_SANDBOX_TESTER_USER_IDS":"test-user"}):
-            self.assertEqual(_sandbox_tester(user),"test-user")
+            with patch("app.routers.finance.require_household_owner", return_value=("test-user","test-home")):
+                self.assertEqual(_sandbox_tester(user),"test-user")
 
 
     def test_general_accounts_exclude_plaid_sandbox(self):

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../src/services/api';
+import { useHouseholdStore } from '../../src/stores/householdStore';
 import { H } from '../../src/theme/hearthDesign';
 import { ScreenHeader } from '../../src/components/ui/PremiumKit';
 
@@ -16,6 +17,8 @@ type Utility = {
   days_until_due: number | null;
   provider_connected: boolean;
 };
+type Provider = { id:string; name:string; coverage:string; note:string; automatic_pull_enabled:boolean; registration_required:boolean };
+type ProviderCatalog = { country:'CA'|'NG'; provider_connections:Provider[]; household_shared_bills:boolean; provider_automatic_pull_enabled:boolean };
 type Overview = {
   utilities: Utility[];
   source: string;
@@ -25,6 +28,21 @@ const CATEGORIES = ['electricity', 'water', 'internet', 'gas', 'television'];
 
 export default function UtilitiesScreen() {
   const insets = useSafeAreaInsets();
+  const householdCountry = useHouseholdStore(x => x.household?.country);
+  const [country, setCountry] = useState<'CA'|'NG'>('CA');
+  const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null);
+  useEffect(() => {
+    if (householdCountry?.toUpperCase().startsWith('NG')) setCountry('NG');
+    if (householdCountry?.toUpperCase().startsWith('CA')) setCountry('CA');
+  }, [householdCountry]);
+  useEffect(() => {
+    let active = true;
+    setProviderCatalog(null);
+    api.get<ProviderCatalog>('/api/utilities/providers', { params: { country } }).then(r => {
+      if (active) setProviderCatalog(r.data);
+    }).catch(() => { if (active) setProviderCatalog(null); });
+    return () => { active = false; };
+  }, [country]);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [busy, setBusy] = useState(true);
   const [checking, setChecking] = useState(false);
@@ -92,6 +110,24 @@ export default function UtilitiesScreen() {
       <ScreenHeader backTo="/(tabs)/integrations" title="Household utilities"
         subtitle="Electricity, water, internet and recurring services." />
       <View style={s.body}>
+        <Text style={s.heading}>Country and provider connections</Text>
+        <View style={{ flexDirection:'row',gap:9,marginBottom:14 }}>
+          {(['CA','NG'] as const).map(value => <TouchableOpacity
+            accessibilityRole="button" accessibilityLabel={value === 'CA' ? 'Canadian utilities' : 'Nigerian utilities'}
+            key={value} onPress={() => setCountry(value)}
+            style={[s.soft,{ flex:1,marginTop:0 }, country === value && { borderWidth:1,borderColor:H.purple }]}>
+            <Text style={s.softText}>{value === 'CA' ? 'Canada' : 'Nigeria'}</Text>
+          </TouchableOpacity>)}
+        </View>
+        <Text style={s.note}>Shared household bills are available to authorized members regardless of country. Provider data will only be pulled after its account holder authorizes an available connector. Private bank balances are excluded.</Text>
+        {providerCatalog?.provider_connections.map(p => <View style={s.bill} key={p.id}>
+          <View style={{flex:1}}>
+            <Text style={s.name}>{p.name}</Text>
+            <Text style={s.meta}>{p.coverage}</Text>
+            <Text style={s.note}>{p.note}</Text>
+            <Text style={[s.meta,{color:H.purple}]}>{p.automatic_pull_enabled ? 'Authorized retrieval available' : p.registration_required ? 'Registration and consent needed' : 'Household manual tracking available'}</Text>
+          </View>
+        </View>)}
         <View style={s.info}>
           <Ionicons name="information-circle-outline" color={H.purple} size={22} />
           <View style={{ flex: 1 }}>
@@ -123,6 +159,7 @@ export default function UtilitiesScreen() {
           <Text style={s.serviceName}>{c.charAt(0).toUpperCase() + c.slice(1)}</Text>
           <Text style={s.coming}>Provider connection pending</Text>
         </View>)}
+        {country === 'NG' && <>
         <Text style={s.heading}>Simulated electricity test</Text>
         <Text style={s.note}>Optional local test only. Uses a fictional prepaid meter example. It does not call VTpass or pay a utility bill.</Text>
         <TouchableOpacity disabled={checking} style={[s.soft, checking && { opacity: .5 }]} onPress={tryMeter}>
@@ -145,6 +182,7 @@ export default function UtilitiesScreen() {
         </TouchableOpacity>
         {!vtpassAvailable && <Text style={s.note}>VTpass provider test is unavailable until authorized Sandbox credentials and tester access are confirmed.</Text>}
         {!!vtpassMessage && <Text style={s.note}>{vtpassMessage}</Text>}
+        </>}
       </View>
     </ScrollView>
   </View>;

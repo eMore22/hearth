@@ -15,6 +15,30 @@ from app.services.plaid_sandbox_sync import (sync_sandbox_transactions,
 
 router = APIRouter(tags=["finance"])
 
+from app.services.owner_private_finance import require_household_owner, owner_bank_profile
+
+@router.get("/owner-profile")
+def owner_profile(current_user: dict = Depends(get_current_user)):
+    # Verify household ownership from DB on every request; owner-only,
+    # not just a hidden widget. Only linked owner-owned records appear.
+    return owner_bank_profile(current_user)
+
+
+@router.post("/owner-profile/mono/{connection_id}/preview")
+async def owner_mono_balance_preview(connection_id: UUID, current_user: dict = Depends(get_current_user)):
+    # No automatic provider calls at profile load: explicit owner tap only.
+    from app.routers.nigeria_sandbox import require_tester
+    from app.services.mono_connect_link import account_preview, MonoLinkError
+    owner_id, household_id = require_household_owner(current_user)
+    require_tester(current_user)
+    try:
+        return await account_preview(user_id=owner_id, household_id=household_id,
+                                     connection_id=str(connection_id))
+    except MonoLinkError:
+        raise HTTPException(status_code=503, detail="Private Mono Sandbox balance unavailable") from None
+
+
+
 def _identity(user: dict) -> tuple[str,str]:
     user_id = str(user.get("id") or "")
     household_id = str(user.get("household_id") or "")
@@ -66,6 +90,7 @@ def _sandbox_tester(user: dict) -> str:
     allowed = {v.strip() for v in os.getenv("PLAID_SANDBOX_TESTER_USER_IDS", "").split(",") if v.strip()}
     if os.getenv("PLAID_SANDBOX_DEMO_ENABLED", "").lower() != "true" or user_id not in allowed:
         raise HTTPException(status_code=404, detail="Sandbox demo unavailable")
+    require_household_owner(user)
     return user_id
 
 @router.post("/sandbox/plaid/link-token")

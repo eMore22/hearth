@@ -229,14 +229,10 @@ export default function PlaidSandboxPreview() {
                   <Text style={styles.accountName}>{account.name}</Text>
                   <Text style={styles.description}>Test account ending {account.mask || '••••'}</Text>
                 </View>
-                <Text style={styles.balance}>
-                  {account.currency === 'CAD' && account.balance_minor != null
-                    ? 'CAD ' + (account.balance_minor / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : 'No verified balance'}
-                </Text>
+                <Text style={styles.description}>Private balance in Profile</Text>
               </View>
             ))}
-          <Text style={styles.small}>Preview is held only on this screen and cleared when you begin a new test.</Text>
+          <Text style={styles.small}>This one-time preview is not saved. To see saved account balances, explicitly connect the simulated bank, then open your private Profile.</Text>
         </View>
       )}
     </View>

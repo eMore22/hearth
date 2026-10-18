@@ -8,6 +8,7 @@ import { useHouseholdStore } from '../../src/stores/householdStore';
 import { useAutomationStore } from '../../src/stores/automationStore';
 import { H, HearthDesign } from '../../src/theme/hearthDesign';
 import { ScreenHeader } from '../../src/components/ui/PremiumKit';
+import PrivateFinanceCard from '../../src/components/finance/PrivateFinanceCard';
 
 const rowMeta = [
   { key: 'members', label: 'Household members', sub: 'Manage the people in your household', icon: 'people-outline' as const, route: '/(tabs)/members' },
@@ -65,6 +66,8 @@ export default function ProfileScreen() {
               <View style={styles.houseStat}><Text style={styles.houseStatValue}>{status.device_count || 0}</Text><Text style={styles.houseStatLabel}>Devices</Text></View>
             </View>
           </TouchableOpacity>
+
+          <PrivateFinanceCard />
 
           {!status.connected && (
             <TouchableOpacity style={styles.connectBanner} onPress={() => router.push('/(tabs)/integrations')} activeOpacity={0.8}>
