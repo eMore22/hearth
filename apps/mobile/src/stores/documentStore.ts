@@ -33,6 +33,7 @@ interface DocumentState {
   fetchAlerts: () => Promise<void>;
   uploadDocument: (file: any, memberName?: string) => Promise<void>;
   askQuestion: (question: string) => Promise<string>;
+  getDocumentUrl: (id: string) => Promise<string>;
   deleteDocument: (id: string) => Promise<void>;
   clearError: () => void;
 }
@@ -101,11 +102,22 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     }
   },
 
+  getDocumentUrl: async (id) => {
+    try {
+      const result = await documentService.access(id);
+      if (!result.data?.url?.startsWith('https://')) throw new Error('Invalid secure URL');
+      return result.data.url;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Could not open secure document');
+    }
+  },
+
   deleteDocument: async (id) => {
     set({ loading: true, isLoading: true, error: null });
     try {
       await documentService.delete(id);
       await get().fetchDocuments();
+      await get().fetchAlerts();
     } catch (error: any) {
       const message = error.response?.data?.detail || 'Failed to delete document';
       set({ error: message });
