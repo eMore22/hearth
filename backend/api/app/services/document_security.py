@@ -5,7 +5,6 @@ arbitrary files or overwrite server-controlled fields.
 """
 import re
 from datetime import date
-from pathlib import PurePath
 from urllib.parse import unquote, urlsplit
 
 ALLOWED = {
@@ -29,8 +28,8 @@ def valid_upload(data: bytes, mime: str) -> bool:
         return False
     return {
         "application/pdf": lambda: data.startswith(b"%PDF-"),
-        "image/jpeg": lambda: data.startswith(b"\\xff\\xd8\\xff"),
-        "image/png": lambda: data.startswith(b"\\x89PNG\\r\\n\\x1a\\n"),
+        "image/jpeg": lambda: data.startswith(b"\xff\xd8\xff"),
+        "image/png": lambda: data.startswith(b"\x89PNG\r\n\x1a\n"),
         "image/webp": lambda: data.startswith(b"RIFF") and data[8:12] == b"WEBP",
     }.get(mime, lambda: False)()
 
