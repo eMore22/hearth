@@ -30,6 +30,9 @@ export default function UtilitiesScreen() {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meterMessage, setMeterMessage] = useState<string | null>(null);
+  const [vtpassAvailable, setVtpassAvailable] = useState(false);
+  const [vtpassMessage, setVtpassMessage] = useState<string | null>(null);
+  const [meterType, setMeterType] = useState<'prepaid' | 'postpaid'>('prepaid');
   const load = useCallback(async () => {
     try {
       const result = await api.get<Overview>('/api/utilities/overview');
@@ -42,6 +45,28 @@ export default function UtilitiesScreen() {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    api.get<{meter_verification_available: boolean}>('/api/utilities/sandbox/vtpass/capabilities')
+      .then(r => setVtpassAvailable(r.data.meter_verification_available))
+      .catch(() => setVtpassAvailable(false));
+  }, []);
+  const verifyVtpass = async () => {
+    setChecking(true); setVtpassMessage(null);
+    try {
+      const { data } = await api.post('/api/utilities/sandbox/vtpass/verify-meter', {
+        service_id: 'enugu-electric',
+        meter_type: meterType,
+        meter_number: meterType === 'prepaid' ? '1111111111111' : '1010101010101',
+      });
+      setVtpassMessage(data.provider_verified && data.valid
+        ? 'VTpass Sandbox successfully verified this TEST meter. No real meter or utility payment is involved.'
+        : 'VTpass Sandbox did not verify the simulated meter.');
+    } catch (e: any) {
+      setVtpassMessage(e?.response?.status === 404
+        ? 'VTpass Sandbox test is not enabled for this account.'
+        : 'VTpass did not complete the Sandbox verification. You can retry.');
+    } finally { setChecking(false); }
+  };
 
   const tryMeter = async () => {
     setChecking(true);
@@ -104,6 +129,22 @@ export default function UtilitiesScreen() {
           {checking ? <ActivityIndicator color={H.purple} /> : <Text style={s.softText}>Run local meter test</Text>}
         </TouchableOpacity>
         {!!meterMessage && <Text style={s.note}>{meterMessage}</Text>}
+        <Text style={s.heading}>VTpass electricity Sandbox</Text>
+        <Text style={s.note}>This checks a documented TEST meter with the actual VTpass Sandbox API. It does not use your personal meter number, vend electricity or make a payment.</Text>
+        <View style={{flexDirection:'row', gap:9, marginTop:12}}>
+          {(['prepaid','postpaid'] as const).map(t => <TouchableOpacity key={t} onPress={()=>setMeterType(t)}
+            style={[s.soft,{flex:1,marginTop:0},meterType===t && {borderWidth:1,borderColor:H.purple}]}>
+            <Text style={s.softText}>{t==='prepaid'?'Prepaid test':'Postpaid test'}</Text>
+          </TouchableOpacity>)}
+        </View>
+        <TouchableOpacity disabled={checking || !vtpassAvailable}
+          style={[s.action,(!vtpassAvailable||checking) && {opacity:.45}]}
+          onPress={verifyVtpass}>
+          {checking ? <ActivityIndicator color="#fff" /> : <Text style={s.actionText}>Verify with VTpass Sandbox</Text>}
+          <Ionicons name="shield-checkmark-outline" size={20} color="#fff"/>
+        </TouchableOpacity>
+        {!vtpassAvailable && <Text style={s.note}>VTpass provider test is unavailable until authorized Sandbox credentials and tester access are confirmed.</Text>}
+        {!!vtpassMessage && <Text style={s.note}>{vtpassMessage}</Text>}
       </View>
     </ScrollView>
   </View>;

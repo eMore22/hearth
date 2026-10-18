@@ -5,6 +5,11 @@ returns personal financial data. Real linking requires further consent review.
 """
 import os
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from app.services.mono_connect_link import (
+    initiate, list_owned, account_preview, account_transactions, revoke,
+    MonoLinkError, config_ready,
+)
 from app.dependencies import get_current_user
 from app.services.mono_sandbox import list_institutions, sandbox_ready, MonoSandboxError
 
@@ -32,7 +37,7 @@ def capabilities(current_user: dict = Depends(get_current_user)):
     return {
         "country": "NG", "currency": "NGN", "sandbox": True,
         "discovery_available": allowed and sandbox_ready(),
-        "bank_linking_enabled": False,
+        "bank_linking_enabled": allowed and config_ready(),
         "account_sync_enabled": False,
         "payment_execution_enabled": False,
     }
@@ -47,3 +52,60 @@ async def institutions(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=503, detail="Mono Sandbox discovery unavailable") from None
     return {"institutions": rows, "sandbox": True, "country": "NG",
             "bank_linking_enabled": False}
+
+
+class StartLinkRequest(BaseModel):
+    consent_acknowledged: bool
+
+
+def _identity(user: dict) -> tuple[str, str]:
+    require_tester(user)
+    return str(user["id"]), str(user["household_id"])
+
+
+@router.post("/link")
+async def initiate_link(payload: StartLinkRequest, current_user: dict = Depends(get_current_user)):
+    user_id, household_id = _identity(current_user)
+    try:
+        return await initiate(user_id=user_id, household_id=household_id,
+                              email=str(current_user.get("email") or ""),
+                              name=str(current_user.get("full_name") or "Hearth Tester"),
+                              acknowledged=payload.consent_acknowledged)
+    except MonoLinkError:
+        raise HTTPException(status_code=503, detail="Mono Sandbox linking unavailable") from None
+
+
+@router.get("/connections")
+def connections(current_user: dict = Depends(get_current_user)):
+    user_id, household_id = _identity(current_user)
+    try:
+        return {"connections": list_owned(user_id, household_id), "sandbox": True}
+    except MonoLinkError:
+        raise HTTPException(status_code=503, detail="Sandbox connections unavailable") from None
+
+
+@router.get("/connections/{connection_id}/preview")
+async def preview(connection_id: str, current_user: dict = Depends(get_current_user)):
+    user_id, household_id = _identity(current_user)
+    try:
+        return await account_preview(user_id=user_id, household_id=household_id, connection_id=connection_id)
+    except MonoLinkError:
+        raise HTTPException(status_code=503, detail="Sandbox account preview unavailable") from None
+
+
+@router.get("/connections/{connection_id}/transactions")
+async def transactions(connection_id: str, current_user: dict = Depends(get_current_user)):
+    user_id, household_id = _identity(current_user)
+    try:
+        return await account_transactions(user_id=user_id, household_id=household_id, connection_id=connection_id)
+    except MonoLinkError:
+        raise HTTPException(status_code=503, detail="Sandbox transactions unavailable") from None
+
+
+@router.post("/connections/{connection_id}/disconnect")
+async def disconnect(connection_id: str, current_user: dict = Depends(get_current_user)):
+    user_id, household_id = _identity(current_user)
+    try:
+        return await revoke(user_id=user_id, household_id=household_id, connection_id=connection_id)
+    except MonoLinkError:
+        raise HTTPException(status_code=503, detail="Sandbox revocation requires retry") from None

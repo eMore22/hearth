@@ -19,6 +19,7 @@ from app.routers import (
     finance,
     utilities,
     nigeria_sandbox,
+    mono_webhooks,
 )
 
 app = FastAPI(
@@ -51,6 +52,7 @@ app.include_router(billing.router,        prefix="/api/billing",       tags=["Bi
 app.include_router(finance.router,        prefix="/api/finance",       tags=["Finance"])
 app.include_router(utilities.router,      prefix="/api/utilities",     tags=["Utilities"])
 app.include_router(nigeria_sandbox.router,prefix="/api/finance/sandbox/mono",tags=["NigeriaSandbox"])
+app.include_router(mono_webhooks.router, prefix="/api/webhooks", tags=["MonoSandboxWebhook"])
 
 
 @app.get("/")
