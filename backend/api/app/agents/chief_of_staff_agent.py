@@ -102,13 +102,43 @@ IMPORTANT RULES:
         if category == "bills" and any(w in msg for w in ("due", "upcoming", "what bills", "show bills")):
             if (context.get("source_status") or {}).get("bills") == "unavailable":
                 return "I couldn't check the bill records just now. Try again shortly."
-            bills = [b for b in (context.get("bills") or [])
-                     if b.get("is_active") is not False]
-            return ("Bills: " + "; ".join(
-                str(b.get("provider") or b.get("name") or "Bill")
-                + (f" due {b['next_due_date']}" if b.get("next_due_date") else " (due date not recorded)")
-                + (f", {b['currency']} {b['amount']}" if b.get("currency") and b.get("amount") is not None else "")
-                for b in bills[:12])) if bills else "I don't see any active bills in your household overview."
+            bills = [bill for bill in (context.get("bills") or [])
+                     if bill.get("is_active") is not False]
+            if not bills:
+                return "I don't see any active bills in your household overview."
+
+            from decimal import Decimal, InvalidOperation
+            household_currency = str((context.get("household") or {}).get("currency") or "").upper()
+            mismatched = set()
+            def describe(bill: dict) -> str:
+                title = str(bill.get("name") or bill.get("provider") or "Bill")
+                saved_currency = str(bill.get("currency") or "").upper()
+                if saved_currency and household_currency and saved_currency != household_currency:
+                    mismatched.add(saved_currency)
+                amount = bill.get("amount")
+                if amount is None:
+                    price = "amount not recorded"
+                else:
+                    try:
+                        value = Decimal(str(amount))
+                        price = (saved_currency + " " if saved_currency else "currency not recorded: ") + format(value, ",.2f")
+                    except (InvalidOperation, ValueError):
+                        price = "amount could not be read"
+                when = str(bill.get("next_due_date") or "")
+                return f"{title}: {price}, " + (f"due {when[:10]}" if when else "due date not recorded")
+
+            dated = sorted((bill for bill in bills if bill.get("next_due_date")),
+                           key=lambda bill: str(bill["next_due_date"]))
+            undated = [bill for bill in bills if not bill.get("next_due_date")]
+            lines = [describe(bill) for bill in (dated + undated)[:12]]
+            intro = ("Here are your saved bills, with recorded due dates first. "
+                     if dated else
+                     "I can't tell which bills are due soon because none has a due date recorded. ")
+            note = (f" Check your saved bill currencies: some are {', '.join(sorted(mismatched))}, "
+                    f"but your household currency is {household_currency}. "
+                    "I have not converted or changed these amounts."
+                    if mismatched else "")
+            return intro + "; ".join(lines) + "." + note
         if category == "grocery" and any(w in msg for w in ("inventory", "pantry", "what groceries", "shopping list")):
             sources = context.get("source_status") or {}
             if sources.get("inventory") == "unavailable" and sources.get("legacy_inventory") == "unavailable":
@@ -126,21 +156,52 @@ IMPORTANT RULES:
             tasks = context.get("household_tasks") or []
             return ("Household tasks: " + "; ".join(str(t.get("title", "Task")) for t in tasks[:12])
                     if tasks else "I don't see any household tasks in your current overview.")
-        if any(w in msg for w in ("integrations", "integration status", "what is connected", "connected services")):
+        if category != "smart_home" and any(w in msg for w in ("integrations", "integration status", "what is connected", "connected services")):
             integrations = context.get("integrations") or []
             return ("Integrations: " + "; ".join(
                 f"{item.get('name')}: {'configured (not live-verified)' if item.get('connected') else 'not configured'}"
                 + (f", last sync {item['last_sync_at']}" if item.get("last_sync_at") else "")
                 for item in integrations)) if integrations else "Integration status is not available."
-        if category == "smart_home" and any(w in msg for w in ("status", "devices", "what is on", "connected")):
-            if (context.get("source_status") or {}).get("ha_devices") == "unavailable":
-                return "I couldn't read Home Assistant device states just now. Try again shortly."
+        if category == "smart_home" and any(
+            w in msg for w in ("status", "devices", "what is on", "connected", "last known", "state of")
+        ):
+            sources = context.get("source_status") or {}
+            if sources.get("ha_devices") == "unavailable":
+                return "I couldn't check saved Home Assistant states just now. Try again shortly."
             devices = context.get("ha_devices") or []
-            return ("Device status: " + "; ".join(
-                f"{d.get('friendly_name', 'Device')}: last known {d.get('last_state', 'unknown')}"
-                + (f" at {d['last_state_at']}" if d.get("last_state_at") else "")
-                for d in devices[:12])
-                    if devices else "No device states are loaded in your current overview.")
+            conn = next((item for item in (context.get("integrations") or [])
+                         if item.get("name") == "Home Assistant"), None)
+            if not conn or not conn.get("connected"):
+                return "Home Assistant isn't configured for this household."
+            from datetime import datetime
+            def readable_date(value) -> str:
+                if not value:
+                    return "unknown date"
+                try:
+                    return datetime.fromisoformat(str(value).replace("Z", "+00:00")).strftime("%d %b %Y")
+                except (ValueError, TypeError):
+                    return str(value)[:10]
+            live = bool(context.get("ha_live_verified_at"))
+            status = ("Home Assistant device states were checked live. " if live
+                      else "Home Assistant is configured, but a live connection is not verified. ")
+            if not live:
+                status += ("Last successful sync: " + readable_date(conn.get("last_sync_at")) +
+                           ". These are saved observations, not current physical-device states. ")
+            if not devices:
+                return status + "No device states are stored."
+            named = [device for device in devices
+                     if str(device.get("friendly_name") or "").strip()
+                     and str(device.get("friendly_name")).casefold() in msg.casefold()]
+            chosen = named if named else devices[:8]
+            rows = [
+                (str(device.get("friendly_name") or "Device") + ": "
+                 + ("" if live else "last known ")
+                 + str(device.get("last_state") or "unknown")
+                 + (f" (observed {readable_date(device.get('last_state_at'))})"
+                    if device.get("last_state_at") and not live else ""))
+                for device in chosen
+            ]
+            return status + "; ".join(rows) + "."
         return None
 
     async def _classify_intent(self, message: str) -> str:
