@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useBillStore } from '../../src/stores/billStore';
+import { useBillStore, Bill } from '../../src/stores/billStore';
 import { useHouseholdStore } from '../../src/stores/householdStore';
 import { getCurrencySymbol } from '../../src/utils/currency';
 import { H, HearthDesign } from '../../src/theme/hearthDesign';
@@ -41,11 +41,13 @@ const metaFor = (category = '', provider = '') => {
 
 export default function BillsScreen() {
   const insets = useSafeAreaInsets();
-  const { bills, monthlyReport, unusedSubscriptions, fetchBills, fetchMonthlyReport, createBill, deleteBill, detectUnused, generateNegotiationScript } = useBillStore();
+  const { bills, monthlyReport, unusedSubscriptions, fetchBills, fetchMonthlyReport, createBill, updateBill, deleteBill, detectUnused, generateNegotiationScript } = useBillStore();
   const household = useHouseholdStore(s => s.household);
   const fetchHousehold = useHouseholdStore(s => s.fetchHousehold);
   const [filter, setFilter] = useState('All');
   const [showAdd, setShowAdd] = useState(false);
+  const [editingBill, setEditingBill] = useState<Bill | null>(null);
+  const [billCurrency, setBillCurrency] = useState('NGN');
   const [provider, setProvider] = useState('');
   const [amount, setAmount] = useState('');
   const [nextDueDate, setNextDueDate] = useState('');
@@ -68,6 +70,24 @@ export default function BillsScreen() {
     .filter(b => b.next_due_date && /^\d{4}-\d{2}-\d{2}$/.test(b.next_due_date))
     .sort((a, b) => String(a.next_due_date).localeCompare(String(b.next_due_date)))[0], [bills]);
 
+  const openCreate = () => {
+    setEditingBill(null);
+    setProvider(''); setAmount(''); setNextDueDate('');
+    setBillingCycle('monthly');
+    setBillCurrency((household?.currency || 'NGN').toUpperCase());
+    setShowAdd(true);
+  };
+
+  const openEdit = (bill: Bill) => {
+    setEditingBill(bill);
+    setProvider(bill.provider || '');
+    setAmount(String(bill.amount ?? ''));
+    setNextDueDate(bill.next_due_date || '');
+    setBillingCycle(bill.billing_cycle || 'monthly');
+    setBillCurrency(String(bill.currency || household?.currency || 'NGN').toUpperCase());
+    setShowAdd(true);
+  };
+
   const add = async () => {
     if (!provider.trim() || !amount.trim()) {
       Alert.alert('Missing details', 'Add a provider and amount.');
@@ -84,15 +104,30 @@ export default function BillsScreen() {
       Alert.alert('Check payment date', 'Enter the next due date as YYYY-MM-DD.');
       return;
     }
+    const requestedCurrency = billCurrency.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(requestedCurrency)) {
+      Alert.alert('Invalid currency', 'Enter a three-letter code such as NGN, USD or CAD.');
+      return;
+    }
     Keyboard.dismiss();
     setSaving(true);
     try {
-      await createBill({ provider: provider.trim(), amount: n, billing_cycle: billingCycle,
-        next_due_date: enteredDue || undefined, category: 'utility' });
+      if (editingBill) {
+        await updateBill(editingBill.id, {
+          provider: provider.trim(), amount: n, currency: requestedCurrency,
+          billing_cycle: billingCycle, next_due_date: enteredDue || null,
+        });
+      } else {
+        await createBill({
+          provider: provider.trim(), amount: n, currency: requestedCurrency,
+          billing_cycle: billingCycle, next_due_date: enteredDue || undefined, category: 'utility',
+        });
+      }
       await fetchMonthlyReport().catch(() => undefined);
-      setProvider(''); setAmount(''); setNextDueDate(''); setBillingCycle('monthly'); setShowAdd(false);
+      setProvider(''); setAmount(''); setNextDueDate(''); setEditingBill(null);
+      setBillingCycle('monthly'); setShowAdd(false);
     } catch (e: any) {
-      Alert.alert('Could not add bill', e?.message || 'Please try again.');
+      Alert.alert(editingBill ? 'Could not update bill' : 'Could not add bill', e?.message || 'Please try again.');
     } finally { setSaving(false); }
   };
 
@@ -116,7 +151,7 @@ export default function BillsScreen() {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 36 }}>
-        <ScreenHeader title="Bills & Subscriptions" subtitle="Track and never miss a payment." right={<TouchableOpacity style={styles.plus} onPress={() => setShowAdd(true)}><Ionicons name="add" size={22} color={H.navy} /></TouchableOpacity>} />
+        <ScreenHeader title="Bills & Subscriptions" subtitle="Track and never miss a payment." right={<TouchableOpacity style={styles.plus} onPress={openCreate}><Ionicons name="add" size={22} color={H.navy} /></TouchableOpacity>} />
         <View style={styles.body}>
           <View style={styles.summaryRow}>
             <View style={styles.summaryCard}>
@@ -148,11 +183,11 @@ export default function BillsScreen() {
           {upcoming && (
             <View style={styles.upcomingCard}>
               <IconBadge icon="flash-outline" bg={H.violetBg} color={H.violet} size={48} />
-              <View style={styles.flex}><Text style={styles.eyebrow}>NEXT TRACKED PAYMENT</Text><Text style={styles.upcomingTitle}>{upcoming.provider}</Text><Text style={styles.upcomingSub}>Due {upcoming.next_due_date} · {currency}{Number(upcoming.amount || 0).toLocaleString()}</Text></View>
+              <View style={styles.flex}><Text style={styles.eyebrow}>NEXT TRACKED PAYMENT</Text><Text style={styles.upcomingTitle}>{upcoming.provider}</Text><Text style={styles.upcomingSub}>Due {upcoming.next_due_date} · {String(upcoming.currency || '?')} {Number(upcoming.amount || 0).toLocaleString()}</Text></View>
             </View>
           )}
 
-          <View style={styles.sectionHead}><Text style={styles.sectionTitle}>All bills</Text><TouchableOpacity style={styles.plus} onPress={() => setShowAdd(true)}><Ionicons name="add" size={22} color={H.navy} /></TouchableOpacity></View>
+          <View style={styles.sectionHead}><Text style={styles.sectionTitle}>All bills</Text><TouchableOpacity style={styles.plus} onPress={openCreate}><Ionicons name="add" size={22} color={H.navy} /></TouchableOpacity></View>
 
           {visible.length === 0 ? <EmptyMessage icon="card-outline" title="No bills yet" subtitle="Add recurring bills and subscriptions so Hearth HQ can keep an eye on them." /> : visible.map(bill => {
             const m = metaFor(bill.category, bill.provider);
@@ -161,9 +196,10 @@ export default function BillsScreen() {
                 <IconBadge icon={m.icon} bg={m.bg} color={m.fg} size={44} />
                 <View style={styles.flex}>
                   <Text style={styles.rowTitle}>{bill.provider}</Text>
-                  <Text style={styles.rowMeta}>{currency}{Number(bill.amount || 0).toLocaleString()} · {bill.billing_cycle}{bill.next_due_date ? ` · Due ${bill.next_due_date}` : ''}</Text>
+                  <Text style={styles.rowMeta}>{String(bill.currency || '?')} {Number(bill.amount || 0).toLocaleString()} · {bill.billing_cycle}{bill.next_due_date ? ` · Due ${bill.next_due_date}` : ''}</Text>
                 </View>
                 <View style={[styles.status, { backgroundColor: categoryFor(bill.category, bill.provider) === 'Subscriptions' ? H.greenBg : '#F0EBFF' }]}><Text style={[styles.statusText, { color: categoryFor(bill.category, bill.provider) === 'Subscriptions' ? H.green : H.purple }]}>Active</Text></View>
+                <TouchableOpacity onPress={() => openEdit(bill)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Edit ${bill.provider} bill`}><Ionicons name="create-outline" size={19} color={H.purple} /></TouchableOpacity>
                 <TouchableOpacity onPress={() => removeBill(bill)} hitSlop={8}><Ionicons name="trash-outline" size={18} color={H.red} /></TouchableOpacity>
               </View>
             );
@@ -179,10 +215,11 @@ export default function BillsScreen() {
         <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowAdd(false)} />
           <View style={[styles.modalCard, { marginBottom: Math.max(insets.bottom, 18) + 20 }]}>
-            <Text style={styles.modalTitle}>Add a bill</Text>
-            <Text style={styles.modalSub}>Hearth HQ will add it to your household overview.</Text>
+            <Text style={styles.modalTitle}>{editingBill ? 'Edit bill' : 'Add a bill'}</Text>
+            <Text style={styles.modalSub}>{editingBill ? 'Update saved amount, currency or due date. Values will not be converted.' : 'Save a recurring household obligation.'}</Text>
             <TextInput value={provider} onChangeText={setProvider} placeholder="Provider" placeholderTextColor={H.muted2} style={styles.input} />
             <TextInput value={amount} onChangeText={setAmount} placeholder="Amount" placeholderTextColor={H.muted2} keyboardType="decimal-pad" style={styles.input} />
+            <TextInput value={billCurrency} onChangeText={setBillCurrency} placeholder="Currency (NGN, USD, CAD)" autoCapitalize="characters" maxLength={3} placeholderTextColor={H.muted2} style={styles.input} />
             <TextInput value={nextDueDate} onChangeText={setNextDueDate} placeholder="Next due date (YYYY-MM-DD), optional" placeholderTextColor={H.muted2} style={styles.input} />
             <Text style={{ color: H.muted, fontSize: 12, fontWeight: '700', marginBottom: 8 }}>Repeat every</Text>
             <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
@@ -193,7 +230,7 @@ export default function BillsScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            <TouchableOpacity style={[styles.save, saving && { opacity: 0.6 }]} onPress={add} disabled={saving}><Text style={styles.saveText}>{saving ? 'Adding…' : 'Add bill'}</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.save, saving && { opacity: 0.6 }]} onPress={add} disabled={saving}><Text style={styles.saveText}>{saving ? 'Saving…' : editingBill ? 'Save bill changes' : 'Add bill'}</Text></TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </Modal>
