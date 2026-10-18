@@ -66,25 +66,22 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
         conversation_history=prior,
     )
 
-    # ── Device command execution ──
-    # If the agent detected a device command intent (e.g. "close the garage
-    # door"), it returns a `device_command` field on the result instead of
-    # just talking about it. Execute it here, where we have household_id
-    # and HA bridge access, then fold the outcome into the reply.
-    device_command = result.get("device_command")
-    if device_command and household_id:
-        result["action_result"] = await _execute_device_command(
-            household_id=household_id,
-            entity_id=device_command.get("entity_id"),
-            action=device_command.get("action"),
-            supabase=get_supabase_admin(),
+    # ── Device action confirmation boundary ──
+    # Text chat is a *shared* household conversation. Never let a model
+    # generated text response directly unlock a door, move a valve or
+    # actuate equipment. A deliberate user tap in Devices, with current
+    # authorization and live HA checks, is required for physical actions.
+    device_command = result.pop("device_command", None)
+    if device_command:
+        result["message"] = (
+            "I understood your device request, but I haven't changed the "
+            "device state. Open Devices and confirm the action using the "
+            "device's controls. Check Home Assistant's live state afterward."
         )
-        if result["action_result"].get("status") == "confirmed":
-            result["message"] = "Home Assistant confirmed the device's new state."
-        elif result["action_result"].get("status") == "sent":
-            result["message"] = "Command sent, but the device did not confirm the change. Check the device state."
-        else:
-            result["message"] = "I could not complete that device command. Please check your Home Assistant connection."
+        result["device_confirmation_required"] = True
+        result["actions_taken"] = []
+        result["action_result"] = {"status": "requires_confirmation"}
+        # No device control is attempted in this chat request.
 
     # ── Logging for traction measurement ──
     # Two different tables, two different purposes:
