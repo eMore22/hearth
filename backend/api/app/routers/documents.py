@@ -153,10 +153,13 @@ async def ask_question(
         raise HTTPException(status_code=400, detail="No household found")
     supabase = get_supabase_admin()
     try:
-        docs = supabase.table("documents").select("*").eq("household_id", household_id).execute()
-        docs_data = docs.data or []
+        query = (supabase.table("documents")
+                 .select("title,document_type,issuer,holder_name,expiry_date,summary,uploaded_by,visibility")
+                 .eq("household_id", household_id).limit(150).execute())
+        docs_data = [d for d in (query.data or [])
+                     if document_visible(d, str(user["id"]))][:60]
     except Exception:
-        docs_data = []
+        raise HTTPException(status_code=503, detail="Document records unavailable") from None
     agent = DocumentAgent(household_id=household_id, user_id=user["id"])
     answer = agent.answer_question(payload.question, docs_data)
     return {"question": payload.question, "answer": answer}
@@ -172,14 +175,15 @@ async def get_expiring_documents(
         return []
     supabase = get_supabase_admin()
     try:
-        docs = supabase.table("documents")\
-            .select("*")\
-            .eq("household_id", household_id)\
-            .not_.is_("expiry_date", "null")\
-            .execute()
-        docs_data = docs.data or []
+        query = (supabase.table("documents")
+                 .select("id,title,document_type,expiry_date,uploaded_by,visibility")
+                 .eq("household_id", household_id)
+                 .not_.is_("expiry_date", "null")
+                 .limit(150).execute())
+        docs_data = [d for d in (query.data or [])
+                     if document_visible(d, str(user["id"]))][:100]
     except Exception:
-        return []
+        raise HTTPException(status_code=503, detail="Document expiry records unavailable") from None
     agent = DocumentAgent(household_id=household_id, user_id=user["id"])
     return agent.check_expiries(docs_data)
 
