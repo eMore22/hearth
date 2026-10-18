@@ -59,9 +59,14 @@ export default function SubscriptionScreen() {
     const success = await purchase(pkg);
 
     if (success) {
+      const state = useBillingStore.getState();
+      const verified = state.serverVerified &&
+        (state.serverTier === 'home' || state.serverTier === 'family');
       Alert.alert(
-        'Subscription active',
-        `${planName} is now active on your Hearth HQ account.`,
+        verified ? 'Subscription verified' : 'Purchase completed in Google Play',
+        verified
+          ? `${planName} access has been verified by Hearth HQ.`
+          : 'Google Play returned a completed purchase, but Hearth has not verified premium access yet. Please refresh or restore purchases shortly.',
       );
     }
   };
