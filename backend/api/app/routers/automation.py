@@ -268,36 +268,48 @@ async def connect_ha(
 
 @router.get("/status")
 async def get_ha_status(current_user: dict = Depends(get_current_user)):
+    """Distinguish a configured HA connection from one verified online now.
+
+    Keeping cached devices is useful when a test tunnel or real HA server is
+    offline, but the UI must not call old states live or offer stale controls.
+    A bounded ping prevents a dead remote endpoint blocking the dashboard.
+    """
     household_id = current_user.get("household_id")
     if not household_id:
-        return {"connected": False}
+        return {"connected": False, "reachable": False}
 
     supabase = get_supabase_admin()
     try:
-        conn = supabase.table("ha_connections")\
-            .select("*")\
-            .eq("household_id", household_id)\
-            .eq("is_active", True)\
-            .maybe_single()\
-            .execute()
-
+        conn = (supabase.table("ha_connections")
+                .select("ha_instance_url,ha_access_token,ha_connected_at,last_sync_at")
+                .eq("household_id", household_id).eq("is_active", True)
+                .maybe_single().execute())
         if not conn or not conn.data:
-            return {"connected": False}
+            return {"connected": False, "reachable": False}
 
-        device_count_res = supabase.table("ha_devices")\
-            .select("id", count="exact")\
-            .eq("household_id", household_id)\
-            .execute()
+        device_count_res = (supabase.table("ha_devices")
+                            .select("id", count="exact")
+                            .eq("household_id", household_id).execute())
+
+        reachable = False
+        try:
+            bridge = build_ha_bridge(conn.data["ha_instance_url"],
+                                     conn.data["ha_access_token"])
+            reachable = bool(await asyncio.wait_for(bridge.ping(), timeout=3.0))
+        except Exception:
+            # An unreachable/expired test tunnel must never be shown as live.
+            reachable = False
 
         return {
-            "connected":       True,
+            "connected": True,  # A connection is saved, not necessarily online.
+            "reachable": reachable,
             "ha_instance_url": conn.data["ha_instance_url"],
             "ha_connected_at": conn.data["ha_connected_at"],
-            "last_sync_at":    conn.data.get("last_sync_at"),
-            "device_count":    device_count_res.count or 0,
+            "last_sync_at": conn.data.get("last_sync_at"),
+            "device_count": device_count_res.count or 0,
         }
     except Exception:
-        return {"connected": False}
+        return {"connected": False, "reachable": False}
 
 
 @router.delete("/disconnect")
