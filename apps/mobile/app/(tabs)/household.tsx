@@ -11,6 +11,7 @@ import { useHealthStore } from '../../src/stores/healthStore';
 import { useHouseholdStore } from '../../src/stores/householdStore';
 import { getCurrencySymbol } from '../../src/utils/currency';
 import { H, HearthDesign } from '../../src/theme/hearthDesign';
+import SharedHouseholdCard from '../../src/components/household/SharedHouseholdCard';
 
 const moduleMeta = [
   { key: 'documents', title: 'Documents', icon: 'document-text-outline' as const, route: '/(tabs)/documents', bg: H.blueBg, fg: H.blue },
@@ -79,6 +80,8 @@ export default function HouseholdScreen() {
             <Text style={styles.statusSub}>Hearth HQ is monitoring your documents, home, bills, food and health.</Text>
           </View>
         </View>
+
+        <SharedHouseholdCard />
 
         <Text style={styles.sectionTitle}>Manage your household</Text>
         <View style={styles.grid}>

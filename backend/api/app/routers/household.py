@@ -143,6 +143,13 @@ async def update_household(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/connected-snapshot")
+async def connected_snapshot(user=Depends(get_current_user)):
+    """Shared household operational view, no private bank/medical/doc data."""
+    from app.services.connected_snapshot import shared_household_snapshot
+    return shared_household_snapshot(user)
+
+
 @router.get("/members")
 async def get_members(
     user=Depends(get_current_user),
