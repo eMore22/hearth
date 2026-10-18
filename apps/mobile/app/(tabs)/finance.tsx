@@ -48,8 +48,8 @@ export default function HouseholdFinance() {
       <Text style={styles.subtitle}>Your recorded bills and subscriptions, in one place.</Text>
 
       <View style={styles.card}>
-        <View style={styles.status}><Ionicons name="lock-closed-outline" size={17} color={H.muted} /><Text style={styles.statusTitle}>Bank accounts are not connected</Text></View>
-        <Text style={styles.body}>Hearth does not have access to your bank balance or transactions. Secure, consent-based read-only bank syncing is being prepared. You will always choose whether to connect a bank.</Text>
+        <View style={styles.status}><Ionicons name="lock-closed-outline" size={17} color={H.muted} /><Text style={styles.statusTitle}>Real bank connections are not enabled</Text></View>
+        <Text style={styles.body}>Hearth cannot access real bank accounts or move money. During internal testing, you can optionally connect a simulated Canadian bank below. Its accounts and transactions are test data only.</Text>
       </View>
 
       <PlaidSandboxPreview />
