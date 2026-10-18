@@ -142,6 +142,38 @@ async def access_document(document_id: uuid.UUID,
         raise HTTPException(status_code=503, detail="Secure document link unavailable") from None
 
 
+class ShareDocumentRequest(BaseModel):
+    visibility: str
+
+
+@router.patch("/{document_id}/visibility")
+async def change_visibility(document_id: uuid.UUID, payload: ShareDocumentRequest,
+                            user=Depends(get_current_user),
+                            _=Depends(require_module("documents"))):
+    if payload.visibility not in ("private", "household"):
+        raise HTTPException(status_code=422, detail="Select private or household")
+    household_id = get_household_id(user)
+    if not household_id:
+        raise HTTPException(status_code=403, detail="Household membership required")
+    db = get_supabase_admin()
+    try:
+        record = (db.table("documents").select("id,uploaded_by")
+                  .eq("id", str(document_id)).eq("household_id", household_id)
+                  .maybe_single().execute().data)
+        if not record or not document_mutable(record, str(user["id"])):
+            raise HTTPException(status_code=404, detail="Document not found")
+        result = (db.table("documents").update({"visibility": payload.visibility})
+                  .eq("id", str(document_id)).eq("household_id", household_id)
+                  .eq("uploaded_by", str(user["id"])).execute())
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return {"id": str(document_id), "visibility": payload.visibility}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="Document sharing could not be updated") from None
+
+
 @router.post("/ask", dependencies=[Depends(require_tier("home"))])
 async def ask_question(
     payload: AskDocumentQuestion,
