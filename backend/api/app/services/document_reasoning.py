@@ -65,9 +65,22 @@ def document_reply(question: str, context: dict) -> str:
         return "Holders in saved document metadata: " + "; ".join(names) + "."
 
     if any(w in msg for w in ("cover", "coverage", "claim", "terms", "eligible")):
-        return ("Hearth has " + str(len(selected)) + " matching saved document(s), but saved "
-                "metadata cannot confirm coverage or eligibility. Open the original policy "
-                "and verify its exclusions or contact the issuer.")
+        message = ("Hearth has " + str(len(selected)) + " matching saved document(s), but saved "
+                   "metadata cannot confirm coverage or eligibility. Open the original policy "
+                   "and verify its exclusions or contact the issuer.")
+        # Share only grounded *household* context. A sensor event is not
+        # proof of damage, a bill, or insurance eligibility.
+        if any(w in msg for w in ("leak", "water damage", "flood", "repair")):
+            alerts = context.get("smart_home_alerts") or []
+            maintenance = [t for t in (context.get("tasks") or [])
+                           if t.get("is_active", True)]
+            if alerts:
+                message += f" There are {len(alerts)} recorded recent smart-home alert(s) to review; no live device state is implied."
+            if maintenance:
+                names = ", ".join(str(t.get("title") or "Maintenance")[:60]
+                                  for t in maintenance[:3])
+                message += " Saved maintenance tasks to review: " + names + "."
+        return message
 
     if any(w in msg for w in ("soon", "renew", "urgent", "next 30", "overdue", "expired")):
         imminent = [text for delta, text in timeline if delta <= 90]
