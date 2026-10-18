@@ -85,6 +85,7 @@ export const documentService = {
 export const billService = {
   list: () => api.get('/api/bills/'),
   create: (data: any) => api.post('/api/bills/', data),
+  update: (id: string, data: any) => api.patch(`/api/bills/${id}`, data),
   delete: (id: string) => api.delete(`/api/bills/${id}`),
   analyze: (billData: any) => api.post('/api/bills/analyze', billData),
   detectUnused: (bills: any[]) => api.post('/api/bills/detect-unused', { bills }),

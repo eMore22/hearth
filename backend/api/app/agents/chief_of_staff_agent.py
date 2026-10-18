@@ -119,8 +119,17 @@ IMPORTANT RULES:
                          str(row["amount"])) if row.get("amount") is not None else "amount not recorded"
                 due = str(row.get("next_due_date") or "due date not recorded")
                 lines.append(f"{row.get('name') or 'Utility'}: {money}, {due}")
+            household_currency = str(overview.get("household_currency") or "").upper()
+            other_currencies = {str(row.get("currency") or "").upper()
+                                for row in matching if row.get("currency")
+                                and str(row.get("currency")).upper() != household_currency}
+            mismatch_note = (" Some recorded utility amounts use " +
+                             ", ".join(sorted(other_currencies)) +
+                             " instead of household currency " + household_currency +
+                             ". Check the saved bill settings; no conversion was made."
+                             if household_currency and other_currencies else "")
             return ("These are manually recorded utility bills, not provider-verified balances "
-                    "or confirmed payments: " + "; ".join(lines) + ".")
+                    "or confirmed payments: " + "; ".join(lines) + "." + mismatch_note)
         if category == "bills" and any(w in msg for w in ("due", "upcoming", "what bills", "show bills")):
             if (context.get("source_status") or {}).get("bills") == "unavailable":
                 return "I couldn't check the bill records just now. Try again shortly."
