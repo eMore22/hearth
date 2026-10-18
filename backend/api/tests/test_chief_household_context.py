@@ -89,8 +89,47 @@ class ChiefContextTests(unittest.TestCase):
                      "currency": "NGN", "amount": 2500, "is_active": False},
                 ],
             })
-        self.assertIn("Electricity due 2026-10-25, NGN 8000", answer)
+        self.assertIn("Electricity: NGN 8,000.00, due 2026-10-25", answer)
         self.assertNotIn("Cancelled plan", answer)
+
+    def test_missing_bill_due_dates_do_not_imply_upcoming(self):
+        with patch("app.agents.base_agent.get_ai_gateway"):
+            agent = ChiefOfStaffAgent("mine", "user")
+            answer = agent._deterministic_reply("Which bills are due soon and how much?", "bills", {
+                "household": {"currency": "NGN"},
+                "source_status": {"bills": "available"},
+                "bills": [
+                    {"name": "Power", "amount": 8000, "currency": "USD",
+                     "is_active": True, "next_due_date": None},
+                ],
+            })
+        self.assertIn("can't tell which bills are due soon", answer)
+        self.assertIn("Power: USD 8,000.00, due date not recorded", answer)
+        self.assertIn("household currency is NGN", answer)
+        self.assertIn("not converted", answer)
+
+    def test_targeted_water_valve_reports_stale_reading_without_other_devices(self):
+        with patch("app.agents.base_agent.get_ai_gateway"):
+            agent = ChiefOfStaffAgent("mine", "user")
+            context = {
+                "source_status": {"ha_devices": "available"},
+                "integrations": [{"name": "Home Assistant", "connected": True,
+                                  "last_sync_at": "2026-10-01T23:15:11+00:00"}],
+                "ha_devices": [
+                    {"friendly_name": "Main Water Valve", "last_state": "off",
+                     "last_state_at": "2026-10-01T23:05:12+00:00"},
+                    {"friendly_name": "Front Door", "last_state": "locked",
+                     "last_state_at": "2026-10-01T22:41:13+00:00"},
+                ],
+            }
+            answer = agent._deterministic_reply(
+                "What is connected to my household and what's the last known state of the Main Water Valve?",
+                "smart_home", context)
+        self.assertIn("live connection is not verified", answer)
+        self.assertIn("Main Water Valve: last known off", answer)
+        self.assertIn("01 Oct 2026", answer)
+        self.assertNotIn("Front Door", answer)
+        self.assertNotIn("T23:", answer)
 
     def test_chief_grocery_source_status_is_not_mistaken_for_empty(self):
         with patch("app.agents.base_agent.get_ai_gateway"):
