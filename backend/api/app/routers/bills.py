@@ -88,6 +88,77 @@ async def create_bill(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+class UpdateBillRequest(BaseModel):
+    provider: Optional[str] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    next_due_date: Optional[str] = None
+    billing_cycle: Optional[str] = None
+
+
+@router.patch("/{bill_id}")
+async def update_bill(
+    bill_id: str,
+    payload: UpdateBillRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Edit a household bill without deleting historical references.
+
+    Only explicitly submitted fields change. In particular, saved currency
+    is never silently converted into the household's default currency.
+    """
+    from datetime import date
+    from math import isfinite
+    from uuid import UUID
+    try:
+        UUID(bill_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid bill ID")
+    household_id = current_user.get("household_id")
+    if not household_id:
+        raise HTTPException(status_code=403, detail="Household membership required")
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="No changes supplied")
+    if "provider" in changes:
+        name = str(changes["provider"] or "").strip()
+        if not (1 <= len(name) <= 120):
+            raise HTTPException(status_code=422, detail="Provider name required")
+        changes["provider"] = name
+        changes["name"] = name
+    if "amount" in changes:
+        amount = changes["amount"]
+        if amount is None or not isfinite(amount) or not 0 <= amount <= 1e12:
+            raise HTTPException(status_code=422, detail="Invalid amount")
+    if "currency" in changes:
+        code = str(changes["currency"] or "").strip().upper()
+        if len(code) != 3 or not code.isalpha() or not code.isascii():
+            raise HTTPException(status_code=422, detail="Use a three-letter currency code")
+        changes["currency"] = code
+    if "billing_cycle" in changes:
+        if changes["billing_cycle"] not in ("weekly", "monthly", "quarterly", "yearly"):
+            raise HTTPException(status_code=422, detail="Unsupported billing cycle")
+    if "next_due_date" in changes and changes["next_due_date"] is not None:
+        try:
+            raw = changes["next_due_date"]
+            if len(raw) != 10 or date.fromisoformat(raw).isoformat() != raw:
+                raise ValueError("invalid")
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="Use YYYY-MM-DD for due date")
+    try:
+        db = get_supabase_admin()
+        result = (db.table("bills").update(changes)
+                  .eq("id", bill_id).eq("household_id", household_id)
+                  .eq("is_active", True).execute())
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Active bill not found")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="Could not update household bill") from None
+
+
 @router.delete("/{bill_id}")
 async def delete_bill(
     bill_id: str,
