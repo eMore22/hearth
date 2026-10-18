@@ -26,6 +26,10 @@ export default function DevicesScreen() {
   useEffect(() => { load(); }, []);
 
   const handleToggle = async (device: HADevice) => {
+    if (status.reachable !== true) {
+      Alert.alert('Home Assistant offline', 'The saved device state is not live. Reconnect a reachable Home Assistant server before controlling devices.');
+      return;
+    }
     const action = isOnState(device.last_state) ? 'turn_off' : 'turn_on';
     setActionLoading(device.entity_id);
     try { await executeAction(device.entity_id, action); }
@@ -40,7 +44,7 @@ export default function DevicesScreen() {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={H.paper} />
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={H.purple} />} contentContainerStyle={{ paddingTop: Math.max(insets.top, 10), paddingBottom: 42 }} showsVerticalScrollIndicator={false}>
-        <ScreenHeader title="Smart home" subtitle="Devices connected through Home Assistant." />
+        <ScreenHeader title="Smart home" subtitle="Devices and last-known states from Home Assistant." />
         <View style={styles.body}>
           {!status.connected ? (
             <View style={styles.emptyCard}>
@@ -51,12 +55,19 @@ export default function DevicesScreen() {
             </View>
           ) : (
             <>
-              <View style={styles.statusCard}><View style={styles.statusIcon}><Ionicons name="checkmark-circle" size={22} color={H.green} /></View><View style={styles.flex}><Text style={styles.statusTitle}>Home Assistant connected</Text><Text style={styles.statusSub}>{devices.length} devices synced</Text></View><TouchableOpacity onPress={() => router.push('/(tabs)/integrations')}><Text style={styles.manage}>Manage</Text></TouchableOpacity></View>
+              <View style={[styles.statusCard, status.reachable !== true && { backgroundColor: H.amberBg, borderColor: '#F0DDAF' }]}>
+                <View style={styles.statusIcon}><Ionicons name={status.reachable === true ? 'checkmark-circle' : 'alert-circle-outline'} size={22} color={status.reachable === true ? H.green : H.amber} /></View>
+                <View style={styles.flex}><Text style={styles.statusTitle}>{status.reachable === true ? 'Home Assistant online' : 'Home Assistant offline'}</Text>
+                  <Text style={styles.statusSub}>{status.reachable === true ? `${devices.length} devices synced` : `${devices.length} cached devices · last sync ${status.last_sync_at?.slice(0, 10) || 'unknown'}`}</Text>
+                  {status.reachable !== true && <Text style={styles.statusSub}>Saved states may be outdated. Controls are disabled.</Text>}
+                </View>
+                <TouchableOpacity onPress={() => router.push('/(tabs)/integrations')}><Text style={styles.manage}>Manage</Text></TouchableOpacity>
+              </View>
               <View style={styles.filterRow}>{(['all','actionable','sensors'] as const).map(f => <TouchableOpacity key={f} style={[styles.filter, filter === f && styles.filterActive]} onPress={() => setFilter(f)}><Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f === 'all' ? 'All' : f === 'actionable' ? 'Controllable' : 'Sensors'}</Text></TouchableOpacity>)}</View>
               {Object.keys(grouped).length === 0 ? <Text style={styles.noResults}>No devices in this filter.</Text> : Object.entries(grouped).map(([area, areaDevices]) => (
                 <View key={area} style={styles.section}><Text style={styles.sectionTitle}>{area}</Text>{areaDevices.map(device => {
                   const c = cfg(device.domain); const on = isOnState(device.last_state);
-                  return <View key={device.entity_id} style={styles.deviceCard}><View style={[styles.deviceIcon, { backgroundColor: on ? H.greenBg : '#F4F3F3' }]}><Ionicons name={c.icon} size={20} color={on ? H.green : H.muted} /></View><View style={styles.flex}><Text style={styles.deviceName} numberOfLines={1}>{device.friendly_name}</Text><Text style={styles.deviceMeta}>{c.label} · {device.last_state || 'unknown'}</Text></View>{device.is_actionable ? (actionLoading === device.entity_id ? <ActivityIndicator color={H.purple} /> : <TouchableOpacity style={[styles.toggle, on && styles.toggleOn]} onPress={() => handleToggle(device)}><View style={[styles.dot, on && styles.dotOn]} /></TouchableOpacity>) : <View style={styles.statePill}><Text style={styles.stateText}>{device.last_state || '—'}</Text></View>}</View>;
+                  return <View key={device.entity_id} style={styles.deviceCard}><View style={[styles.deviceIcon, { backgroundColor: on ? H.greenBg : '#F4F3F3' }]}><Ionicons name={c.icon} size={20} color={on ? H.green : H.muted} /></View><View style={styles.flex}><Text style={styles.deviceName} numberOfLines={1}>{device.friendly_name}</Text><Text style={styles.deviceMeta}>{c.label} · {device.last_state || 'unknown'}{status.reachable !== true ? ' (last known)' : ''}</Text></View>{device.is_actionable ? (actionLoading === device.entity_id ? <ActivityIndicator color={H.purple} /> : <TouchableOpacity disabled={status.reachable !== true} style={[styles.toggle, on && styles.toggleOn, status.reachable !== true && { opacity: 0.35 }]} onPress={() => handleToggle(device)}><View style={[styles.dot, on && styles.dotOn]} /></TouchableOpacity>) : <View style={styles.statePill}><Text style={styles.stateText}>{device.last_state || '—'}</Text></View>}</View>;
                 })}</View>
               ))}
             </>
