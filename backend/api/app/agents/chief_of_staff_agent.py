@@ -241,6 +241,9 @@ IMPORTANT RULES:
             return "utilities"
         if any(w in msg for w in ("integration", "connected services")):
             return "integrations"
+        if any(w in msg for w in ("insurance", "insurance policy", "policy coverage", "warranty", "passport",
+                                    "document", "expiry", "expire", "renewal", "lease agreement")):
+            return "documents"
         if any(w in msg for w in ("smart home", "sensor", "leak", "door", "lock", "device", "garage", "valve", "light", "switch", "temperature")):
             return "smart_home"
         if any(w in msg for w in ("document", "passport", "insurance", "expire", "warranty")):
