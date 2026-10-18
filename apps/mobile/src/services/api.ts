@@ -73,6 +73,7 @@ export const householdService = {
 export const documentService = {
   list: () => api.get('/api/documents/'),
   access: (id: string) => api.get<{url:string;expires_in_seconds:number;name:string}>(`/api/documents/${id}/access`),
+  setVisibility: (id: string, visibility: 'private'|'household') => api.patch(`/api/documents/${id}/visibility`, { visibility }),
   upload: (formData: FormData) =>
     api.post('/api/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
