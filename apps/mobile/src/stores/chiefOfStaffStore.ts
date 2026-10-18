@@ -12,6 +12,7 @@ export interface ChatMessage {
   // data's there for when that's built.
   user_id?: string;
   proactive_suggestions?: string[];
+  device_confirmation_required?: boolean;
   // Present when the Chief executed a smart-home command during this reply
   action_result?: { status: 'sent' | 'confirmed' | 'failed'; entity_id?: string; action?: string; error?: string };
 }
@@ -78,6 +79,7 @@ export const useChiefOfStaffStore = create<ChiefOfStaffState>((set, get) => ({
         category: response.data.category,
         proactive_suggestions: response.data.proactive_suggestions,
         action_result: response.data.action_result,
+        device_confirmation_required: response.data.device_confirmation_required === true,
       };
 
       set({
