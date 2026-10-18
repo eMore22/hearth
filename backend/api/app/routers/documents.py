@@ -4,7 +4,8 @@ from typing import Optional
 from app.dependencies import get_supabase_admin, get_current_user, require_module
 from app.agents.document_agent import DocumentAgent
 import uuid
-from app.services.document_security import safe_filename, valid_upload, storage_path, clean_extraction
+from app.services.document_security import (safe_filename, valid_upload, storage_path,
+    clean_extraction, document_visible, document_mutable)
 
 from fastapi.concurrency import run_in_threadpool
 from app.services.subscriptions import require_tier, access_for, BillingUnavailable
@@ -71,6 +72,7 @@ async def upload_document(
             **details, "household_id": household_id, "uploaded_by": user["id"],
             "member_name": str(member_name).strip()[:140] if member_name else None,
             "file_name": name, "file_url": f"storage://documents/{path}",
+            "visibility": "private",
         }).execute()
         if not result.data:
             raise RuntimeError("Document record not created")
@@ -99,9 +101,10 @@ async def list_documents(
         return []
     try:
         docs = (get_supabase_admin().table("documents")
-                .select("id,title,document_type,issuer,member_name,expiry_date,summary,created_at")
+                .select("id,title,document_type,issuer,member_name,expiry_date,summary,created_at,visibility,uploaded_by")
                 .eq("household_id", household_id).order("created_at", desc=True)
-                .limit(100).execute().data or [])
+                .limit(150).execute().data or [])
+        docs = [d for d in docs if document_visible(d, str(user["id"]))][:100]
         # Avoid signing every document at list time. A short-lived URL is
         # issued only after an explicit request for a particular document.
         return docs
@@ -118,12 +121,12 @@ async def access_document(document_id: uuid.UUID,
     db = get_supabase_admin()
     try:
         doc = (db.table("documents")
-               .select("id,file_url,file_name")
+               .select("id,file_url,file_name,uploaded_by,visibility")
                .eq("id", str(document_id)).eq("household_id", household_id)
                .maybe_single().execute().data)
     except Exception:
         raise HTTPException(status_code=503, detail="Document lookup unavailable") from None
-    if not doc:
+    if not doc or not document_visible(doc, str(user["id"])):
         raise HTTPException(status_code=404, detail="Document not found")
     path = storage_path(doc.get("file_url"), household_id)
     if not path:
@@ -192,12 +195,12 @@ async def delete_document(
         raise HTTPException(status_code=403, detail="Household membership required")
     db = get_supabase_admin()
     try:
-        record = (db.table("documents").select("id,file_url")
+        record = (db.table("documents").select("id,file_url,uploaded_by")
                   .eq("id", str(document_id)).eq("household_id", household_id)
                   .maybe_single().execute().data)
     except Exception:
         raise HTTPException(status_code=503, detail="Document record unavailable") from None
-    if not record:
+    if not record or not document_mutable(record, str(user["id"])):
         raise HTTPException(status_code=404, detail="Document not found")
     ref = record.get("file_url")
     path = storage_path(ref, household_id)
