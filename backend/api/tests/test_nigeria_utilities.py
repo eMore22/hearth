@@ -99,7 +99,8 @@ class MonoPrivacyTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(mono_capabilities(current_user=user)["bank_linking_enabled"])
         with patch.dict("os.environ", {"MONO_SANDBOX_DEMO_ENABLED": "true",
                                        "MONO_SANDBOX_TESTER_USER_IDS": "tester"}):
-            self.assertEqual(require_tester(user), "tester")
+            with patch("app.routers.nigeria_sandbox.require_household_owner", return_value=("tester","house")):
+                self.assertEqual(require_tester(user), "tester")
 
 
 if __name__ == "__main__":
