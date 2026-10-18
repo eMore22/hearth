@@ -72,6 +72,7 @@ export const householdService = {
 
 export const documentService = {
   list: () => api.get('/api/documents/'),
+  access: (id: string) => api.get<{url:string;expires_in_seconds:number;name:string}>(`/api/documents/${id}/access`),
   upload: (formData: FormData) =>
     api.post('/api/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
