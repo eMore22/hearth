@@ -17,6 +17,8 @@ from app.routers import (
     tasks,
     billing,
     finance,
+    utilities,
+    nigeria_sandbox,
 )
 
 app = FastAPI(
@@ -47,6 +49,8 @@ app.include_router(intake.router,         prefix="/api/intake",        tags=["In
 app.include_router(tasks.router,          prefix="/api/tasks",         tags=["Tasks"])
 app.include_router(billing.router,        prefix="/api/billing",       tags=["Billing"])
 app.include_router(finance.router,        prefix="/api/finance",       tags=["Finance"])
+app.include_router(utilities.router,      prefix="/api/utilities",     tags=["Utilities"])
+app.include_router(nigeria_sandbox.router,prefix="/api/finance/sandbox/mono",tags=["NigeriaSandbox"])
 
 
 @app.get("/")
