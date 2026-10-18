@@ -14,9 +14,15 @@ class MonoSandboxError(Exception):
 
 
 def sandbox_ready() -> bool:
-    return bool(os.getenv("MONO_SANDBOX_SECRET_KEY", "").strip()) and (
-        os.getenv("MONO_SANDBOX_DEMO_ENABLED", "").lower() == "true"
-    )
+    """Fail closed unless an explicit Mono *test* secret and flag are present.
+
+    Mono uses the same API host for Sandbox and production. Checking just the
+    flag is insufficient: accidentally adding a live key could expose real
+    accounts or incur billing. Live Mono keys are never accepted here.
+    """
+    key = os.getenv("MONO_SANDBOX_SECRET_KEY", "").strip()
+    return (key.startswith("test_sk_") and len(key) > len("test_sk_")
+            and os.getenv("MONO_SANDBOX_DEMO_ENABLED", "").lower() == "true")
 
 
 async def list_institutions() -> list[dict]:

@@ -72,6 +72,24 @@ class MonoPrivacyTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(MonoSandboxError):
                 await list_institutions()
 
+    async def test_mono_rejects_live_secret_even_when_demo_is_on(self):
+        # Mono Sandbox and Live share api.withmono.com: never allow a
+        # production secret to hit endpoints from the internal tester UI.
+        with patch.dict("os.environ", {
+            "MONO_SANDBOX_DEMO_ENABLED": "true",
+            "MONO_SANDBOX_SECRET_KEY": "live_sk_test_marker_only",
+        }):
+            self.assertFalse(sandbox_ready())
+            with self.assertRaises(MonoSandboxError):
+                await list_institutions()
+
+    async def test_mono_accepts_explicit_test_secret_for_discovery_only(self):
+        with patch.dict("os.environ", {
+            "MONO_SANDBOX_DEMO_ENABLED": "true",
+            "MONO_SANDBOX_SECRET_KEY": "test_sk_fake_for_unit_test",
+        }):
+            self.assertTrue(sandbox_ready())
+
     async def test_mono_allowlist_does_not_expose_bank_data(self):
         user = {"id": "tester", "household_id": "house"}
         with patch.dict("os.environ", {"MONO_SANDBOX_DEMO_ENABLED": "false",
