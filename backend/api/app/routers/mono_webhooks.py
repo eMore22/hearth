@@ -69,11 +69,8 @@ async def mono_event(request: Request, mono_webhook_secret: str | None = Header(
         if not result.data:
             # A concurrently revoked or expired session must stay revoked.
             return {"received": True}
-        db.table("finance_consent_events").insert({
-            "connection_id": str(ref), "household_id": result.data[0]["household_id"],
-            "owner_user_id": result.data[0]["owner_user_id"],
-            "event_type": "granted", "scopes": ["accounts.read", "balances.read", "transactions.read"]
-        }).execute()
+        # Consent was recorded when the user explicitly started the link.
+        # Do not create another grant on retry or risk partially committed webhook work.
     except HTTPException:
         raise
     except Exception:
