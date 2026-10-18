@@ -77,6 +77,30 @@ class ChiefContextTests(unittest.TestCase):
         reply = offline_household_brief(overview)
         self.assertIn("Home Assistant: configured", reply)
 
+    def test_chief_bills_use_next_due_date_and_skip_inactive(self):
+        with patch("app.agents.base_agent.get_ai_gateway"):
+            agent = ChiefOfStaffAgent("mine", "user")
+            answer = agent._deterministic_reply("Which bills are due soon?", "bills", {
+                "source_status": {"bills": "available"},
+                "bills": [
+                    {"name": "Electricity", "next_due_date": "2026-10-25",
+                     "currency": "NGN", "amount": 8000, "is_active": True},
+                    {"name": "Cancelled plan", "next_due_date": "2026-10-24",
+                     "currency": "NGN", "amount": 2500, "is_active": False},
+                ],
+            })
+        self.assertIn("Electricity due 2026-10-25, NGN 8000", answer)
+        self.assertNotIn("Cancelled plan", answer)
+
+    def test_chief_grocery_source_status_is_not_mistaken_for_empty(self):
+        with patch("app.agents.base_agent.get_ai_gateway"):
+            agent = ChiefOfStaffAgent("mine", "user")
+            answer = agent._deterministic_reply("What's in my pantry?", "grocery", {
+                "source_status": {"inventory": "unavailable", "legacy_inventory": "unavailable"},
+                "inventory": [],
+            })
+        self.assertIn("couldn't check", answer)
+
     def test_client_context_cannot_create_device_command(self):
         with patch("app.agents.base_agent.get_ai_gateway"):
             agent = ChiefOfStaffAgent("mine", "user")

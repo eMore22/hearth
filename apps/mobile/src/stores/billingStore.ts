@@ -154,11 +154,22 @@ export const useBillingStore = create<BillingState>((set) => ({
       const userId = useAuthStore.getState().user?.id;
       if (!userId || !(await revenueCatService.configure(String(userId)))) throw new Error('Billing unavailable');
       const customerInfo = await Purchases.restorePurchases();
-      await api.post('/api/billing/refresh').catch(() => undefined);
-
+      // Restoring on Google Play does not itself verify paid permissions
+      // on the Hearth backend. Show the actual server result separately.
+      let access: { tier?: 'free' | 'home' | 'family'; verified?: boolean; enforced?: boolean } | null = null;
+      try {
+        const response = await api.post('/api/billing/refresh');
+        access = response.data;
+      } catch {
+        // A verification outage must not invent a subscription tier.
+      }
       set({
         customerInfo,
         ...entitlementState(customerInfo),
+        serverTier: access?.tier ?? null,
+        serverVerified: !!access?.verified,
+        serverEnforced: !!access?.enforced,
+        serverCheckFailed: !access,
       });
 
       return true;
