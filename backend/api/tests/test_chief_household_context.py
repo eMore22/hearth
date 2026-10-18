@@ -131,6 +131,23 @@ class ChiefContextTests(unittest.TestCase):
         self.assertNotIn("Front Door", answer)
         self.assertNotIn("T23:", answer)
 
+    def test_chief_utilities_warn_about_recorded_currency_mismatch(self):
+        with patch("app.agents.base_agent.get_ai_gateway"):
+            agent = ChiefOfStaffAgent("mine", "user")
+            reply = agent._deterministic_reply("Which utility bills are due?", "utilities", {
+                "source_status": {"utilities": "available"},
+                "utilities": {
+                    "household_currency": "NGN",
+                    "utilities": [
+                        {"name": "Electricity", "currency": "USD",
+                         "amount": "15", "next_due_date": None, "category": "electricity"}
+                    ],
+                },
+            })
+        self.assertIn("Electricity: USD 15", reply)
+        self.assertIn("household currency NGN", reply)
+        self.assertIn("no conversion", reply)
+
     def test_chief_grocery_source_status_is_not_mistaken_for_empty(self):
         with patch("app.agents.base_agent.get_ai_gateway"):
             agent = ChiefOfStaffAgent("mine", "user")
