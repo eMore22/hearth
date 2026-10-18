@@ -90,6 +90,7 @@ def _sandbox_tester(user: dict) -> str:
     allowed = {v.strip() for v in os.getenv("PLAID_SANDBOX_TESTER_USER_IDS", "").split(",") if v.strip()}
     if os.getenv("PLAID_SANDBOX_DEMO_ENABLED", "").lower() != "true" or user_id not in allowed:
         raise HTTPException(status_code=404, detail="Sandbox demo unavailable")
+    require_household_owner(user)
     return user_id
 
 @router.post("/sandbox/plaid/link-token")
