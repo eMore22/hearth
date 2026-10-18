@@ -37,7 +37,9 @@ class FinanceRoutesTests(unittest.TestCase):
         with patch("app.routers.finance.get_supabase_admin", return_value=db):
             result = list_accounts(current_user={"id": "test-user", "household_id": "test-home"})
         self.assertEqual(result["accounts"], [])
-        query.neq.assert_called_once_with("provider", "plaid")
+        query.neq.assert_any_call("provider", "plaid")
+        query.neq.assert_any_call("provider", "mono")
+        self.assertEqual(query.neq.call_count, 2)
 
 if __name__=="__main__":
     unittest.main()

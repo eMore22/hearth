@@ -40,6 +40,7 @@ def list_accounts(current_user: dict = Depends(get_current_user)):
                   # feature-gated, tester-allowlisted /sandbox/plaid routes.
                   # Never surface them through the ordinary Finance account API.
                   .neq("provider", "plaid")
+                  .neq("provider", "mono")
                   .eq("status", "linked").is_("consent_revoked_at", "null")
                   .gt("consent_expires_at", datetime.now(timezone.utc).isoformat())
                   .limit(30).execute().data or [])

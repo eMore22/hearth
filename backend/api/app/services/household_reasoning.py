@@ -5,7 +5,7 @@ from typing import Any
 
 VISIBLE_KEYS = (
     "as_of", "household", "household_member_count", "documents", "alerts",
-    "bills", "inventory", "shopping_lists", "meal_plan", "preferences",
+    "bills", "utilities", "inventory", "shopping_lists", "meal_plan", "preferences",
     "tasks", "household_tasks", "medications", "health_reminders",
     "health_event_count", "home_profiles", "smart_home_connected",
     "ha_devices", "ha_live_verified_at", "smart_home_alerts", "device_actions", "activity",
