@@ -3,10 +3,12 @@
 Future utility-provider payments are deliberately not implemented.
 """
 import os
+from typing import Literal
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException
 from app.dependencies import get_current_user, get_supabase_admin
 from app.services.utility_intelligence import summarize_utilities
+from app.services.utility_provider_catalog import utility_provider_capabilities
 from app.services.utility_sandbox import check_test_meter
 from app.services.vtpass_sandbox import verify_test_meter, ready as vtpass_ready, VtpassSandboxUnavailable
 
@@ -29,6 +31,13 @@ def overview(current_user: dict = Depends(get_current_user)):
     except Exception:
         raise HTTPException(status_code=503, detail="Utility records are temporarily unavailable") from None
     return summarize_utilities(rows, house.get("currency"))
+
+
+@router.get("/providers")
+def providers(country: Literal["CA", "NG"], current_user: dict = Depends(get_current_user)):
+    if not current_user.get("id") or not current_user.get("household_id"):
+        raise HTTPException(status_code=403, detail="Household membership required")
+    return utility_provider_capabilities(country)
 
 
 @router.get("/capabilities")
