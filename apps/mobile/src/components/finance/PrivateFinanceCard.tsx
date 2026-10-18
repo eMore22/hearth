@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useAuthStore } from '../../stores/authStore';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
@@ -14,20 +16,33 @@ const money = (currency: string|undefined, value: number|null) =>
   `${currency} ${(value / 100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
 export default function PrivateFinanceCard() {
+  const userId = useAuthStore(s => s.user?.id);
   const [profile, setProfile] = useState<Profile|null>(null);
   const [state, setState] = useState<'loading'|'owner'|'member'|'unavailable'>('loading');
   const [busy, setBusy] = useState(false);
   const [mono, setMono] = useState<{id:string;account:MonoBalance}|null>(null);
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let active = true;
-    // Profile only reads saved balances from the database. It does not call Mono.
+    setState('loading');
+    setProfile(null);
+    setMono(null);
+    if (!userId) {
+      setState('member');
+      return () => { active = false; };
+    }
+    // Profile reads only locally stored balance data; no Mono call here.
     api.get<Profile>('/api/finance/owner-profile').then(r => {
       if (active) { setProfile(r.data); setState('owner'); }
     }).catch((err:any) => {
       if (active) setState(err?.response?.status === 403 ? 'member' : 'unavailable');
     });
-    return () => { active = false; };
-  }, []);
+    return () => {
+      active = false;
+      // Clear balances when leaving Profile or switching accounts.
+      setMono(null);
+      setProfile(null);
+    };
+  }, [userId]));
   const viewMono = async (id:string) => {
     if (busy) return;
     setBusy(true); setMono(null);
