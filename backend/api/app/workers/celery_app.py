@@ -71,6 +71,10 @@ celery_app.conf.beat_schedule = {
         "task": "finance.expire_sandbox_connections",
         "schedule": crontab(minute=42),
     },
+    "hourly-mono-sandbox-expiry": {
+        "task": "finance.expire_mono_sandbox_connections",
+        "schedule": crontab(minute=47),
+    },
     "check-due-tasks": {
         "task": "tasks.check_due_tasks",
         "schedule": crontab(minute="*/15"),
