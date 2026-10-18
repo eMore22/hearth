@@ -13,8 +13,7 @@ class FakeDB:
         self.tables = []
         self.saved = None
         self.stored_path = None
-    def storage(self):
-        return self
+        self.storage = self
     def from_(self, bucket):
         self.bucket = bucket
         return self
