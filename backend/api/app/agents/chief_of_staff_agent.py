@@ -99,6 +99,28 @@ IMPORTANT RULES:
     def _deterministic_reply(self, message: str, category: str, context: Dict) -> Optional[str]:
         """Handle common read-only requests without a model."""
         msg = message.lower()
+        if category == "utilities":
+            sources = context.get("source_status") or {}
+            if sources.get("utilities") == "unavailable":
+                return "I couldn't check saved utility bills right now."
+            overview = context.get("utilities") or {}
+            items = overview.get("utilities") or []
+            if not items:
+                return ("No utility bills are recorded yet. You can track electricity, "
+                        "water, internet, gas and television through Hearth Bills.")
+            filters = [word for word in ("electricity", "water", "internet", "gas", "television")
+                       if word in msg]
+            matching = [row for row in items if not filters or row.get("category") in filters]
+            if not matching:
+                return "I couldn't find a saved bill for that utility."
+            lines = []
+            for row in matching[:8]:
+                money = (str(row.get("currency") or "currency unknown") + " " +
+                         str(row["amount"])) if row.get("amount") is not None else "amount not recorded"
+                due = str(row.get("next_due_date") or "due date not recorded")
+                lines.append(f"{row.get('name') or 'Utility'}: {money}, {due}")
+            return ("These are manually recorded utility bills, not provider-verified balances "
+                    "or confirmed payments: " + "; ".join(lines) + ".")
         if category == "bills" and any(w in msg for w in ("due", "upcoming", "what bills", "show bills")):
             if (context.get("source_status") or {}).get("bills") == "unavailable":
                 return "I couldn't check the bill records just now. Try again shortly."
@@ -207,6 +229,10 @@ IMPORTANT RULES:
     async def _classify_intent(self, message: str) -> str:
         """Prefer free deterministic routing for known household requests."""
         msg = message.lower()
+        if any(w in msg for w in ("utility", "utilities", "electricity", "internet bill",
+                                    "water bill", "meter bill", "meter number", "gas bill",
+                                    "power bill", "broadband bill", "tv bill")):
+            return "utilities"
         if any(w in msg for w in ("integration", "connected services")):
             return "integrations"
         if any(w in msg for w in ("smart home", "sensor", "leak", "door", "lock", "device", "garage", "valve", "light", "switch", "temperature")):
