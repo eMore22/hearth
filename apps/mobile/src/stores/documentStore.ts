@@ -3,6 +3,8 @@ import { documentService } from '../services/api';
 
 export interface Document {
   id: string;
+  uploaded_by?: string;
+  visibility?: 'private' | 'household';
   title: string;
   document_type: string;
   file_url?: string;
@@ -34,6 +36,7 @@ interface DocumentState {
   uploadDocument: (file: any, memberName?: string) => Promise<void>;
   askQuestion: (question: string) => Promise<string>;
   getDocumentUrl: (id: string) => Promise<string>;
+  setDocumentVisibility: (id: string, visibility: 'private'|'household') => Promise<void>;
   deleteDocument: (id: string) => Promise<void>;
   clearError: () => void;
 }
@@ -109,6 +112,18 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       return result.data.url;
     } catch (error: any) {
       throw new Error(error.response?.data?.detail || 'Could not open secure document');
+    }
+  },
+
+  setDocumentVisibility: async (id, visibility) => {
+    try {
+      await documentService.setVisibility(id, visibility);
+      set({ documents: get().documents.map(d =>
+        d.id === id ? { ...d, visibility } : d) });
+      await get().fetchDocuments();
+      await get().fetchAlerts();
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Document sharing could not be changed');
     }
   },
 
