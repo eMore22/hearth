@@ -1,6 +1,8 @@
 """Secure document handling and Chief's grounded document answers."""
 import unittest
 from datetime import date, timedelta
+from unittest.mock import patch
+from app.agents.chief_of_staff_agent import ChiefOfStaffAgent
 from app.services.document_security import safe_filename, valid_upload, storage_path, clean_extraction
 from app.services.document_reasoning import document_reply
 
@@ -44,7 +46,7 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(result["issue_date"], "2026-10-18")
 
 
-class ReasoningTests(unittest.TestCase):
+class ReasoningTests(unittest.IsolatedAsyncioTestCase):
     def test_near_expiry_uses_real_dates_not_stale_alerts(self):
         date_soon = (date.today() + timedelta(days=12)).isoformat()
         context = {
@@ -67,6 +69,24 @@ class ReasoningTests(unittest.TestCase):
                            "summary": "Potential water damage", "expiry_date": None}],
         })
         self.assertIn("cannot confirm coverage", reply)
+
+    async def test_policy_leak_question_uses_document_intent(self):
+        with patch("app.agents.base_agent.get_ai_gateway"):
+            agent = ChiefOfStaffAgent("home", "person")
+            category = await agent._classify_intent("Does my insurance cover a water leak?")
+        self.assertEqual(category, "documents")
+
+    def test_policy_answer_can_point_to_recorded_household_alert_and_task(self):
+        reply = document_reply("Does my insurance cover this water leak?", {
+            "source_status": {"documents": "available"},
+            "documents": [{"title":"House Insurance","document_type":"insurance"}],
+            "smart_home_alerts": [{"new_state":"wet","time":"2026-10-18"}],
+            "tasks": [{"title":"Inspect pipe","is_active":True}],
+        })
+        self.assertIn("cannot confirm coverage", reply)
+        self.assertIn("recorded recent smart-home alert", reply)
+        self.assertIn("Inspect pipe", reply)
+        self.assertNotIn("confirmed water damage", reply)
 
     def test_unavailable_is_not_reported_empty(self):
         reply = document_reply("When does my passport expire?", {
