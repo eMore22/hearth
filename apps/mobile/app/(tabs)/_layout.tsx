@@ -14,6 +14,8 @@ export default function TabLayout() {
       <Tabs.Screen name="documents" options={{ href: null }} />
       <Tabs.Screen name="bills" options={{ href: null }} />
       <Tabs.Screen name="finance" options={{ href: null }} />
+      <Tabs.Screen name="utilities" options={{ href: null }} />
+      <Tabs.Screen name="nigeria-banking" options={{ href: null }} />
       <Tabs.Screen name="grocery" options={{ href: null }} />
       <Tabs.Screen name="maintenance" options={{ href: null }} />
       <Tabs.Screen name="health" options={{ href: null }} />
