@@ -72,8 +72,16 @@ def _create_pending(db, *, user_id: str, household_id: str, acknowledged: bool) 
     }
     try:
         db.table("finance_connections").insert(record).execute()
+        db.table("finance_consent_events").insert({
+            "connection_id": record["id"], "household_id": household_id,
+            "owner_user_id": user_id, "event_type": "granted", "scopes": SCOPES,
+        }).execute()
         return record
     except Exception:
+        try:
+            db.table("finance_connections").delete().eq("id", record["id"]).execute()
+        except Exception:
+            pass
         raise MonoLinkError("Unable to prepare a secure test connection") from None
 
 
@@ -99,7 +107,10 @@ async def initiate(*, user_id: str, household_id: str, email: str,
         acknowledged=acknowledged)
     # A HTTPS redirect page owned by Hearth; no secret/token in the URL.
     redirect = os.getenv("MONO_SANDBOX_REDIRECT_URL", "https://hearthhq.online")
-    if not redirect.startswith("https://hearthhq.online"):
+    from urllib.parse import urlsplit
+    destination = urlsplit(redirect)
+    if (destination.scheme != "https" or destination.hostname != "hearthhq.online"
+            or destination.port not in (None, 443) or destination.username):
         await run_in_threadpool(_delete_pending, db, pending)
         raise MonoLinkError("Mono Sandbox callback URL is not approved")
     try:
