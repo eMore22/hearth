@@ -39,11 +39,11 @@ export default function IntegrationsScreen() {
       <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={{ paddingTop: Math.max(insets.top, 12), paddingBottom: 44 }}>
         <ScreenHeader backTo="/(tabs)/profile" title="Integrations" subtitle="Connect the services that make Hearth HQ proactive." />
         <View style={styles.body}>
-          <View style={[styles.integrationCard, status.connected && styles.integrationConnected]}>
-            <View style={styles.integrationTop}><View style={[styles.logo, { backgroundColor: H.blueBg }]}><Ionicons name="home-outline" size={24} color={H.blue} /></View><View style={styles.flex}><Text style={styles.name}>Home Assistant</Text><Text style={styles.desc}>Smart-home devices, sensors and automations</Text></View>{status.connected ? <View style={styles.statusPill}><Text style={styles.statusText}>Connected</Text></View> : null}</View>
+          <View style={[styles.integrationCard, status.connected && status.reachable === true && styles.integrationConnected]}>
+            <View style={styles.integrationTop}><View style={[styles.logo, { backgroundColor: H.blueBg }]}><Ionicons name="home-outline" size={24} color={H.blue} /></View><View style={styles.flex}><Text style={styles.name}>Home Assistant</Text><Text style={styles.desc}>Smart-home devices, sensors and automations</Text></View>{status.connected ? <View style={[styles.statusPill, status.reachable !== true && { backgroundColor: H.amberBg }]}><Text style={[styles.statusText, status.reachable !== true && { color: H.amber }]}>{status.reachable === true ? 'Online' : 'Offline'}</Text></View> : null}</View>
             {status.connected ? (
               <>
-                <View style={styles.connectedInfo}><Text style={styles.infoLabel}>INSTANCE</Text><Text style={styles.infoValue} numberOfLines={1}>{status.ha_instance_url || 'Connected instance'}</Text><Text style={styles.infoMeta}>{status.device_count || 0} devices synced</Text></View>
+                <View style={styles.connectedInfo}><Text style={styles.infoLabel}>INSTANCE</Text><Text style={styles.infoValue} numberOfLines={1}>{status.ha_instance_url || 'Connected instance'}</Text><Text style={styles.infoMeta}>{status.device_count || 0} cached devices · Last sync: {status.last_sync_at?.slice(0, 10) || 'unknown'}</Text>{status.reachable !== true && <Text style={styles.infoMeta}>Home Assistant is unreachable. Saved device states are not live. Reconnect using a reachable HTTPS address to restore controls.</Text>}</View>
                 <View style={styles.actionRow}><TouchableOpacity style={styles.primarySoft} onPress={() => router.push('/(tabs)/devices')}><Ionicons name="hardware-chip-outline" size={17} color={H.blue} /><Text style={styles.primarySoftText}>View devices</Text></TouchableOpacity><TouchableOpacity style={styles.dangerSoft} onPress={disconnect}><Text style={styles.dangerText}>Disconnect</Text></TouchableOpacity></View>
               </>
             ) : (
@@ -59,7 +59,7 @@ export default function IntegrationsScreen() {
           </View>
 
           <Text style={styles.section}>More integrations</Text>
-          <TouchableOpacity style={styles.futureCard} activeOpacity={0.8} onPress={() => router.push('/(tabs)/finance')}><View style={[styles.logo,{backgroundColor:'#EEF7F1'}]}><Ionicons name="wallet-outline" size={22} color={H.green} /></View><View style={styles.flex}><Text style={styles.name}>Banks & Household Finance</Text><Text style={styles.desc}>Explore bill commitments. Read-only bank syncing is not connected yet.</Text></View><Ionicons name="chevron-forward" size={19} color={H.muted} /></TouchableOpacity>
+          <TouchableOpacity style={styles.futureCard} activeOpacity={0.8} onPress={() => router.push('/(tabs)/finance')}><View style={[styles.logo,{backgroundColor:'#EEF7F1'}]}><Ionicons name="wallet-outline" size={22} color={H.green} /></View><View style={styles.flex}><Text style={styles.name}>Banks & Household Finance</Text><Text style={styles.desc}>Bills and commitments. Canadian bank simulation is available to approved internal testers.</Text></View><Ionicons name="chevron-forward" size={19} color={H.muted} /></TouchableOpacity>
           <View style={styles.futureCard}><View style={[styles.logo,{backgroundColor:H.amberBg}]}><Ionicons name="flash-outline" size={22} color={H.amber} /></View><View style={styles.flex}><Text style={styles.name}>Utilities</Text><Text style={styles.desc}>Direct utility-provider connections are not enabled yet.</Text></View><View style={styles.coming}><Text style={styles.comingText}>Coming later</Text></View></View>
         </View>
       </ScrollView>

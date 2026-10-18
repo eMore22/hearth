@@ -177,6 +177,10 @@ export default function Dashboard() {
       ]);
       return;
     }
+    if (status.reachable !== true) {
+      Alert.alert('Home Assistant offline', 'These are last-known device states. Reconnect your Home Assistant test simulator or a reachable server before sending commands.');
+      return;
+    }
     const run = async () => {
       const key = `quick_${device.entity_id}`;
       setActionLoading(key);
@@ -349,7 +353,9 @@ export default function Dashboard() {
                   <Text style={styles.viewAll}>Manage  </Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.quickHomeHint}>Large, simple controls for the devices you may need most.</Text>
+              <Text style={styles.quickHomeHint}>{status.reachable === true
+                ? 'Large, simple controls for the devices you may need most.'
+                : 'Home Assistant is offline. Displaying last-known states; controls are disabled.'}</Text>
               <View style={styles.quickHomeList}>
                 {quickDevices.map(device => {
                   const on = isDeviceOn(device.last_state);
@@ -361,12 +367,12 @@ export default function Dashboard() {
                       </View>
                       <View style={styles.flex}>
                         <Text style={styles.quickDeviceName} numberOfLines={1}>{device.friendly_name}</Text>
-                        <Text style={styles.quickDeviceState}>{deviceStateLabel(device)}</Text>
+                        <Text style={styles.quickDeviceState}>{status.reachable === true ? deviceStateLabel(device) : `Last known: ${deviceStateLabel(device)}`}</Text>
                       </View>
                       <TouchableOpacity
-                        style={[styles.quickDeviceButton, on && styles.quickDeviceButtonOn, actionLoading === key && { opacity: 0.55 }]}
+                        style={[styles.quickDeviceButton, on && styles.quickDeviceButtonOn, (actionLoading === key || status.reachable !== true) && { opacity: 0.45 }]}
                         onPress={() => runQuickDeviceAction(device)}
-                        disabled={actionLoading === key}
+                        disabled={actionLoading === key || status.reachable !== true}
                         activeOpacity={0.82}
                         accessibilityRole="button"
                         accessibilityLabel={`${deviceActionLabel(device)} ${device.friendly_name}`}

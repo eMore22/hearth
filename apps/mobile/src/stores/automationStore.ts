@@ -40,6 +40,8 @@ export interface SuggestedAction {
 
 export interface HAStatus {
   connected: boolean;
+  /** True only after a fresh server-side Home Assistant health check. */
+  reachable?: boolean;
   ha_instance_url?: string;
   ha_connected_at?: string;
   last_sync_at?: string;
@@ -85,7 +87,7 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
         ha_instance_url: haUrl,
         ha_access_token: accessToken,
       });
-      set({ status: { connected: true }, isLoading: false });
+      set({ status: { connected: true, reachable: true }, isLoading: false });
       // Refresh devices after connecting
       await get().fetchDevices();
       return res.data;
