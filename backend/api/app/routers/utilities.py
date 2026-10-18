@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.dependencies import get_current_user, get_supabase_admin
 from app.services.utility_intelligence import summarize_utilities
 from app.services.utility_sandbox import check_test_meter
+from app.services.vtpass_sandbox import verify_test_meter, ready as vtpass_ready, VtpassSandboxUnavailable
 
 router = APIRouter(tags=["Utilities"])
 
@@ -61,3 +62,37 @@ def check_meter(payload: TestMeterRequest, current_user: dict = Depends(get_curr
         return check_test_meter(payload.service_id, payload.meter_type, payload.meter_number)
     except ValueError:
         raise HTTPException(status_code=422, detail="Unsupported local test scenario") from None
+
+
+@router.get("/sandbox/vtpass/capabilities")
+def vtpass_capabilities(current_user: dict = Depends(get_current_user)):
+    if not current_user.get("id") or not current_user.get("household_id"):
+        raise HTTPException(status_code=403, detail="Household membership required")
+    allowlist = {x.strip() for x in
+                 os.getenv("VTPASS_SANDBOX_TESTER_USER_IDS", "").split(",") if x.strip()}
+    return {
+        "sandbox": True, "provider": "VTpass",
+        "meter_verification_available": (str(current_user["id"]) in allowlist and vtpass_ready()),
+        "real_meter_verification_enabled": False,
+        "bill_payment_enabled": False,
+    }
+
+
+@router.post("/sandbox/vtpass/verify-meter")
+async def vtpass_verify_meter(payload: TestMeterRequest,
+                              current_user: dict = Depends(get_current_user)):
+    user_id = str(current_user.get("id") or "")
+    if not user_id or not current_user.get("household_id"):
+        raise HTTPException(status_code=403, detail="Household membership required")
+    allowlist = {x.strip() for x in
+                 os.getenv("VTPASS_SANDBOX_TESTER_USER_IDS", "").split(",") if x.strip()}
+    if user_id not in allowlist or not vtpass_ready():
+        raise HTTPException(status_code=404, detail="VTpass Sandbox unavailable")
+    if payload.service_id != "enugu-electric":
+        raise HTTPException(status_code=422, detail="Unsupported test service")
+    try:
+        return await verify_test_meter(payload.meter_type, payload.meter_number)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Use only Sandbox meter examples") from None
+    except VtpassSandboxUnavailable:
+        raise HTTPException(status_code=503, detail="Sandbox provider verification unavailable") from None

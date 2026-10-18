@@ -48,3 +48,13 @@ Provide a bounded, verified, household-scoped read-only context for utilities, b
 - Existing Supabase + Render only unless explicitly approved; do not create paid branches or staging services.
 - On-device Android Sandbox flow after CI and native build, as with Plaid.
 - Do not merge or turn on any real-bank / real-payment environment flag without a separate review.
+
+## Implemented internal test infrastructure (18 October 2026)
+
+- `/api/utilities/overview` derives household utility summaries from manually stored bills. Currency totals are kept separate; this is not meter usage or confirmed payment data.
+- `/api/utilities/sandbox/check-meter` is a clearly labeled local fixture, available only with `UTILITIES_SANDBOX_DEMO_ENABLED=true` and `UTILITIES_SANDBOX_TESTER_USER_IDS`. No external verification takes place.
+- `/api/utilities/sandbox/vtpass/verify-meter` is an optional *actual VTpass Sandbox* meter verification, never a payment. Use only documented `enugu-electric` sample meter numbers. Leave disabled until official VTpass Sandbox credentials are configured. Requires `VTPASS_SANDBOX_ENABLED=true`, `VTPASS_SANDBOX_API_KEY`, `VTPASS_SANDBOX_SECRET_KEY` and an explicit `VTPASS_SANDBOX_TESTER_USER_IDS` list in the Render API service. Neither client nor API response exposes keys or full meter data. Only the fixed `sandbox.vtpass.com` host may be called.
+- `/api/finance/sandbox/mono/capabilities` exposes the Nigerian readiness state. `/api/finance/sandbox/mono/institutions` is restricted to `MONO_SANDBOX_DEMO_ENABLED=true`, `MONO_SANDBOX_SECRET_KEY` and `MONO_SANDBOX_TESTER_USER_IDS` on Render. Linking and account synchronization remain OFF.
+- An internal-test AAB with new read-only Nigeria and Utilities screens has been queued separately. Backend changes require no additional Supabase migration.
+
+**Important:** VTpass Sandbox simulation, including a successful meter response, is not proof of ownership of a real utility account, bill payment, electricity supply or meter readings. Real bank connections and all payment APIs remain disabled.
