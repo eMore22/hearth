@@ -11,3 +11,5 @@ Internal testing only; do not publicly launch without entitlement gate and physi
 Retest Android AAB with VERIFIED valid native splash asset at GitHub merge 33e32a530e4b5d27b43b3c8964c89cbbd9a1cf57. Prior build failed EAS Prebuild due malformed image; this is the corrected image artifact.
 
 2026-10-17: Build new signed Google Play internal-testing AAB from main with Plaid Sandbox UI enabled (internalTest profile). Finance schema and read-only Sandbox guardrails deployed; API allows only explicitly approved tester IDs. No real money movement. Previous release CI passed; physical-device validation remains required.
+
+2026-10-18: Signed Google Play internal-testing AAB for merge 96e562d7d3d1d723c50de92b963515529f91e739. Contains utility tracking, Mono Nigeria Sandbox readiness screen, deterministic Chief utilities context and local-only, tester-restricted electricity meter simulation. No real bank account connections or bill payments. Run on-device tests before public release.
