@@ -103,6 +103,13 @@ export default function ChiefScreen() {
                 {msg.role !== 'user' && <View style={styles.assistantAvatar}><Ionicons name="sparkles" size={14} color={H.purple} /></View>}
                 <View style={[styles.message, msg.role === 'user' ? styles.userMessage : styles.assistantMessage]}>
                   <Text style={[styles.messageText, msg.role === 'user' ? styles.userText : styles.assistantText]}>{msg.role === 'user' ? msg.content : msg.content.replace(/\*\*(.*?)\*\*/g, '$1').replace(/(^|\n)#{1,3}\s*/g, '$1').replace(/\*(.*?)\*/g, '$1')}</Text>
+                  {msg.device_confirmation_required && (
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open Devices to confirm requested device action"
+                      onPress={() => router.push('/(tabs)/devices')}
+                      style={{ marginTop: 10, backgroundColor: H.violetBg, padding: 12, borderRadius: 12, alignItems: 'center' }}>
+                      <Text style={{ color: H.purple, fontWeight: '800', fontSize: 12 }}>Open Devices to confirm</Text>
+                    </TouchableOpacity>
+                  )}
                   {!!msg.action_result && <View style={styles.actionResult}><Ionicons name={msg.action_result.status === 'confirmed' ? 'checkmark-circle' : 'alert-circle'} size={14} color={msg.action_result.status === 'confirmed' ? H.green : msg.action_result.status === 'sent' ? H.muted : H.red} /><Text style={[styles.actionResultText, { color: msg.action_result.status === 'confirmed' ? H.green : msg.action_result.status === 'sent' ? H.muted : H.red }]}>{msg.action_result.status === 'confirmed' ? 'Device confirmed' : msg.action_result.status === 'sent' ? 'Command sent. Check device state.' : 'Action failed'}</Text></View>}
                 </View>
                 {!!msg.proactive_suggestions?.length && (
