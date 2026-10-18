@@ -57,10 +57,19 @@ def load_household_context(household_id: str, db: Any = None) -> dict:
 
     members = collect("members", "household_members", "role", limit=30)
     overview["household_member_count"] = len(members)
-    overview["documents"] = collect("documents", "documents",
-        "title,document_type,issuer,expiry_date,summary,created_at", limit=60)
-    overview["alerts"] = collect("document_alerts", "document_alerts",
-        "message,urgency,days_until_expiry,sent_at", limit=40, ordered="sent_at")
+    # Chief is a SHARED household conversation, so it must never reveal
+    # personal vault metadata even to another household member. Only
+    # documents explicitly shared by their uploader can influence Chief.
+    all_documents = collect("documents", "documents",
+        "id,title,document_type,issuer,expiry_date,summary,created_at,visibility",
+        limit=100)
+    overview["documents"] = [d for d in all_documents
+                             if d.get("visibility") == "household"][:60]
+    all_alerts = collect("document_alerts", "document_alerts",
+        "document_id,message,urgency,days_until_expiry,sent_at",
+        limit=60, ordered="sent_at")
+    shared_ids = {str(d.get("id")) for d in overview["documents"]}
+    overview["alerts"] = [a for a in all_alerts if str(a.get("document_id")) in shared_ids][:40]
     overview["bills"] = collect("bills", "bills",
         "name,provider,amount,currency,billing_cycle,next_due_date,is_active,category", limit=60)
     # Only saved household obligations. Never assume provider-confirmed usage,
