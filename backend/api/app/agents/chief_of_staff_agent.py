@@ -177,12 +177,9 @@ IMPORTANT RULES:
             items = context.get("inventory") or []
             return ("Pantry: " + ", ".join(str(i.get("name") or i.get("item_name") or "Item")
                                             for i in items[:20])) if items else "Your pantry is currently empty in Hearth."
-        if category == "documents" and any(w in msg for w in ("expiry", "expire", "expiring", "document list")):
-            if (context.get("source_status") or {}).get("documents") == "unavailable":
-                return "I couldn't check your document vault just now. Try again shortly."
-            alerts = context.get("alerts") or []
-            return ("Document alerts: " + "; ".join(str(x.get("message", "Review document")) for x in alerts[:5])
-                    if alerts else f"You have {len(context.get('documents') or [])} saved documents and no current expiry alerts.")
+        if category == "documents":
+            from app.services.document_reasoning import document_reply
+            return document_reply(message, context)
         if category == "general" and any(w in msg for w in ("my tasks", "to do", "todo", "to-do")):
             tasks = context.get("household_tasks") or []
             return ("Household tasks: " + "; ".join(str(t.get("title", "Task")) for t in tasks[:12])
