@@ -10,6 +10,7 @@ from app.services.mono_connect_link import (
     initiate, list_owned, account_preview, account_transactions, revoke,
     MonoLinkError, config_ready,
 )
+from app.services.owner_private_finance import require_household_owner
 from app.dependencies import get_current_user
 from app.services.mono_sandbox import list_institutions, sandbox_ready, MonoSandboxError
 
@@ -24,6 +25,7 @@ def require_tester(user: dict) -> str:
                  os.getenv("MONO_SANDBOX_TESTER_USER_IDS", "").split(",") if x.strip()}
     if os.getenv("MONO_SANDBOX_DEMO_ENABLED", "").lower() != "true" or user_id not in allowlist:
         raise HTTPException(status_code=404, detail="Nigerian bank demo unavailable")
+    require_household_owner(user)
     return user_id
 
 
