@@ -156,7 +156,7 @@ IMPORTANT RULES:
             tasks = context.get("household_tasks") or []
             return ("Household tasks: " + "; ".join(str(t.get("title", "Task")) for t in tasks[:12])
                     if tasks else "I don't see any household tasks in your current overview.")
-        if any(w in msg for w in ("integrations", "integration status", "what is connected", "connected services")):
+        if category != "smart_home" and any(w in msg for w in ("integrations", "integration status", "what is connected", "connected services")):
             integrations = context.get("integrations") or []
             return ("Integrations: " + "; ".join(
                 f"{item.get('name')}: {'configured (not live-verified)' if item.get('connected') else 'not configured'}"
