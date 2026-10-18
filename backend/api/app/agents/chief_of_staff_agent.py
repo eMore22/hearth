@@ -102,13 +102,16 @@ IMPORTANT RULES:
         if category == "bills" and any(w in msg for w in ("due", "upcoming", "what bills", "show bills")):
             if (context.get("source_status") or {}).get("bills") == "unavailable":
                 return "I couldn't check the bill records just now. Try again shortly."
-            bills = context.get("bills") or []
+            bills = [b for b in (context.get("bills") or [])
+                     if b.get("is_active") is not False]
             return ("Bills: " + "; ".join(
-                (str(b.get("provider") or b.get("name") or "Bill")
-                 + (f" due {b['due_date']}" if b.get("due_date") else ""))
-                for b in bills[:12])) if bills else "I don't see any bills in your household overview."
+                str(b.get("provider") or b.get("name") or "Bill")
+                + (f" due {b['next_due_date']}" if b.get("next_due_date") else " (due date not recorded)")
+                + (f", {b['currency']} {b['amount']}" if b.get("currency") and b.get("amount") is not None else "")
+                for b in bills[:12])) if bills else "I don't see any active bills in your household overview."
         if category == "grocery" and any(w in msg for w in ("inventory", "pantry", "what groceries", "shopping list")):
-            if (context.get("source_status") or {}).get("groceries") == "unavailable":
+            sources = context.get("source_status") or {}
+            if sources.get("inventory") == "unavailable" and sources.get("legacy_inventory") == "unavailable":
                 return "I couldn't check your grocery records just now. Try again shortly."
             items = context.get("inventory") or []
             return ("Pantry: " + ", ".join(str(i.get("name") or i.get("item_name") or "Item")
