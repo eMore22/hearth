@@ -31,6 +31,7 @@ export default function PlaidSandboxPreview() {
   const [connections, setConnections] = useState<DemoConnection[]>([]);
   const [transactions, setTransactions] = useState<DemoTransaction[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [showAllTransactions, setShowAllTransactions] = useState(false);
 
   const loadConnections = useCallback(async () => {
     if (process.env.EXPO_PUBLIC_PLAID_SANDBOX_DEMO !== 'true') return;
@@ -118,13 +119,16 @@ export default function PlaidSandboxPreview() {
   const inspectConnection = useCallback(async (connectionId: string, doSync: boolean) => {
     if (busy) return;
     setBusy(true);
-    setSelected(connectionId);
     setMessage(null);
+    setSelected(null);
+    setTransactions([]);
+    setShowAllTransactions(false);
     try {
       if (doSync) await api.post(`/api/finance/sandbox/plaid/connections/${connectionId}/sync`);
       const response = await api.get<{ transactions: DemoTransaction[] }>(
         `/api/finance/sandbox/plaid/connections/${connectionId}/transactions`);
       setTransactions(response.data.transactions);
+      setSelected(connectionId);
       setMessage(doSync ? 'Simulated transactions refreshed.' : 'Saved simulated transactions loaded.');
       await loadConnections();
     } catch {
@@ -144,6 +148,7 @@ export default function PlaidSandboxPreview() {
           await api.delete(`/api/finance/sandbox/plaid/connections/${connectionId}`);
           setTransactions([]);
           setSelected(null);
+          setShowAllTransactions(false);
           setMessage('Sandbox bank disconnected and access revoked.');
           await loadConnections();
         } catch {
@@ -198,10 +203,21 @@ export default function PlaidSandboxPreview() {
       ))}
       {selected && <View style={styles.results}>
         <Text style={styles.resultsTitle}>Simulated transactions · CAD only</Text>
-        {transactions.length ? transactions.slice(0, 30).map(tx => <View key={tx.id} style={styles.account}>
+        {transactions.length > 0 && <Text style={[styles.description, { marginBottom: 6 }]}>
+          Showing {Math.min(transactions.length, showAllTransactions ? 30 : 8)} of {transactions.length} simulated transactions. Amounts are signed: minus indicates money out, plus indicates money in.
+        </Text>}
+        {transactions.length ? transactions.slice(0, showAllTransactions ? 30 : 8).map(tx => <View key={tx.id} style={styles.account}>
           <View style={{ flex: 1 }}><Text style={styles.accountName}>{tx.merchant || tx.description || 'Test transaction'}</Text><Text style={styles.description}>{tx.booked_at.slice(0, 10)}</Text></View>
-          <Text style={styles.balance}>{tx.currency} {(tx.amount_minor / 100).toFixed(2)}</Text>
+          <Text style={styles.balance}>{tx.currency} {tx.amount_minor > 0 ? '+' : ''}{(tx.amount_minor / 100).toFixed(2)}</Text>
         </View>) : <Text style={styles.description}>No simulated transactions currently available.</Text>}
+        {transactions.length > 8 && <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={showAllTransactions ? 'Show fewer test transactions' : 'Show more test transactions'}
+          onPress={() => setShowAllTransactions(value => !value)}
+          style={[styles.smallButton, { alignSelf: 'flex-start', marginTop: 12 }]}
+        >
+          <Text style={styles.smallButtonText}>{showAllTransactions ? 'Show fewer' : 'Show more activity'}</Text>
+        </TouchableOpacity>}
       </View>}
       {preview !== null && (
         <View style={styles.results}>
