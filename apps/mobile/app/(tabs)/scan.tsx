@@ -155,7 +155,7 @@ export default function ScanScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Scan Anything</Text>
-          <Text style={styles.headerSubtitle}>Hearth HQ routes it automatically</Text>
+          <Text style={styles.headerSubtitle}>Save and review scans securely</Text>
         </View>
         <View style={{ width: 36 }} />
       </LinearGradient>
@@ -177,7 +177,7 @@ export default function ScanScreen() {
                 </View>
               </View>
               <Text style={styles.scanHint}>
-                Point your camera at any document, bill, receipt, or medical record
+                Scan a document, bill, receipt or medical record. Verify extracted information before adding it to other modules.
               </Text>
             </View>
 
@@ -210,7 +210,7 @@ export default function ScanScreen() {
             </Animated.View>
             <Text style={styles.processingTitle}>Reading document...</Text>
             <Text style={styles.processingSubtitle}>
-              Claude Vision is extracting data and figuring out where this belongs
+              Hearth is reading your scan and preparing a document record
             </Text>
             <ActivityIndicator color={ACCENT} style={{ marginTop: 24 }} />
           </View>
