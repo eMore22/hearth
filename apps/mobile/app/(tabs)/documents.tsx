@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Linking, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -38,7 +38,7 @@ const formatDate = (iso?: string | null) => {
 
 export default function DocumentsScreen() {
   const insets = useSafeAreaInsets();
-  const { documents, alerts, fetchDocuments, fetchAlerts, uploadDocument, askQuestion } = useDocumentStore();
+  const { documents, alerts, fetchDocuments, fetchAlerts, uploadDocument, askQuestion, getDocumentUrl, deleteDocument } = useDocumentStore();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
   const [showAdd, setShowAdd] = useState(false);
@@ -70,12 +70,35 @@ export default function DocumentsScreen() {
     try {
       await uploadDocument(asset);
       setShowAdd(false);
-      Alert.alert('Document saved', 'Hearth HQ analysed the file and added it to your document vault.');
+      Alert.alert('Document saved', 'Your file is in the secure document vault. Automatic extraction runs only when available on your plan.');
     } catch (e: any) {
       Alert.alert('Upload failed', e?.response?.data?.detail || e?.message || 'Please try again.');
     } finally {
       setUploading(false);
     }
+  };
+
+  const openDocument = (doc: { id: string; title: string }) => {
+    Alert.alert(doc.title || 'Document', 'Choose an action for this saved file.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Open securely', onPress: async () => {
+        try {
+          const url = await getDocumentUrl(doc.id);
+          await Linking.openURL(url);
+        } catch (err: any) {
+          Alert.alert('Could not open document', err?.message || 'Try again shortly.');
+        }
+      } },
+      { text: 'Delete', style: 'destructive', onPress: () => {
+        Alert.alert('Permanently delete document?', 'This deletes the saved file and its document record. This action cannot be undone.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: async () => {
+            try { await deleteDocument(doc.id); }
+            catch (err: any) { Alert.alert('Delete failed', err?.message || 'Try again shortly.'); }
+          } },
+        ]);
+      } },
+    ]);
   };
 
   const chooseGallery = async () => {
@@ -135,7 +158,7 @@ export default function DocumentsScreen() {
             const icon = docIcon(doc.document_type || doc.title);
             const expired = expiredIds.has(doc.id) || (!!doc.expiry_date && new Date(doc.expiry_date) < new Date());
             return (
-              <TouchableOpacity key={doc.id} style={styles.row} activeOpacity={0.82}>
+              <TouchableOpacity key={doc.id} style={styles.row} onPress={() => openDocument(doc)} accessibilityRole="button" accessibilityLabel={`Open ${doc.title}`} activeOpacity={0.82}>
                 <IconBadge icon={icon.icon} bg={icon.bg} color={icon.fg} size={44} />
                 <View style={styles.flex}>
                   <Text style={styles.rowTitle} numberOfLines={1}>{doc.title}</Text>
