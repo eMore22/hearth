@@ -80,7 +80,6 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
         )
         result["device_confirmation_required"] = True
         result["actions_taken"] = []
-        result["action_result"] = {"status": "requires_confirmation"}
         # No device control is attempted in this chat request.
 
     # ── Logging for traction measurement ──
