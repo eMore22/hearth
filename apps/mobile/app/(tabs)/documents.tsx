@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Linking, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useDocumentStore } from '../../src/stores/documentStore';
+import { useDocumentStore, Document } from '../../src/stores/documentStore';
+import { useAuthStore } from '../../src/stores/authStore';
 import { H, HearthDesign } from '../../src/theme/hearthDesign';
 import { EmptyMessage, IconBadge, ScreenHeader } from '../../src/components/ui/PremiumKit';
 
@@ -38,7 +39,8 @@ const formatDate = (iso?: string | null) => {
 
 export default function DocumentsScreen() {
   const insets = useSafeAreaInsets();
-  const { documents, alerts, fetchDocuments, fetchAlerts, uploadDocument, askQuestion } = useDocumentStore();
+  const userId = useAuthStore(state => state.user?.id);
+  const { documents, alerts, fetchDocuments, fetchAlerts, uploadDocument, askQuestion, getDocumentUrl, deleteDocument, setDocumentVisibility } = useDocumentStore();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
   const [showAdd, setShowAdd] = useState(false);
@@ -70,12 +72,55 @@ export default function DocumentsScreen() {
     try {
       await uploadDocument(asset);
       setShowAdd(false);
-      Alert.alert('Document saved', 'Hearth HQ analysed the file and added it to your document vault.');
+      Alert.alert('Document saved', 'Your file is saved privately. You can share it with your household from its menu.');
     } catch (e: any) {
       Alert.alert('Upload failed', e?.response?.data?.detail || e?.message || 'Please try again.');
     } finally {
       setUploading(false);
     }
+  };
+
+  const confirmDelete = (doc: Document) => {
+    Alert.alert('Permanently delete document?', 'The document and stored file will be deleted. This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try { await deleteDocument(doc.id); }
+        catch (err: any) { Alert.alert('Delete failed', err?.message || 'Try again shortly.'); }
+      } },
+    ]);
+  };
+
+  const sharingMenu = (doc: Document) => {
+    const next = doc.visibility === 'household' ? 'private' : 'household';
+    Alert.alert('Document privacy', doc.visibility === 'household'
+      ? 'This document is currently shared with your household.'
+      : 'This document is private to your account.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: next === 'household' ? 'Share with household' : 'Make private', onPress: async () => {
+        try {
+          await setDocumentVisibility(doc.id, next);
+        } catch (err: any) {
+          Alert.alert('Sharing failed', err?.message || 'Try again.');
+        }
+      } },
+      { text: 'Delete document', style: 'destructive', onPress: () => confirmDelete(doc) },
+    ]);
+  };
+
+  const openDocument = (doc: Document) => {
+    Alert.alert(doc.title || 'Document', 'Choose an action for this saved file.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'View original file', onPress: async () => {
+        try {
+          const url = await getDocumentUrl(doc.id);
+          await Linking.openURL(url);
+        } catch (err: any) {
+          Alert.alert('Could not open document', err?.message || 'Try again shortly.');
+        }
+      } },
+      ...(doc.uploaded_by === userId ?
+        [{ text: 'Sharing & delete', onPress: () => sharingMenu(doc) }] : []),
+    ]);
   };
 
   const chooseGallery = async () => {
@@ -135,11 +180,11 @@ export default function DocumentsScreen() {
             const icon = docIcon(doc.document_type || doc.title);
             const expired = expiredIds.has(doc.id) || (!!doc.expiry_date && new Date(doc.expiry_date) < new Date());
             return (
-              <TouchableOpacity key={doc.id} style={styles.row} activeOpacity={0.82}>
+              <TouchableOpacity key={doc.id} style={styles.row} onPress={() => openDocument(doc)} accessibilityRole="button" accessibilityLabel={`Open ${doc.title}`} activeOpacity={0.82}>
                 <IconBadge icon={icon.icon} bg={icon.bg} color={icon.fg} size={44} />
                 <View style={styles.flex}>
                   <Text style={styles.rowTitle} numberOfLines={1}>{doc.title}</Text>
-                  <Text style={[styles.rowMeta, expired && { color: H.red }]}>{expired ? 'Expired' : doc.expiry_date ? 'Valid' : 'Added'} · {formatDate(doc.expiry_date || doc.created_at)}</Text>
+                  <Text style={[styles.rowMeta, expired && { color: H.red }]}>{doc.visibility === 'household' ? 'Shared' : 'Private'} · {expired ? 'Expired' : doc.expiry_date ? 'Valid' : 'Added'} · {formatDate(doc.expiry_date || doc.created_at)}</Text>
                 </View>
                 {doc.expiry_date ? <View style={[styles.statusPill, { backgroundColor: expired ? '#FCE5E8' : H.greenBg }]}><Text style={[styles.statusText, { color: expired ? H.red : H.green }]}>{expired ? 'Expired' : 'Valid'}</Text></View> : null}
                 <Ionicons name="chevron-forward" size={18} color={H.muted2} />

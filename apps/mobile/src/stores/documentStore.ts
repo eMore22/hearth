@@ -3,6 +3,8 @@ import { documentService } from '../services/api';
 
 export interface Document {
   id: string;
+  uploaded_by?: string;
+  visibility?: 'private' | 'household';
   title: string;
   document_type: string;
   file_url?: string;
@@ -33,6 +35,8 @@ interface DocumentState {
   fetchAlerts: () => Promise<void>;
   uploadDocument: (file: any, memberName?: string) => Promise<void>;
   askQuestion: (question: string) => Promise<string>;
+  getDocumentUrl: (id: string) => Promise<string>;
+  setDocumentVisibility: (id: string, visibility: 'private'|'household') => Promise<void>;
   deleteDocument: (id: string) => Promise<void>;
   clearError: () => void;
 }
@@ -101,11 +105,34 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     }
   },
 
+  getDocumentUrl: async (id) => {
+    try {
+      const result = await documentService.access(id);
+      if (!result.data?.url?.startsWith('https://')) throw new Error('Invalid secure URL');
+      return result.data.url;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Could not open secure document');
+    }
+  },
+
+  setDocumentVisibility: async (id, visibility) => {
+    try {
+      await documentService.setVisibility(id, visibility);
+      set({ documents: get().documents.map(d =>
+        d.id === id ? { ...d, visibility } : d) });
+      await get().fetchDocuments();
+      await get().fetchAlerts();
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Document sharing could not be changed');
+    }
+  },
+
   deleteDocument: async (id) => {
     set({ loading: true, isLoading: true, error: null });
     try {
       await documentService.delete(id);
       await get().fetchDocuments();
+      await get().fetchAlerts();
     } catch (error: any) {
       const message = error.response?.data?.detail || 'Failed to delete document';
       set({ error: message });

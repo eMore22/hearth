@@ -47,7 +47,8 @@ class FakeDB:
             "household_tasks": [],
             "documents": [
                 {"household_id": "mine", "title": "Home Insurance",
-                 "document_type": "insurance", "summary": "Home water damage"},
+                 "document_type": "insurance", "summary": "Home water damage",
+                 "visibility": "household"},
                 {"household_id": "theirs", "title": "Secret",
                  "document_type": "insurance", "summary": "OTHER HOUSEHOLD"},
             ],
