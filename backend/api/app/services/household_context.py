@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.dependencies import get_supabase_admin
+from app.services.utility_intelligence import summarize_utilities
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,11 @@ def load_household_context(household_id: str, db: Any = None) -> dict:
         "message,urgency,days_until_expiry,sent_at", limit=40, ordered="sent_at")
     overview["bills"] = collect("bills", "bills",
         "name,provider,amount,currency,billing_cycle,next_due_date,is_active,category", limit=60)
+    # Only saved household obligations. Never assume provider-confirmed usage,
+    # meter state, or payment. No private bank account data is loaded here.
+    overview["utilities"] = summarize_utilities(
+        overview["bills"], (overview["household"] or {}).get("currency"))
+    overview["source_status"]["utilities"] = overview["source_status"]["bills"]
     overview["inventory"] = collect("groceries", "grocery_inventory",
         "name,quantity,unit,category,expiry_date", limit=80)
     legacy_inventory = collect("legacy_inventory", "inventory",
