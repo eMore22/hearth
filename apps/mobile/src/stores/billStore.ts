@@ -47,6 +47,7 @@ interface BillState {
 
   fetchBills: () => Promise<void>;
   createBill: (data: Partial<Bill>) => Promise<Bill>;
+  updateBill: (id: string, data: Partial<Bill>) => Promise<Bill>;
   deleteBill: (id: string) => Promise<void>;
   analyzeBill: (billData: Partial<Bill>) => Promise<any>;
   detectUnused: (bills?: Bill[]) => Promise<UnusedSubscription[]>;
@@ -80,6 +81,19 @@ export const useBillStore = create<BillState>((set, get) => ({
       const newBill = response.data;
       set({ bills: [...get().bills, newBill], isLoading: false });
       return newBill;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  updateBill: async (id, data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await billService.update(id, data);
+      const updated = response.data as Bill;
+      set({ bills: get().bills.map(b => b.id === id ? updated : b), isLoading: false });
+      return updated;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;
