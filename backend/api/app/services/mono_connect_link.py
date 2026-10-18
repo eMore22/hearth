@@ -88,6 +88,8 @@ def _delete_pending(db, record: dict):
 
 async def initiate(*, user_id: str, household_id: str, email: str,
                    name: str, acknowledged: bool) -> dict:
+    if not acknowledged:
+        raise MonoLinkError("Explicit read-only Sandbox consent is required")
     _secret()
     if not email or "@" not in email or len(email) > 254:
         raise MonoLinkError("Verified account email required")
