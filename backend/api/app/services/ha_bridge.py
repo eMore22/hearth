@@ -5,6 +5,7 @@ Called by the automation router and the Chief of Staff agent.
 """
 import httpx
 import json
+from app.services.ha_security import validate_public_ha_url
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
@@ -29,7 +30,8 @@ class HABridgeService:
     async def ping(self) -> bool:
         """Return True if the HA instance is reachable and the token is valid."""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+        await validate_public_ha_url(self.base_url)
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
                 resp = await client.get(
                     f"{self.base_url}/api/",
                     headers=self.headers,
@@ -44,7 +46,8 @@ class HABridgeService:
         Fetch the full state list from HA.
         Returns every entity with its current state and attributes.
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        await validate_public_ha_url(self.base_url)
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
             resp = await client.get(
                 f"{self.base_url}/api/states",
                 headers=self.headers,
@@ -54,7 +57,8 @@ class HABridgeService:
 
     async def get_entity_state(self, entity_id: str) -> Dict:
         """Fetch the current state of a single entity."""
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        await validate_public_ha_url(self.base_url)
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
             resp = await client.get(
                 f"{self.base_url}/api/states/{entity_id}",
                 headers=self.headers,
@@ -82,7 +86,8 @@ class HABridgeService:
         if extra_data:
             payload.update(extra_data)
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        await validate_public_ha_url(self.base_url)
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
             resp = await client.post(
                 f"{self.base_url}/api/services/{domain}/{service}",
                 headers=self.headers,
