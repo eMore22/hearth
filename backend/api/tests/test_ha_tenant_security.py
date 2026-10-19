@@ -148,6 +148,9 @@ class WebhookIsolationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(sensitive_device_action("cover","cover.garage"))
         self.assertTrue(sensitive_device_action("switch","switch.main_water_valve"))
         self.assertTrue(sensitive_device_action("input_boolean","input_boolean.gas_valve"))
+        self.assertTrue(sensitive_device_action("switch", "switch.relay_01", "Main water valve"))
+        self.assertTrue(sensitive_device_action("fan", "fan.relay_12", "Garage exhaust"))
+        self.assertTrue(sensitive_device_action("switch", "switch.relay_02", "", "gas"))
         self.assertFalse(sensitive_device_action("light","light.kitchen"))
         self.assertFalse(sensitive_device_action("switch","switch.desk_lamp"))
 
@@ -163,6 +166,19 @@ class WebhookIsolationTests(unittest.IsolatedAsyncioTestCase):
                     current_user={"id":USER,"household_id":H1})
         self.assertEqual(caught.exception.status_code,428)
         self.assertEqual(db.events.writes,0)
+
+    async def test_opaque_relay_with_valve_name_requires_confirmation(self):
+        db = DB(role="owner")
+        db.devices.data = {"domain": "switch", "is_actionable": True,
+                           "entity_id": "switch.relay_01",
+                           "friendly_name": "Main Water Valve", "device_class": "switch"}
+        with (patch("app.routers.automation.get_supabase_admin", return_value=db),
+              patch("app.services.ha_security.get_supabase_admin", return_value=db)):
+            with self.assertRaises(HTTPException) as caught:
+                await execute_action(
+                    ExecuteActionRequest(entity_id="switch.relay_01", action="turn_off"),
+                    current_user={"id": USER, "household_id": H1})
+        self.assertEqual(caught.exception.status_code, 428)
 
     async def test_household_owner_needed_before_device_call(self):
         db=DB(role="member")

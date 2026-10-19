@@ -44,14 +44,20 @@ class ExecuteActionRequest(BaseModel):
     confirm_sensitive: bool = False
 
 
-def sensitive_device_action(domain: str, entity_id: str) -> bool:
-    """Require a separate user acknowledgement for security/utility actuators."""
+def sensitive_device_action(
+    domain: str, entity_id: str, friendly_name: str = "", device_class: str = ""
+) -> bool:
+    """Classify by HA metadata too: relay IDs often don't describe physical equipment."""
     if domain in ("lock", "cover"):
         return True
-    if domain in ("switch", "input_boolean", "climate"):
-        return any(word in entity_id.casefold() for word in
-                   ("valve", "gas", "garage", "gate", "door", "heater", "security", "boiler"))
-    return False
+    # Never trust an opaque entity_id alone to identify a valve, gate or lock.
+    # Both mobile and API gate these actions; the API is authoritative.
+    descriptor = " ".join(str(value or "").casefold() for value in
+                          (entity_id, friendly_name, device_class))
+    return any(word in descriptor for word in
+               ("valve", "gas", "garage", "gate", "door", "heater", "security",
+                "boiler", "shutoff", "shut_off", "stopcock", "pump", "water",
+                "fire", "alarm", "siren", "lock"))
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -464,7 +470,7 @@ async def execute_action(
         raise HTTPException(status_code=400, detail="Home Assistant not connected")
 
     # Do not dispatch arbitrary entity IDs supplied by a client.
-    target = (supabase.table("ha_devices").select("domain, is_actionable")
+    target = (supabase.table("ha_devices").select("domain, is_actionable, friendly_name, device_class")
               .eq("household_id", household_id).eq("entity_id", payload.entity_id)
               .maybe_single().execute())
     if not target.data or not target.data.get("is_actionable"):
@@ -478,7 +484,9 @@ async def execute_action(
     }
     if payload.action not in allowed.get(domain, set()):
         raise HTTPException(status_code=400, detail="Unsupported action for this device")
-    if sensitive_device_action(str(domain or ""), payload.entity_id) and not payload.confirm_sensitive:
+    if sensitive_device_action(str(domain or ""), payload.entity_id,
+                               str(target.data.get("friendly_name") or ""),
+                               str(target.data.get("device_class") or "")) and not payload.confirm_sensitive:
         raise HTTPException(status_code=428,
                             detail="Confirm this sensitive device action explicitly before sending it")
 
