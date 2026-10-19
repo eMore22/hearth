@@ -10,6 +10,8 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from app.routers.documents import access_document, change_visibility, ShareDocumentRequest
 from app.services.owner_private_finance import require_household_owner, owner_bank_profile
+from app.services.household_context import load_household_context
+from app.services.household_reasoning import make_chief_prompt
 
 OWNER = "00000000-0000-4000-8000-000000000001"
 MEMBER = "00000000-0000-4000-8000-000000000002"
@@ -121,6 +123,19 @@ class TenantPrivacyTests(unittest.IsolatedAsyncioTestCase):
             await change_visibility(self.doc_id,ShareDocumentRequest(visibility="private"),user=self.owner,_=None)
             with self.assertRaises(HTTPException):
                 await access_document(self.doc_id,user=self.member,_=None)
+
+    def test_shared_chief_ignores_private_documents_and_unrelated_tenants(self):
+        # Chief is a household conversation. Even the uploader's personal
+        # document cannot enter the shared model prompt without opt-in.
+        private=load_household_context(HOME,self.db)
+        prompt=make_chief_prompt("What documents expire soon?",private,[])
+        self.assertNotIn("Private Passport",prompt)
+        self.assertNotIn("Other Family Secret",prompt)
+        self.db.tables["documents"][0]["visibility"]="household"
+        shared=load_household_context(HOME,self.db)
+        shared_prompt=make_chief_prompt("What documents expire soon?",shared,[])
+        self.assertIn("Private Passport",shared_prompt)
+        self.assertNotIn("Other Family Secret",shared_prompt)
 
     def test_bank_overview_forbidden_for_member(self):
         with patch("app.services.owner_private_finance.get_supabase_admin",return_value=self.db):
