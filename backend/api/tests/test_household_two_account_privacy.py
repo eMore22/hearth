@@ -44,7 +44,7 @@ class Rows:
         matching=[row for row in items if all(row.get(key)==value for key,value in self.conditions)]
         if self.updated and matching:
             for row in matching: row.update(self.updated)
-        return SimpleNamespace(data=matching[0] if getattr(self,"one",False) else matching)
+        return SimpleNamespace(data=(matching[0] if matching else None) if getattr(self,"one",False) else matching)
     def single(self): self.one=True;return self
 
 
