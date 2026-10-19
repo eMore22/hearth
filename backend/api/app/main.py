@@ -20,6 +20,7 @@ from app.routers import (
     utilities,
     nigeria_sandbox,
     mono_webhooks,
+    account_deletion,
 )
 
 app = FastAPI(
@@ -37,6 +38,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router,           prefix="/api/auth",          tags=["Auth"])
+app.include_router(account_deletion.router, prefix="/api/auth", tags=["Account deletion"])
 app.include_router(household.router,      prefix="/api/household",     tags=["Household"])
 app.include_router(documents.router,      prefix="/api/documents",     tags=["Documents"])
 app.include_router(bills.router,          prefix="/api/bills",         tags=["Bills"])
