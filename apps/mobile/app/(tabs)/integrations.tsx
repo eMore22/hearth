@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
+import { automationService } from '../../src/services/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAutomationStore } from '../../src/stores/automationStore';
 import { H, HearthDesign } from '../../src/theme/hearthDesign';
@@ -12,6 +14,23 @@ export default function IntegrationsScreen() {
   const { status, isLoading, fetchStatus, connectHA, disconnectHA } = useAutomationStore();
   const [url, setUrl] = useState('');
   const [token, setToken] = useState('');
+  const [webhookSetup, setWebhookSetup] = useState<{
+    webhook_url:string; header_household_id:string;
+    header_name:string; webhook_token:string; note:string;
+  } | null>(null);
+  const [loadingWebhook, setLoadingWebhook] = useState(false);
+  useFocusEffect(useCallback(() => () => setWebhookSetup(null), []));
+  const showWebhookSetup = async () => {
+    setLoadingWebhook(true);
+    try {
+      const response = await automationService.webhookSetup();
+      setWebhookSetup(response.data);
+    } catch(e: any) {
+      Alert.alert('Webhook setup unavailable',
+        e?.response?.status === 403 ? 'Only the household owner can view this credential.' :
+        e?.response?.data?.detail || 'Try again when Home Assistant is connected.');
+    } finally { setLoadingWebhook(false); }
+  };
   useEffect(() => { fetchStatus(); }, []);
   useEffect(() => { if (status.ha_instance_url) setUrl(status.ha_instance_url); }, [status.ha_instance_url]);
 
@@ -23,6 +42,7 @@ export default function IntegrationsScreen() {
     try {
       const result = await connectHA(cleanUrl, token.trim());
       setToken('');
+      setWebhookSetup(null);
       await fetchStatus();
       Alert.alert('Connected', result.message || `Hearth HQ connected to ${result.device_count || 0} devices.`);
     } catch (e: any) { Alert.alert('Could not connect', e?.message || 'Check your URL and token.'); }
@@ -44,6 +64,24 @@ export default function IntegrationsScreen() {
             {status.connected ? (
               <>
                 <View style={styles.connectedInfo}><Text style={styles.infoLabel}>INSTANCE</Text><Text style={styles.infoValue} numberOfLines={1}>{status.ha_instance_url || 'Connected instance'}</Text><Text style={styles.infoMeta}>{status.device_count || 0} cached devices · Last sync: {status.last_sync_at?.slice(0, 10) || 'unknown'}</Text>{status.reachable !== true && <Text style={styles.infoMeta}>Home Assistant is unreachable. Saved device states are not live. Reconnect using a reachable HTTPS address to restore controls.</Text>}</View>
+                <View style={{ marginTop: 13, gap: 8 }}>
+                  <TouchableOpacity style={styles.primarySoft} disabled={loadingWebhook}
+                    onPress={webhookSetup ? () => setWebhookSetup(null) : showWebhookSetup}>
+                    <Text style={styles.primarySoftText}>
+                      {loadingWebhook ? 'Checking…' : webhookSetup ? 'Hide webhook setup' : 'Show owner webhook setup'}
+                    </Text>
+                  </TouchableOpacity>
+                  {webhookSetup && <View style={{ backgroundColor: '#F5F4F2', borderRadius: 14, padding: 12, gap: 6 }}>
+                    <Text style={styles.infoMeta}>Private household webhook credential. Copy these values into your trusted Home Assistant automation. Never share your token.</Text>
+                    <Text style={styles.label}>WEBHOOK URL</Text>
+                    <Text selectable style={styles.infoValue}>{webhookSetup.webhook_url}</Text>
+                    <Text style={styles.label}>X-HEARTH-HOUSEHOLD-ID</Text>
+                    <Text selectable style={styles.infoValue}>{webhookSetup.header_household_id}</Text>
+                    <Text style={styles.label}>X-HEARTH-WEBHOOK-TOKEN</Text>
+                    <Text selectable style={styles.infoValue}>{webhookSetup.webhook_token}</Text>
+                    <Text style={styles.infoMeta}>Disconnecting and reconnecting Home Assistant invalidates the old credential. Existing integrations using the previous shared token must be updated.</Text>
+                  </View>}
+                </View>
                 <View style={styles.actionRow}><TouchableOpacity style={styles.primarySoft} onPress={() => router.push('/(tabs)/devices')}><Ionicons name="hardware-chip-outline" size={17} color={H.blue} /><Text style={styles.primarySoftText}>View devices</Text></TouchableOpacity><TouchableOpacity style={styles.dangerSoft} onPress={disconnect}><Text style={styles.dangerText}>Disconnect</Text></TouchableOpacity></View>
               </>
             ) : (
