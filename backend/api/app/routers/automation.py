@@ -339,6 +339,12 @@ async def get_ha_status(current_user: dict = Depends(get_current_user)):
         return {"connected": False, "reachable": False}
 
     supabase = get_supabase_admin()
+    # Members may see connectivity and cached device count, never the
+    # household owner's private remote HA address.
+    try:
+        is_owner = household_owner(current_user, supabase) == household_id
+    except HTTPException:
+        is_owner = False
     try:
         conn = (supabase.table("ha_connections")
                 .select("ha_instance_url,ha_access_token,ha_connected_at,last_sync_at")
@@ -363,7 +369,7 @@ async def get_ha_status(current_user: dict = Depends(get_current_user)):
         return {
             "connected": True,  # A connection is saved, not necessarily online.
             "reachable": reachable,
-            "ha_instance_url": conn.data["ha_instance_url"],
+            "ha_instance_url": conn.data["ha_instance_url"] if is_owner else None,
             "ha_connected_at": conn.data["ha_connected_at"],
             "last_sync_at": conn.data.get("last_sync_at"),
             "device_count": device_count_res.count or 0,
