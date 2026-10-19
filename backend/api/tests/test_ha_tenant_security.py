@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from app.services.ha_security import (
     webhook_token, check_webhook_token, public_https_host, household_owner,
 )
-from app.routers.automation import receive_webhook, execute_action, ExecuteActionRequest, _process_event_with_chief
+from app.routers.automation import receive_webhook, execute_action, ExecuteActionRequest, _process_event_with_chief, sensitive_device_action
 
 H1 = "00000000-0000-4000-8000-000000000001"
 H2 = "00000000-0000-4000-8000-000000000002"
@@ -142,6 +142,27 @@ class WebhookIsolationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Shared Home Coverage",prompt)
         self.assertNotIn("PRIVATE LIFE COVERAGE",prompt)
         self.assertIn(("visibility","household"),db.docs.conditions)
+
+    def test_safety_sensitive_devices_require_confirmation(self):
+        self.assertTrue(sensitive_device_action("lock","lock.front_door"))
+        self.assertTrue(sensitive_device_action("cover","cover.garage"))
+        self.assertTrue(sensitive_device_action("switch","switch.main_water_valve"))
+        self.assertTrue(sensitive_device_action("input_boolean","input_boolean.gas_valve"))
+        self.assertFalse(sensitive_device_action("light","light.kitchen"))
+        self.assertFalse(sensitive_device_action("switch","switch.desk_lamp"))
+
+    async def test_unconfirmed_lock_action_is_rejected_at_server(self):
+        db=DB(role="owner")
+        db.devices.data={"domain":"lock","is_actionable":True,
+                         "entity_id":"lock.front_door"}
+        with (patch("app.routers.automation.get_supabase_admin",return_value=db),
+              patch("app.services.ha_security.get_supabase_admin",return_value=db)):
+            with self.assertRaises(HTTPException) as caught:
+                await execute_action(
+                    ExecuteActionRequest(entity_id="lock.front_door",action="unlock"),
+                    current_user={"id":USER,"household_id":H1})
+        self.assertEqual(caught.exception.status_code,428)
+        self.assertEqual(db.events.writes,0)
 
     async def test_household_owner_needed_before_device_call(self):
         db=DB(role="member")
