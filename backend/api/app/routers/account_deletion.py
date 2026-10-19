@@ -4,6 +4,7 @@ A request is not proof that deletion has happened. Operators must verify
 household roles, cancel provider access and handle shared family data before
 purging Supabase Auth and owned records.
 """
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from app.dependencies import get_current_user, get_supabase_admin
@@ -76,7 +77,7 @@ async def cancel_deletion_request(user: dict = Depends(get_current_user)):
     db = get_supabase_admin()
     try:
         changed = (db.table("account_deletion_requests")
-                   .update({"status": "cancelled"})
+                   .update({"status": "cancelled", "updated_at": datetime.now(timezone.utc).isoformat()})
                    .eq("user_id", user_id).eq("status", "requested")
                    .execute().data or [])
         if not changed:
