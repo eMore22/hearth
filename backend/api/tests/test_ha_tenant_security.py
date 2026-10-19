@@ -59,8 +59,8 @@ class Req:
 
 class WebhookIsolationTests(unittest.IsolatedAsyncioTestCase):
     def test_tenant_tokens_are_distinct_and_root_secret_is_not_accepted(self):
-        with (patch("app.services.ha_security.settings.HA_WEBHOOK_SECRET","global-root-pretend-test"),
-              patch("app.routers.automation.get_supabase_admin",return_value=db)):
+        with patch("app.services.ha_security.settings.HA_WEBHOOK_SECRET","global-root-pretend-test"):
+            token = webhook_token(H1, CONNECTED_AT)
             self.assertEqual(len(token),64)
             self.assertTrue(check_webhook_token(H1,CONNECTED_AT,token))
             self.assertFalse(check_webhook_token(H2,CONNECTED_AT,token))
