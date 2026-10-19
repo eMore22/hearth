@@ -33,10 +33,12 @@ export default function DevicesScreen() {
     if (actionLoading) return;
     const action = isOnState(device.last_state) ? 'turn_off' : 'turn_on';
     const name = String(device.friendly_name || device.entity_id);
-    const sensitive = ['lock','cover'].includes(device.domain) ||
-      (['switch','input_boolean','climate'].includes(device.domain) &&
-       ['valve','gas','garage','gate','door','heater','security','boiler']
-         .some(term => device.entity_id.toLowerCase().includes(term)));
+    const descriptor = [device.entity_id, device.friendly_name, device.device_class]
+      .map(value => String(value || '').toLowerCase()).join(' ');
+    const sensitive = ['lock', 'cover'].includes(device.domain) ||
+      ['valve', 'gas', 'garage', 'gate', 'door', 'heater', 'security',
+       'boiler', 'shutoff', 'shut_off', 'stopcock', 'pump', 'water',
+       'fire', 'alarm', 'siren', 'lock'].some(term => descriptor.includes(term));
     const perform = async (confirmed: boolean) => {
       setActionLoading(device.entity_id);
       try { await executeAction(device.entity_id, action, confirmed ? {confirm_sensitive: true} : {}); }
