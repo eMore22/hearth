@@ -10,7 +10,6 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from app.routers.documents import access_document, change_visibility, ShareDocumentRequest
 from app.services.owner_private_finance import require_household_owner, owner_bank_profile
-from app.services.household_context import load_household_context
 
 OWNER = "00000000-0000-4000-8000-000000000001"
 MEMBER = "00000000-0000-4000-8000-000000000002"
@@ -29,7 +28,7 @@ class Rows:
     def eq(self, name, value):
         self.conditions.append((name,value))
         return self
-    def maybe_single(self):return self
+    def maybe_single(self):self.one=True;return self
     def order(self, *args, **kwargs):return self
     def limit(self, *args):return self
     def gt(self, *args):return self
@@ -133,5 +132,5 @@ class TenantPrivacyTests(unittest.IsolatedAsyncioTestCase):
 
     def test_unauthorized_bank_member_never_becomes_owner(self):
         with self.assertRaises(HTTPException) as caught:
-            require_household_owner(self.other,self.db) if False else require_household_owner(self.member,self.db)
+            require_household_owner(self.member,self.db)
         self.assertEqual(caught.exception.status_code,403)
