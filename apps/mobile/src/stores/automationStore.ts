@@ -133,10 +133,12 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
   executeAction: async (entityId, action, payload = {}) => {
     set({ isLoading: true, error: null });
     try {
+      const { confirm_sensitive, ...extra } = payload || {};
       const res = await api.post('/api/automation/action', {
         entity_id: entityId,
         action,
-        payload,
+        payload: extra,
+        confirm_sensitive: confirm_sensitive === true,
       });
 
       // The backend returns the state read directly back from Home Assistant.
