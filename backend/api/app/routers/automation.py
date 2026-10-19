@@ -239,22 +239,9 @@ async def connect_ha(
     if not household_id:
         raise HTTPException(status_code=400, detail="Create a household first")
 
-    # Render must never fetch loopback / RFC1918 / cloud metadata endpoints
-    # through a user-supplied Home Assistant URL.
-    from urllib.parse import urlsplit
-    import ipaddress
-    url = urlsplit(payload.ha_instance_url)
-    host = url.hostname or ""
-    if (url.scheme != "https" or not host or url.username or url.password
-            or host == "localhost" or host.endswith(".local")
-            or "." not in host):
-        raise HTTPException(status_code=400, detail="Use a public HTTPS Home Assistant URL")
-    try:
-        address = ipaddress.ip_address(host)
-        if not address.is_global:
-            raise HTTPException(status_code=400, detail="Private Home Assistant URLs are not allowed")
-    except ValueError:
-        pass
+    household_owner(current_user)
+    # Validate DNS as well as the hostname before any outbound call.
+    await validate_public_ha_url(payload.ha_instance_url)
 
     bridge = build_ha_bridge(payload.ha_instance_url, payload.ha_access_token)
     is_reachable = await bridge.ping()
@@ -296,6 +283,28 @@ async def connect_ha(
 
 
 # ── Status ────────────────────────────────────────────────────────────────────
+
+@router.get("/webhook-setup")
+async def household_webhook_setup(current_user: dict = Depends(get_current_user)):
+    """One household's webhook credential; never expose the shared root key."""
+    household_id = household_owner(current_user)
+    try:
+        db = get_supabase_admin()
+        connection = (db.table("ha_connections").select("ha_connected_at")
+                      .eq("household_id", household_id).eq("is_active", True)
+                      .maybe_single().execute().data)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Webhook configuration unavailable") from None
+    if not connection:
+        raise HTTPException(status_code=404, detail="Connect Home Assistant first")
+    return {
+        "webhook_url": "https://hearth-hq.onrender.com/api/automation/webhook",
+        "header_household_id": household_id,
+        "header_name": "X-Hearth-Webhook-Token",
+        "webhook_token": webhook_token(household_id, str(connection.get("ha_connected_at") or "")),
+        "note": "Keep this token private. It only works for this active household connection. Disconnect/reconnect to revoke it.",
+    }
+
 
 @router.get("/status")
 async def get_ha_status(current_user: dict = Depends(get_current_user)):
@@ -349,6 +358,7 @@ async def disconnect_ha(current_user: dict = Depends(get_current_user)):
     if not household_id:
         raise HTTPException(status_code=400, detail="No household found")
 
+    household_owner(current_user)
     supabase = get_supabase_admin()
     try:
         supabase.table("ha_connections")\
@@ -410,6 +420,10 @@ async def execute_action(
     household_id = current_user.get("household_id")
     if not household_id:
         raise HTTPException(status_code=400, detail="No household found")
+
+    # Until granular device roles and two-phase confirmation are audited,
+    # only the verified household owner may actuate physical equipment.
+    household_owner(current_user)
 
     supabase = get_supabase_admin()
 
