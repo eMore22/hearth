@@ -59,8 +59,8 @@ class Req:
 
 class WebhookIsolationTests(unittest.IsolatedAsyncioTestCase):
     def test_tenant_tokens_are_distinct_and_root_secret_is_not_accepted(self):
-        with patch("app.services.ha_security.settings.HA_WEBHOOK_SECRET","global-root-pretend-test"):
-            token=webhook_token(H1,CONNECTED_AT)
+        with (patch("app.services.ha_security.settings.HA_WEBHOOK_SECRET","global-root-pretend-test"),
+              patch("app.routers.automation.get_supabase_admin",return_value=db)):
             self.assertEqual(len(token),64)
             self.assertTrue(check_webhook_token(H1,CONNECTED_AT,token))
             self.assertFalse(check_webhook_token(H2,CONNECTED_AT,token))
@@ -89,8 +89,8 @@ class WebhookIsolationTests(unittest.IsolatedAsyncioTestCase):
         db=DB()
         event=('{"entity_id":"sensor.water","event_type":"state_changed",'
                '"new_state":"wet"}').encode()
-        with patch("app.services.ha_security.settings.HA_WEBHOOK_SECRET","global-root-pretend-test"), \\
-             patch("app.routers.automation.get_supabase_admin",return_value=db):
+        with (patch("app.services.ha_security.settings.HA_WEBHOOK_SECRET","global-root-pretend-test"),
+              patch("app.routers.automation.get_supabase_admin",return_value=db)):
             with self.assertRaises(HTTPException) as error:
                 await receive_webhook(Req(event),
                    x_hearth_household_id=H1,
@@ -100,8 +100,8 @@ class WebhookIsolationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_household_owner_needed_before_device_call(self):
         db=DB(role="member")
-        with patch("app.routers.automation.get_supabase_admin",return_value=db), \\
-             patch("app.services.ha_security.get_supabase_admin",return_value=db):
+        with (patch("app.routers.automation.get_supabase_admin",return_value=db),
+              patch("app.services.ha_security.get_supabase_admin",return_value=db)):
             with self.assertRaises(HTTPException) as e:
                 await execute_action(
                     ExecuteActionRequest(entity_id="lock.front_door",action="unlock"),
