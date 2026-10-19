@@ -41,6 +41,17 @@ class ExecuteActionRequest(BaseModel):
     entity_id: str
     action: str
     payload: dict = {}
+    confirm_sensitive: bool = False
+
+
+def sensitive_device_action(domain: str, entity_id: str) -> bool:
+    """Require a separate user acknowledgement for security/utility actuators."""
+    if domain in ("lock", "cover"):
+        return True
+    if domain in ("switch", "input_boolean", "climate"):
+        return any(word in entity_id.casefold() for word in
+                   ("valve", "gas", "garage", "gate", "door", "heater", "security", "boiler"))
+    return False
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -461,6 +472,9 @@ async def execute_action(
     }
     if payload.action not in allowed.get(domain, set()):
         raise HTTPException(status_code=400, detail="Unsupported action for this device")
+    if sensitive_device_action(str(domain or ""), payload.entity_id) and not payload.confirm_sensitive:
+        raise HTTPException(status_code=428,
+                            detail="Confirm this sensitive device action explicitly before sending it")
 
     bridge = build_ha_bridge(conn.data["ha_instance_url"], conn.data["ha_access_token"])
 
