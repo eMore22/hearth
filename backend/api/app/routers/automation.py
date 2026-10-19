@@ -160,7 +160,7 @@ async def receive_webhook(
         raise HTTPException(status_code=401, detail="Invalid webhook credentials")
 
     entity_id = str(body.get("entity_id") or "")[:120]
-    if not re.fullmatch(r"[a-z_]+\\.[a-z0-9_]+", entity_id):
+    if not re.fullmatch(r"[a-z_]+[.][a-z0-9_]+", entity_id):
         raise HTTPException(status_code=422, detail="Invalid entity ID")
     event_type = str(body.get("event_type") or "state_changed")[:50]
     old_state = str(body.get("old_state") or "")[:80]
