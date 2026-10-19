@@ -14,12 +14,14 @@ import re
 import traceback
 import logging
 import httpx
+import json
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from pydantic import BaseModel
 from app.dependencies import get_current_user, get_supabase_admin
 from app.services.ha_bridge import build_ha_bridge, HABridgeService
+from app.services.ha_security import household_owner, webhook_token, check_webhook_token, validate_public_ha_url
 from app.services.analytics import log_event
 
 from app.services.subscriptions import require_tier
@@ -39,6 +41,17 @@ class ExecuteActionRequest(BaseModel):
     entity_id: str
     action: str
     payload: dict = {}
+    confirm_sensitive: bool = False
+
+
+def sensitive_device_action(domain: str, entity_id: str) -> bool:
+    """Require a separate user acknowledgement for security/utility actuators."""
+    if domain in ("lock", "cover"):
+        return True
+    if domain in ("switch", "input_boolean", "climate"):
+        return any(word in entity_id.casefold() for word in
+                   ("valve", "gas", "garage", "gate", "door", "heater", "security", "boiler"))
+    return False
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -115,31 +128,69 @@ async def receive_webhook(
     x_hearth_household_id: Optional[str] = Header(None),
     x_hearth_webhook_token: Optional[str] = Header(None),
 ):
-    # Never accept tenant-selectable webhook events without a shared secret.
-    # Disabled by default until a secret is configured in Render and HA.
+    # A global token must never authorize caller-selected households.
+    # Each household has its own HMAC derived from the server-side root
+    # secret and that connection's creation timestamp.
     from app.config import settings
     if not settings.HA_WEBHOOK_SECRET:
         raise HTTPException(status_code=503, detail="Webhook authentication is not configured")
-    if not x_hearth_webhook_token or not secrets.compare_digest(
-        x_hearth_webhook_token, settings.HA_WEBHOOK_SECRET
-    ):
-        raise HTTPException(status_code=401, detail="Invalid webhook credentials")
+    total = 0
+    pieces = []
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > 32 * 1024:
+            raise HTTPException(status_code=413, detail="Webhook event too large")
+        pieces.append(chunk)
     try:
-        body = await request.json()
-    except Exception:
+        body = json.loads(b"".join(pieces))
+    except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="Invalid JSON body")
-
-    household_id = x_hearth_household_id or body.get("household_id")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Invalid webhook event")
+    body_id = str(body.get("household_id") or "")
+    header_id = str(x_hearth_household_id or "")
+    if header_id and body_id and header_id != body_id:
+        raise HTTPException(status_code=400, detail="Webhook household mismatch")
+    household_id = header_id or body_id
     if not household_id:
         raise HTTPException(status_code=400, detail="household_id required")
-
-    entity_id  = body.get("entity_id", "unknown")
-    event_type = body.get("event_type", "state_changed")
-    old_state  = body.get("old_state")
-    new_state  = body.get("new_state")
-    attributes = body.get("attributes", {})
-
+    # Invalid UUID fails before any DB query; no tenant enumeration.
+    webhook_token(household_id, "validation")
     supabase = get_supabase_admin()
+    try:
+        connection = (supabase.table("ha_connections")
+                      .select("ha_connected_at")
+                      .eq("household_id", household_id).eq("is_active", True)
+                      .maybe_single().execute().data)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Webhook authorization unavailable") from None
+    if (not connection or
+        not check_webhook_token(
+            household_id, str(connection.get("ha_connected_at") or ""),
+            str(x_hearth_webhook_token or ""))):
+        raise HTTPException(status_code=401, detail="Invalid webhook credentials")
+
+    entity_id = str(body.get("entity_id") or "")[:120]
+    if not re.fullmatch(r"[a-z_]+[.][a-z0-9_]+", entity_id):
+        raise HTTPException(status_code=422, detail="Invalid entity ID")
+    try:
+        device = (supabase.table("ha_devices").select("entity_id")
+                  .eq("household_id", household_id).eq("entity_id", entity_id)
+                  .maybe_single().execute().data)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Webhook device verification unavailable") from None
+    if not device:
+        raise HTTPException(status_code=404, detail="Unknown household device")
+
+    event_type = str(body.get("event_type") or "state_changed")[:50]
+    old_state = str(body.get("old_state") or "")[:80]
+    new_state = str(body.get("new_state") or "")[:80]
+    raw_attributes = body.get("attributes")
+    if not isinstance(raw_attributes, dict):
+        raw_attributes = {}
+    attributes = {key: str(raw_attributes[key])[:100]
+                  for key in ("device_class", "friendly_name")
+                  if key in raw_attributes}
 
     # 1. Log raw event
     try:
@@ -208,22 +259,9 @@ async def connect_ha(
     if not household_id:
         raise HTTPException(status_code=400, detail="Create a household first")
 
-    # Render must never fetch loopback / RFC1918 / cloud metadata endpoints
-    # through a user-supplied Home Assistant URL.
-    from urllib.parse import urlsplit
-    import ipaddress
-    url = urlsplit(payload.ha_instance_url)
-    host = url.hostname or ""
-    if (url.scheme != "https" or not host or url.username or url.password
-            or host == "localhost" or host.endswith(".local")
-            or "." not in host):
-        raise HTTPException(status_code=400, detail="Use a public HTTPS Home Assistant URL")
-    try:
-        address = ipaddress.ip_address(host)
-        if not address.is_global:
-            raise HTTPException(status_code=400, detail="Private Home Assistant URLs are not allowed")
-    except ValueError:
-        pass
+    household_owner(current_user)
+    # Validate DNS as well as the hostname before any outbound call.
+    await validate_public_ha_url(payload.ha_instance_url)
 
     bridge = build_ha_bridge(payload.ha_instance_url, payload.ha_access_token)
     is_reachable = await bridge.ping()
@@ -266,6 +304,28 @@ async def connect_ha(
 
 # ── Status ────────────────────────────────────────────────────────────────────
 
+@router.get("/webhook-setup")
+async def household_webhook_setup(current_user: dict = Depends(get_current_user)):
+    """One household's webhook credential; never expose the shared root key."""
+    household_id = household_owner(current_user)
+    try:
+        db = get_supabase_admin()
+        connection = (db.table("ha_connections").select("ha_connected_at")
+                      .eq("household_id", household_id).eq("is_active", True)
+                      .maybe_single().execute().data)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Webhook configuration unavailable") from None
+    if not connection:
+        raise HTTPException(status_code=404, detail="Connect Home Assistant first")
+    return {
+        "webhook_url": "https://hearth-hq.onrender.com/api/automation/webhook",
+        "header_household_id": household_id,
+        "header_name": "X-Hearth-Webhook-Token",
+        "webhook_token": webhook_token(household_id, str(connection.get("ha_connected_at") or "")),
+        "note": "Keep this token private. It only works for this active household connection. Disconnect/reconnect to revoke it.",
+    }
+
+
 @router.get("/status")
 async def get_ha_status(current_user: dict = Depends(get_current_user)):
     """Distinguish a configured HA connection from one verified online now.
@@ -279,6 +339,12 @@ async def get_ha_status(current_user: dict = Depends(get_current_user)):
         return {"connected": False, "reachable": False}
 
     supabase = get_supabase_admin()
+    # Members may see connectivity and cached device count, never the
+    # household owner's private remote HA address.
+    try:
+        is_owner = household_owner(current_user, supabase) == household_id
+    except HTTPException:
+        is_owner = False
     try:
         conn = (supabase.table("ha_connections")
                 .select("ha_instance_url,ha_access_token,ha_connected_at,last_sync_at")
@@ -303,7 +369,7 @@ async def get_ha_status(current_user: dict = Depends(get_current_user)):
         return {
             "connected": True,  # A connection is saved, not necessarily online.
             "reachable": reachable,
-            "ha_instance_url": conn.data["ha_instance_url"],
+            "ha_instance_url": conn.data["ha_instance_url"] if is_owner else None,
             "ha_connected_at": conn.data["ha_connected_at"],
             "last_sync_at": conn.data.get("last_sync_at"),
             "device_count": device_count_res.count or 0,
@@ -318,6 +384,7 @@ async def disconnect_ha(current_user: dict = Depends(get_current_user)):
     if not household_id:
         raise HTTPException(status_code=400, detail="No household found")
 
+    household_owner(current_user)
     supabase = get_supabase_admin()
     try:
         supabase.table("ha_connections")\
@@ -380,6 +447,10 @@ async def execute_action(
     if not household_id:
         raise HTTPException(status_code=400, detail="No household found")
 
+    # Until granular device roles and two-phase confirmation are audited,
+    # only the verified household owner may actuate physical equipment.
+    household_owner(current_user)
+
     supabase = get_supabase_admin()
 
     conn = supabase.table("ha_connections")\
@@ -407,6 +478,9 @@ async def execute_action(
     }
     if payload.action not in allowed.get(domain, set()):
         raise HTTPException(status_code=400, detail="Unsupported action for this device")
+    if sensitive_device_action(str(domain or ""), payload.entity_id) and not payload.confirm_sensitive:
+        raise HTTPException(status_code=428,
+                            detail="Confirm this sensitive device action explicitly before sending it")
 
     bridge = build_ha_bridge(conn.data["ha_instance_url"], conn.data["ha_access_token"])
 
@@ -647,9 +721,10 @@ async def _process_event_with_chief(
 
     try:
         docs_res = supabase.table("documents")\
-            .select("title, document_type, summary")\
+            .select("title,document_type")\
             .eq("household_id", household_id)\
-            .execute()
+            .eq("visibility", "household")\
+            .limit(30).execute()
         docs = docs_res.data or []
         insurance_docs = [
             d for d in docs

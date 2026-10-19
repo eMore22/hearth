@@ -172,6 +172,7 @@ export const chiefService = {
 
 export const automationService = {
   getStatus: () => api.get('/api/automation/status'),
+  webhookSetup: () => api.get<{webhook_url:string;header_household_id:string;header_name:string;webhook_token:string;note:string}>('/api/automation/webhook-setup'),
   connect: (haInstanceUrl: string, haAccessToken: string) =>
     api.post('/api/automation/connect', {
       ha_instance_url: haInstanceUrl,

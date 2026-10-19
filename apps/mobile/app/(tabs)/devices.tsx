@@ -30,11 +30,27 @@ export default function DevicesScreen() {
       Alert.alert('Home Assistant offline', 'The saved device state is not live. Reconnect a reachable Home Assistant server before controlling devices.');
       return;
     }
+    if (actionLoading) return;
     const action = isOnState(device.last_state) ? 'turn_off' : 'turn_on';
-    setActionLoading(device.entity_id);
-    try { await executeAction(device.entity_id, action); }
-    catch (e: any) { Alert.alert('Action failed', e?.message || 'Could not reach Home Assistant.'); }
-    finally { setActionLoading(null); }
+    const name = String(device.friendly_name || device.entity_id);
+    const sensitive = ['lock','cover'].includes(device.domain) ||
+      (['switch','input_boolean','climate'].includes(device.domain) &&
+       ['valve','gas','garage','gate','door','heater','security','boiler']
+         .some(term => device.entity_id.toLowerCase().includes(term)));
+    const perform = async (confirmed: boolean) => {
+      setActionLoading(device.entity_id);
+      try { await executeAction(device.entity_id, action, confirmed ? {confirm_sensitive: true} : {}); }
+      catch (e: any) { Alert.alert('Action failed', e?.message || 'Could not reach Home Assistant.'); }
+      finally { setActionLoading(null); }
+    };
+    if (sensitive) {
+      Alert.alert('Confirm physical device action',
+        `Hearth will ask Home Assistant to ${action === 'turn_on' ? 'activate/open' : 'deactivate/close'} "${name}". This may move a lock, door, gas or water valve. Confirm the area is safe and verify the device state afterward.`,
+        [{text:'Cancel',style:'cancel'},
+         {text:'Confirm device action',style:'destructive',onPress:()=>{void perform(true);}}]);
+      return;
+    }
+    await perform(false);
   };
 
   const filtered = devices.filter(d => filter === 'all' ? true : filter === 'actionable' ? d.is_actionable : !d.is_actionable);
