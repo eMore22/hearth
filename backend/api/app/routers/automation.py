@@ -14,12 +14,14 @@ import re
 import traceback
 import logging
 import httpx
+import json
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from pydantic import BaseModel
 from app.dependencies import get_current_user, get_supabase_admin
 from app.services.ha_bridge import build_ha_bridge, HABridgeService
+from app.services.ha_security import household_owner, webhook_token, check_webhook_token, validate_public_ha_url
 from app.services.analytics import log_event
 
 from app.services.subscriptions import require_tier
@@ -115,31 +117,60 @@ async def receive_webhook(
     x_hearth_household_id: Optional[str] = Header(None),
     x_hearth_webhook_token: Optional[str] = Header(None),
 ):
-    # Never accept tenant-selectable webhook events without a shared secret.
-    # Disabled by default until a secret is configured in Render and HA.
+    # A global token must never authorize caller-selected households.
+    # Each household has its own HMAC derived from the server-side root
+    # secret and that connection's creation timestamp.
     from app.config import settings
     if not settings.HA_WEBHOOK_SECRET:
         raise HTTPException(status_code=503, detail="Webhook authentication is not configured")
-    if not x_hearth_webhook_token or not secrets.compare_digest(
-        x_hearth_webhook_token, settings.HA_WEBHOOK_SECRET
-    ):
-        raise HTTPException(status_code=401, detail="Invalid webhook credentials")
+    total = 0
+    pieces = []
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > 32 * 1024:
+            raise HTTPException(status_code=413, detail="Webhook event too large")
+        pieces.append(chunk)
     try:
-        body = await request.json()
-    except Exception:
+        body = json.loads(b"".join(pieces))
+    except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="Invalid JSON body")
-
-    household_id = x_hearth_household_id or body.get("household_id")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Invalid webhook event")
+    body_id = str(body.get("household_id") or "")
+    header_id = str(x_hearth_household_id or "")
+    if header_id and body_id and header_id != body_id:
+        raise HTTPException(status_code=400, detail="Webhook household mismatch")
+    household_id = header_id or body_id
     if not household_id:
         raise HTTPException(status_code=400, detail="household_id required")
-
-    entity_id  = body.get("entity_id", "unknown")
-    event_type = body.get("event_type", "state_changed")
-    old_state  = body.get("old_state")
-    new_state  = body.get("new_state")
-    attributes = body.get("attributes", {})
-
+    # Invalid UUID fails before any DB query; no tenant enumeration.
+    webhook_token(household_id, "validation")
     supabase = get_supabase_admin()
+    try:
+        connection = (supabase.table("ha_connections")
+                      .select("ha_connected_at")
+                      .eq("household_id", household_id).eq("is_active", True)
+                      .maybe_single().execute().data)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Webhook authorization unavailable") from None
+    if (not connection or
+        not check_webhook_token(
+            household_id, str(connection.get("ha_connected_at") or ""),
+            str(x_hearth_webhook_token or ""))):
+        raise HTTPException(status_code=401, detail="Invalid webhook credentials")
+
+    entity_id = str(body.get("entity_id") or "")[:120]
+    if not re.fullmatch(r"[a-z_]+\\.[a-z0-9_]+", entity_id):
+        raise HTTPException(status_code=422, detail="Invalid entity ID")
+    event_type = str(body.get("event_type") or "state_changed")[:50]
+    old_state = str(body.get("old_state") or "")[:80]
+    new_state = str(body.get("new_state") or "")[:80]
+    raw_attributes = body.get("attributes")
+    if not isinstance(raw_attributes, dict):
+        raw_attributes = {}
+    attributes = {key: str(raw_attributes[key])[:100]
+                  for key in ("device_class", "friendly_name")
+                  if key in raw_attributes}
 
     # 1. Log raw event
     try:
