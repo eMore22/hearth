@@ -30,8 +30,8 @@ class HABridgeService:
     async def ping(self) -> bool:
         """Return True if the HA instance is reachable and the token is valid."""
         try:
-        await validate_public_ha_url(self.base_url)
-        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
+            await validate_public_ha_url(self.base_url)
+            async with httpx.AsyncClient(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
                 resp = await client.get(
                     f"{self.base_url}/api/",
                     headers=self.headers,
