@@ -162,6 +162,15 @@ async def receive_webhook(
     entity_id = str(body.get("entity_id") or "")[:120]
     if not re.fullmatch(r"[a-z_]+[.][a-z0-9_]+", entity_id):
         raise HTTPException(status_code=422, detail="Invalid entity ID")
+    try:
+        device = (supabase.table("ha_devices").select("entity_id")
+                  .eq("household_id", household_id).eq("entity_id", entity_id)
+                  .maybe_single().execute().data)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Webhook device verification unavailable") from None
+    if not device:
+        raise HTTPException(status_code=404, detail="Unknown household device")
+
     event_type = str(body.get("event_type") or "state_changed")[:50]
     old_state = str(body.get("old_state") or "")[:80]
     new_state = str(body.get("new_state") or "")[:80]
@@ -692,9 +701,10 @@ async def _process_event_with_chief(
 
     try:
         docs_res = supabase.table("documents")\
-            .select("title, document_type, summary")\
+            .select("title,document_type")\
             .eq("household_id", household_id)\
-            .execute()
+            .eq("visibility", "household")\
+            .limit(30).execute()
         docs = docs_res.data or []
         insurance_docs = [
             d for d in docs
