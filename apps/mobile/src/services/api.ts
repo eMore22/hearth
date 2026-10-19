@@ -58,6 +58,10 @@ export const authService = {
     api.post('/api/auth/reset-password', { email, token, new_password: newPassword }),
   updateProfile: (fullName: string) =>
     api.patch('/api/auth/profile', { full_name: fullName }),
+  deletionRequestStatus: () => api.get<{request: {status:string;requested_at:string}|null}>('/api/auth/deletion-request'),
+  requestDeletion: (confirmation: string) =>
+    api.post('/api/auth/deletion-request', {confirmation}),
+  cancelDeletion: () => api.delete('/api/auth/deletion-request'),
 };
 
 export const householdService = {
