@@ -34,6 +34,8 @@ class Settings(BaseSettings):
 
     # Shared secret supplied only to trusted Home Assistant webhooks.
     HA_WEBHOOK_SECRET: str = ""
+    # Separate application-side Fernet key for Home Assistant tokens. Never ship to mobile.
+    HA_TOKEN_ENCRYPTION_KEY: str = ""
 
     # Server-side RevenueCat key, NEVER EXPO_PUBLIC_. Gate is enabled only
     # after purchase/restore validation in Google Play Internal Testing.
