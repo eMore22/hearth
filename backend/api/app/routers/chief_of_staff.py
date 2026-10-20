@@ -4,6 +4,7 @@ import asyncio
 from app.dependencies import get_current_user, get_supabase_admin
 from app.agents.chief_of_staff_agent import ChiefOfStaffAgent
 from app.services.ha_bridge import build_ha_bridge
+from app.services.ha_credentials import read_ha_token
 from app.services.analytics import log_event
 from app.services.household_context import load_household_context
 from app.services.subscriptions import require_tier
@@ -39,7 +40,7 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
                           .eq("is_active", True).maybe_single().execute().data)
             if connection:
                 bridge = build_ha_bridge(connection["ha_instance_url"],
-                                         connection["ha_access_token"])
+                                         read_ha_token(household_id, connection, supabase))
                 live = await bridge.get_all_states()
                 parsed = bridge.parse_devices_from_states(live)
                 from datetime import datetime, timezone
@@ -215,7 +216,7 @@ async def _execute_device_command(household_id: str, entity_id: str, action: str
     if not conn or not conn.data:
         return {"status": "failed", "error": "Home Assistant not connected"}
 
-    bridge = build_ha_bridge(conn.data["ha_instance_url"], conn.data["ha_access_token"])
+    bridge = build_ha_bridge(conn.data["ha_instance_url"], read_ha_token(household_id, conn.data, supabase))
 
     action_row = supabase.table("ha_actions").insert({
         "household_id": household_id,

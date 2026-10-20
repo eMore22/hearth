@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from pydantic import BaseModel
 from app.dependencies import get_current_user, get_supabase_admin
 from app.services.ha_bridge import build_ha_bridge, HABridgeService
+from app.services.ha_credentials import encrypt_ha_token, read_ha_token
 from app.services.ha_security import household_owner, webhook_token, check_webhook_token, validate_public_ha_url
 from app.services.analytics import log_event
 
@@ -283,7 +284,7 @@ async def connect_ha(
         supabase.table("ha_connections").upsert({
             "household_id":    household_id,
             "ha_instance_url": payload.ha_instance_url,
-            "ha_access_token": payload.ha_access_token,
+            "ha_access_token": encrypt_ha_token(payload.ha_access_token),
             "ha_connected_at": datetime.utcnow().isoformat(),
             "is_active":       True,
         }, on_conflict="household_id").execute()
@@ -366,7 +367,7 @@ async def get_ha_status(current_user: dict = Depends(get_current_user)):
         reachable = False
         try:
             bridge = build_ha_bridge(conn.data["ha_instance_url"],
-                                     conn.data["ha_access_token"])
+                                     read_ha_token(household_id, conn.data, supabase))
             reachable = bool(await asyncio.wait_for(bridge.ping(), timeout=3.0))
         except Exception:
             # An unreachable/expired test tunnel must never be shown as live.
@@ -394,7 +395,7 @@ async def disconnect_ha(current_user: dict = Depends(get_current_user)):
     supabase = get_supabase_admin()
     try:
         supabase.table("ha_connections")\
-            .update({"is_active": False})\
+            .update({"is_active": False, "ha_access_token": ""})\
             .eq("household_id", household_id)\
             .execute()
         return {"status": "disconnected"}
@@ -425,7 +426,7 @@ async def list_devices(current_user: dict = Depends(get_current_user)):
         if conn and conn.data:
             bridge = build_ha_bridge(
                 conn.data["ha_instance_url"],
-                conn.data["ha_access_token"],
+                read_ha_token(household_id, conn.data, supabase),
             )
             await _sync_devices(household_id, bridge, supabase)
     except Exception as e:
@@ -490,7 +491,7 @@ async def execute_action(
         raise HTTPException(status_code=428,
                             detail="Confirm this sensitive device action explicitly before sending it")
 
-    bridge = build_ha_bridge(conn.data["ha_instance_url"], conn.data["ha_access_token"])
+    bridge = build_ha_bridge(conn.data["ha_instance_url"], read_ha_token(household_id, conn.data, supabase))
 
     action_row = supabase.table("ha_actions").insert({
         "household_id": household_id,

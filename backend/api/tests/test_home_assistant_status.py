@@ -44,8 +44,9 @@ class HomeAssistantStatusTests(unittest.IsolatedAsyncioTestCase):
         bridge = MagicMock()
         bridge.ping = AsyncMock(return_value=reachable)
         with patch("app.routers.automation.get_supabase_admin", return_value=db):
-            with patch("app.routers.automation.build_ha_bridge", return_value=bridge):
-                result = await get_ha_status(current_user={"household_id": "mine"})
+            with patch("app.routers.automation.read_ha_token", return_value="TEST-CREDENTIAL"):
+                with patch("app.routers.automation.build_ha_bridge", return_value=bridge):
+                    result = await get_ha_status(current_user={"household_id": "mine"})
         self.assertNotIn("ha_access_token", result)
         self.assertNotIn("NOT-FOR-USER-RESPONSES", str(result))
         return result, bridge
