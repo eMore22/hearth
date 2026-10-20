@@ -8,6 +8,16 @@ The signed-in app creates a **request**, not an irreversible deletion. Never rep
 - Public access is available through `/account-deletion` (support email), for users who cannot sign in. The support inbox is **not** automatically connected to this queue; an operator must reconcile requests from both sources.
 - Requests hold a user ID and household ID at request time, not email, password or scanned personal documents. Administrative database access only.
 
+## Available operator-only readiness tools
+- \`app.services.deletion_review_queue.pending_deletion_queue()\` returns bounded IDs, statuses and age flags for requests that need attention. It contains no personal email, documents or bank data, and is **not exposed to app users or unauthenticated HTTP clients**. Operations staff must explicitly invoke it from a restricted backend environment.
+- \`app.services.deletion_review_queue.review_deletion_request(request_id)\` returns the conservative read-only preflight. It covers multiple memberships, owner roles, private documents, finance connections, notification tokens and user-attributed chat, in addition to household-shared health data.
+- These tools only inventory work. They do not revoke consents, remove files, delete identities, send customer notifications or assert deletion completed. Every unresolved item remains a blocker; do not manually set the status to completed without audited verification.
+- A seven-day default age flag is an operational triage threshold, **not a legal deadline**. Determine applicable statutory periods and response obligations by market.
+
+## HA credential migration
+- The API now encrypts existing active HA credentials on startup using its Render-held Fernet key; it logs **counts only**. Query the encrypted/plaintext counts without selecting secrets.
+- After database encryption, rotate historical Home Assistant tokens through each user's authorized HA instance and re-link. Do not rotate or delete other household members' data.
+
 ## Required processing checklist (human operator)
 1. Establish request ownership from active authenticated identity or independently verified support case. Confirm household owner vs invited family member, and inspect co-owned resources before deleting anything.
 2. Cancel the user's Google Play subscription only via Google Play / user instructions; do not assert that deleting Hearth cancels billing. Check RevenueCat entitlements and reconcile subscriber IDs.
