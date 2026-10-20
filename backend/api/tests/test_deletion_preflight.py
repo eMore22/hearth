@@ -33,6 +33,8 @@ class DB:
             "medications":[],
             "family_health_profiles":[],
             "chat_messages":[],
+            "push_tokens":[],
+            "analytics_events":[],
         }
     def table(self,name):return Q(self.data.get(name,[]))
 
@@ -52,6 +54,26 @@ class PreflightTests(unittest.TestCase):
     def test_bank_requires_revocation(self):
         report=deletion_preflight(ID,DB(bank=True))
         self.assertTrue(any("provider consents" in reason for reason in report["blockers"]))
+
+    def test_multiple_households_are_blocked(self):
+        db = DB(private_doc=False)
+        db.data["household_members"].append({
+            "household_id": "00000000-0000-4000-8000-000000000099",
+            "user_id": USER, "role": "owner"})
+        report=deletion_preflight(ID,db)
+        self.assertEqual(report["evidence_counts"]["membership_count"],2)
+        self.assertTrue(report["evidence_counts"]["owns_household"])
+        self.assertTrue(any("multiple households" in reason for reason in report["blockers"]))
+        self.assertFalse(report["automated_purge_authorized"])
+
+    def test_user_owned_chat_and_push_are_discovered(self):
+        db=DB(private_doc=False)
+        db.data["chat_messages"]=[{"id":"m","user_id":USER,"household_id":HOME}]
+        db.data["push_tokens"]=[{"id":"p","user_id":USER}]
+        report=deletion_preflight(ID,db)
+        self.assertEqual(report["evidence_counts"]["personal_chat_messages"],1)
+        self.assertEqual(report["evidence_counts"]["personal_push_tokens"],1)
+        self.assertTrue(any("notification tokens" in reason for reason in report["blockers"]))
 
     def test_even_empty_case_requires_operator_verification(self):
         db=DB(role="owner",other_member=False,private_doc=False)
