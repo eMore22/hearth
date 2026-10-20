@@ -36,13 +36,44 @@ def deletion_preflight(request_id: str, db=None) -> dict:
         blockers.append("No verified household at request time. Verify identity and personal records manually.")
     try:
         membership = (db.table("household_members").select("role,household_id")
-                      .eq("user_id",user_id).limit(1).execute().data or [])
+                      .eq("user_id",user_id).limit(101).execute().data or [])
     except Exception:
         membership = []
         blockers.append("Unable to read current household membership")
+    evidence["membership_count"] = len(membership)
+    if len(membership) >= 101:
+        blockers.append("Membership inventory exceeds limit; investigate every household")
+    if len(membership) > 1:
+        blockers.append("User belongs to multiple households; every membership requires separate review")
+    evidence["owns_household"] = any(row.get("role") == "owner" for row in membership)
+    if evidence["owns_household"] and len(membership) > 1:
+        blockers.append("Owner roles require verified transfer or closure for each household")
     household_id = str(membership[0]["household_id"]) if membership else household_id
     role = str(membership[0].get("role") or "") if membership else "unverified"
     evidence["role"] = role
+    evidence["membership_roles"] = sorted({str(row.get("role") or "unknown") for row in membership})
+    if record.get("household_id_at_request") and household_id != str(record["household_id_at_request"]):
+        blockers.append("Household changed after request; verify identity and deletion scope")
+
+    def personal_count(table: str, col: str, cap=101):
+        try:
+            rows = (db.table(table).select("id").eq(col,user_id)
+                    .limit(cap).execute().data or [])
+            if len(rows) >= cap:
+                blockers.append(f"{table} personal record count exceeds limit")
+            return len(rows)
+        except Exception:
+            blockers.append(f"{table} user-attributed inventory unavailable")
+            return None
+
+    evidence["personal_chat_messages"] = personal_count("chat_messages","user_id")
+    evidence["personal_push_tokens"] = personal_count("push_tokens","user_id")
+    evidence["personal_analytics"] = personal_count("analytics_events","user_id")
+    evidence["personal_finance_connections"] = personal_count("finance_connections","owner_user_id")
+    if evidence["personal_chat_messages"]:
+        blockers.append("User-attributed chat must be reviewed for personal deletion versus shared conversation")
+    if evidence["personal_push_tokens"]:
+        blockers.append("Revoke and erase user notification tokens before deleting Auth")
 
     if household_id:
         try:
@@ -68,7 +99,7 @@ def deletion_preflight(request_id: str, db=None) -> dict:
                 return None
 
         evidence["personal_documents"] = count("documents","uploaded_by",user_id)
-        evidence["linked_bank_connections"] = count("finance_connections","owner_user_id",user_id)
+        evidence["linked_bank_connections"] = evidence["personal_finance_connections"]
         evidence["household_health_events"] = count("health_events","household_id",household_id)
         evidence["household_medications"] = count("medications","household_id",household_id)
         evidence["household_family_health_profiles"] = count("family_health_profiles","household_id",household_id)
