@@ -32,7 +32,9 @@ class FakeTable:
                 self.row.update(values)
                 return SimpleNamespace(data=[dict(self.row)])
             return SimpleNamespace(data=[])
-        return SimpleNamespace(data=dict(self.row) if self.single and allowed else None)
+        if not self.single:
+            return SimpleNamespace(data=[dict(self.row)] if allowed else [])
+        return SimpleNamespace(data=dict(self.row) if allowed else None)
 
 
 class FakeDB:
