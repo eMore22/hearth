@@ -75,3 +75,42 @@ def read_ha_token(household_id: str, connection: dict, db) -> str:
     except Exception:
         pass
     raise HTTPException(status_code=503, detail="Smart-home credential migration unavailable")
+
+
+def migrate_active_ha_credentials(db=None, max_rows: int = 100) -> dict:
+    """Bounded, idempotent encryption migration of active legacy HA credentials.
+
+    Invoke during API startup. Only counts are returned, never token values.
+    Failed migrations cannot bypass the fail-closed read path.
+    """
+    from app.dependencies import get_supabase_admin
+    if not 1 <= max_rows <= 500:
+        raise ValueError("Invalid migration batch size")
+    db = db or get_supabase_admin()
+    try:
+        rows = (db.table("ha_connections")
+                .select("household_id,ha_access_token")
+                .eq("is_active", True).limit(max_rows + 1)
+                .execute().data or [])
+    except Exception:
+        return {"scanned": 0, "migrated": 0, "failed": 1, "truncated": False}
+    migrated = 0
+    failed = 0
+    for row in rows[:max_rows]:
+        household_id = str(row.get("household_id") or "")
+        value = row.get("ha_access_token")
+        if not household_id or not isinstance(value, str) or not value:
+            failed += 1
+        elif value.startswith(TOKEN_PREFIX):
+            try:
+                _decrypt(value)
+            except HTTPException:
+                failed += 1
+        else:
+            try:
+                read_ha_token(household_id, row, db)
+                migrated += 1
+            except HTTPException:
+                failed += 1
+    return {"scanned": min(len(rows), max_rows), "migrated": migrated,
+            "failed": failed, "truncated": len(rows) > max_rows}

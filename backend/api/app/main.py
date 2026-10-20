@@ -1,4 +1,21 @@
+from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI
+from fastapi.concurrency import run_in_threadpool
+from app.services.ha_credentials import migrate_active_ha_credentials
+
+startup_logger = logging.getLogger(__name__)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Only encrypt saved HA tokens; no commands are sent to real hardware.
+    # Failed migrations cannot bypass the fail-closed credential read path.
+    try:
+        result = await run_in_threadpool(migrate_active_ha_credentials)
+        startup_logger.info("HA encryption migration summary: %s", result)
+    except Exception:
+        startup_logger.warning("HA encryption migration deferred")
+    yield
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
@@ -26,7 +43,8 @@ from app.routers import (
 app = FastAPI(
     title="Hearth API",
     description="AI Household Operating System",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

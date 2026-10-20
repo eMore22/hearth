@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from cryptography.fernet import Fernet
 from fastapi import HTTPException
-from app.services.ha_credentials import TOKEN_PREFIX, encrypt_ha_token, read_ha_token
+from app.services.ha_credentials import TOKEN_PREFIX, encrypt_ha_token, read_ha_token, migrate_active_ha_credentials
 
 H = "00000000-0000-4000-8000-000000000011"
 
@@ -17,6 +17,7 @@ class FakeTable:
         self.single = False
         self.writes = 0
     def select(self, *args): return self
+    def limit(self, count): return self
     def update(self, values): self.change = values; return self
     def eq(self, name, value): self.filters.append((name, value)); return self
     def maybe_single(self): self.single = True; return self
@@ -31,7 +32,9 @@ class FakeTable:
                 self.row.update(values)
                 return SimpleNamespace(data=[dict(self.row)])
             return SimpleNamespace(data=[])
-        return SimpleNamespace(data=dict(self.row) if self.single and allowed else None)
+        if not self.single:
+            return SimpleNamespace(data=[dict(self.row)] if allowed else [])
+        return SimpleNamespace(data=dict(self.row) if allowed else None)
 
 
 class FakeDB:
@@ -91,6 +94,26 @@ class CredentialTests(unittest.TestCase):
             self.assertEqual(db.conn.writes, 0)
             self.assertEqual(db.conn.row["ha_access_token"], self.secret)
 
+
+    def test_startup_migration_encrypts_legacy_row_once(self):
+        with patch("app.services.ha_credentials.settings.HA_TOKEN_ENCRYPTION_KEY", self.key):
+            db = FakeDB(self.secret)
+            first = migrate_active_ha_credentials(db)
+            self.assertEqual(first["migrated"], 1)
+            self.assertEqual(first["failed"], 0)
+            self.assertTrue(db.conn.row["ha_access_token"].startswith(TOKEN_PREFIX))
+            second = migrate_active_ha_credentials(db)
+            self.assertEqual(second["migrated"], 0)
+            self.assertEqual(second["failed"], 0)
+            self.assertEqual(db.conn.writes, 1)
+
+    def test_startup_migration_refuses_missing_key(self):
+        with patch("app.services.ha_credentials.settings.HA_TOKEN_ENCRYPTION_KEY", ""):
+            db = FakeDB(self.secret)
+            result = migrate_active_ha_credentials(db)
+            self.assertEqual(result["migrated"], 0)
+            self.assertEqual(result["failed"], 1)
+            self.assertEqual(db.conn.writes, 0)
 
 if __name__ == "__main__":
     unittest.main()
