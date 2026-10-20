@@ -54,7 +54,7 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
             context["source_status"]["ha_live_refresh"] = "unavailable"
     try:
         prior = (supabase.table("chat_messages").select("role,content")
-                 .eq("household_id", household_id)
+                  .eq("household_id", household_id).eq("user_id", str(current_user["id"]))
                  .order("created_at", desc=True).limit(20).execute().data or [])
         prior.reverse()
     except Exception:
@@ -68,7 +68,7 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
     )
 
     # ── Device action confirmation boundary ──
-    # Text chat is a *shared* household conversation. Never let a model
+    # Text chat is private to the signed-in person. Never let a model
     # generated text response directly unlock a door, move a valve or
     # actuate equipment. A deliberate user tap in Devices, with current
     # authorization and live HA checks, is required for physical actions.
@@ -124,9 +124,8 @@ async def chat(request: Request, current_user: dict = Depends(get_current_user))
 @router.get("/history")
 async def get_history(current_user: dict = Depends(get_current_user)):
     """
-    Returns this household's shared Chief of Staff conversation, oldest
-    first. One thread per household, not per user — every member sees
-    and continues the same conversation.
+    Returns only the caller's Chief of Staff conversation, oldest first.
+    Other household members cannot access this thread.
     """
     household_id = current_user.get("household_id")
     if not household_id:
@@ -136,6 +135,7 @@ async def get_history(current_user: dict = Depends(get_current_user)):
     result = supabase.table("chat_messages")\
         .select("*")\
         .eq("household_id", household_id)\
+        .eq("user_id", str(current_user["id"]))\
         .order("created_at", desc=True)\
         .limit(200)\
         .execute()
@@ -148,16 +148,15 @@ async def get_history(current_user: dict = Depends(get_current_user)):
 @router.delete("/history")
 async def clear_history(current_user: dict = Depends(get_current_user)):
     """
-    Clears the shared household conversation. Deliberately destructive
-    for everyone in the household, not just the caller's device — the
-    frontend is expected to confirm before calling this.
+    Clears only the signed-in user's personal Chief conversation.
+    Other household members' histories remain intact.
     """
     household_id = current_user.get("household_id")
     if not household_id:
         return {"status": "no_household"}
 
     supabase = get_supabase_admin()
-    supabase.table("chat_messages").delete().eq("household_id", household_id).execute()
+    supabase.table("chat_messages").delete().eq("household_id", household_id).eq("user_id", str(current_user["id"])).execute()
     return {"status": "cleared"}
 
 
