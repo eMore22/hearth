@@ -65,7 +65,7 @@ export default function ChiefScreen() {
     }
   };
 
-  const clear = () => Alert.alert('Clear conversation?', 'This removes the current Chief of Staff history for this household.', [
+  const clear = () => Alert.alert('Clear conversation?', 'This removes only your private Chief of Staff conversation. Other household members keep their own history.', [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Clear', style: 'destructive', onPress: () => clearMessages() },
   ]);
