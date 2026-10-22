@@ -22,7 +22,9 @@
       "autoIncrement": true,
       "env": {
         "EXPO_ROUTER_APP_ROOT": "./app",
-        "EXPO_PUBLIC_API_URL": "https://hearth-hq.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://hearth-hq.onrender.com",
+        "EXPO_PUBLIC_BANKING_SANDBOX_UI": "false",
+        "EXPO_PUBLIC_PLAID_SANDBOX_DEMO": "false"
       },
       "environment": "production"
     },
@@ -35,7 +37,8 @@
       "env": {
         "EXPO_ROUTER_APP_ROOT": "./app",
         "EXPO_PUBLIC_API_URL": "https://hearth-hq.onrender.com",
-        "EXPO_PUBLIC_PLAID_SANDBOX_DEMO": "true"
+        "EXPO_PUBLIC_PLAID_SANDBOX_DEMO": "true",
+        "EXPO_PUBLIC_BANKING_SANDBOX_UI": "true"
       },
       "environment": "production"
     }

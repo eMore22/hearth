@@ -34,7 +34,7 @@ export default function PlaidSandboxPreview() {
   const [showAllTransactions, setShowAllTransactions] = useState(false);
 
   const loadConnections = useCallback(async () => {
-    if (process.env.EXPO_PUBLIC_PLAID_SANDBOX_DEMO !== 'true') return;
+    if (process.env.EXPO_PUBLIC_BANKING_SANDBOX_UI !== 'true' || process.env.EXPO_PUBLIC_PLAID_SANDBOX_DEMO !== 'true') return;
     try {
       const response = await api.get<{ connections: DemoConnection[] }>('/api/finance/sandbox/plaid/connections');
       setConnections(response.data.connections.filter(c => c.status !== 'revoked'));
@@ -161,7 +161,7 @@ export default function PlaidSandboxPreview() {
   }, [busy, loadConnections]);
 
   // Internal Google Play testers only; production users never see a demo bank CTA.
-  if (process.env.EXPO_PUBLIC_PLAID_SANDBOX_DEMO !== 'true') return null;
+  if (process.env.EXPO_PUBLIC_BANKING_SANDBOX_UI !== 'true' || process.env.EXPO_PUBLIC_PLAID_SANDBOX_DEMO !== 'true') return null;
 
   return (
     <View style={styles.shell}>

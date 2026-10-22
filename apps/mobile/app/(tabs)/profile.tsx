@@ -9,6 +9,7 @@ import { useAutomationStore } from '../../src/stores/automationStore';
 import { H, HearthDesign } from '../../src/theme/hearthDesign';
 import { ScreenHeader } from '../../src/components/ui/PremiumKit';
 import PrivateFinanceCard from '../../src/components/finance/PrivateFinanceCard';
+import { isInternalBankingSandboxBuild } from '../../src/config/bankingRelease';
 
 const rowMeta = [
   { key: 'members', label: 'Household members', sub: 'Manage the people in your household', icon: 'people-outline' as const, route: '/(tabs)/members' },
@@ -67,7 +68,7 @@ export default function ProfileScreen() {
             </View>
           </TouchableOpacity>
 
-          <PrivateFinanceCard />
+          {isInternalBankingSandboxBuild && <PrivateFinanceCard />}
 
           {!status.connected && (
             <TouchableOpacity style={styles.connectBanner} onPress={() => router.push('/(tabs)/integrations')} activeOpacity={0.8}>
