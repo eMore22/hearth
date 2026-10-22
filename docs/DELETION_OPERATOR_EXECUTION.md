@@ -18,3 +18,14 @@ This supports only **an unambiguous invited member without owned documents, prov
 The handler deletes its own chat, analytics and push tokens, removes one membership, invokes \`supabase.auth.admin.delete_user\` and verifies the profile CASCADE and recorded request completion. No unrelated household data is removed.
 
 **Tests use simulated Auth and PostgREST interfaces only.** End-to-end staging with real Supabase Auth and Storage plus subscription receipts is required before production activation.
+
+
+## Private documents in member deletions (October 2026)
+Eligible invited-member deletions now reconcile ALL Storage paths and ALL document
+metadata records within the member's household before beginning. Every object
+must have a unique validated document record. Missing or orphaned objects, shared
+uploads, uncertain ownership and any linked financial provider stop the deletion.
+After operator approval, only the caller's private objects and DB metadata are
+removed; the other members' objects and records remain untouched. This scope
+still requires a real staged Auth + Storage test and a provider-aware solution
+for connected-bank accounts before public launch.
