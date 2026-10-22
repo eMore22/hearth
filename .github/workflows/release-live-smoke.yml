@@ -1,0 +1,45 @@
+name: Hearth public API release smoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release-live-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-readonly-smoke:
+    name: Verify live public endpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check health, policy, terms and account deletion
+        env:
+          HEARTH_API_BASE: https://hearth-hq.onrender.com
+        run: |
+          python - <<'PY'
+          import os, time, urllib.error, urllib.request
+          root = os.environ["HEARTH_API_BASE"]
+          endpoints = [
+              ("/health", b'"status":"ok"'),
+              ("/privacy-policy", b"Privacy Policy"),
+              ("/terms-of-service", b"Terms of Service"),
+              ("/account-deletion", b"Delete your Hearth HQ account"),
+          ]
+          for path, expected in endpoints:
+              for attempt in range(10):
+                  try:
+                      req = urllib.request.Request(root + path, headers={"User-Agent":"hearth-release-smoke/1"})
+                      with urllib.request.urlopen(req, timeout=12) as res:
+                          data = res.read(65536)
+                          if res.status != 200 or expected not in data:
+                              raise ValueError(f"Unexpected status/content at {path}")
+                      print(f"PASS {path}: status 200")
+                      break
+                  except (OSError, ValueError) as exc:
+                      if attempt == 9:
+                          raise SystemExit(f"FAIL {path} after retries: {type(exc).__name__}")
+                      time.sleep(12)
+          PY

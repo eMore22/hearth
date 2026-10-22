@@ -98,4 +98,6 @@ def account_deletion():
     from your account email address with the subject <strong>Hearth HQ account deletion request</strong>.</p>
     <p>We will verify account ownership before processing the request. Include no passwords or private documents in the email.
     If you have a Google Play subscription, cancel it separately in Google Play to stop future renewals.</p>
+    <p>If the support address is unavailable, you can also reach the privacy contact at
+    <a href='mailto:uguomoreeugene123@gmail.com?subject=Hearth%20HQ%20account%20deletion%20request'>uguomoreeugene123@gmail.com</a>.</p>
     <p>If any information must be retained for legal, security, or billing reasons, we will explain what is retained and why.</p></body></html>"""
