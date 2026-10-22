@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     HA_WEBHOOK_SECRET: str = ""
     # Separate application-side Fernet key for Home Assistant tokens. Never ship to mobile.
     HA_TOKEN_ENCRYPTION_KEY: str = ""
+    # Backend-only operator approval for scoped account deletion; never mobile.
+    DELETION_OPERATOR_SECRET: str = ""
 
     # Server-side RevenueCat key, NEVER EXPO_PUBLIC_. Gate is enabled only
     # after purchase/restore validation in Google Play Internal Testing.
