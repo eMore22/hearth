@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAutomationStore } from '../../src/stores/automationStore';
 import { H, HearthDesign } from '../../src/theme/hearthDesign';
 import { ScreenHeader } from '../../src/components/ui/PremiumKit';
+import { isInternalBankingSandboxBuild } from '../../src/config/bankingRelease';
 
 export default function IntegrationsScreen() {
   const insets = useSafeAreaInsets();
@@ -97,7 +98,7 @@ export default function IntegrationsScreen() {
           </View>
 
           <Text style={styles.section}>More integrations</Text>
-          <TouchableOpacity style={styles.futureCard} activeOpacity={0.8} onPress={() => router.push('/(tabs)/finance')}><View style={[styles.logo,{backgroundColor:'#EEF7F1'}]}><Ionicons name="wallet-outline" size={22} color={H.green} /></View><View style={styles.flex}><Text style={styles.name}>Banks & Household Finance</Text><Text style={styles.desc}>Canada and Nigeria Sandbox banks, private balances, and shared household bills.</Text></View><Ionicons name="chevron-forward" size={19} color={H.muted} /></TouchableOpacity>
+          <TouchableOpacity style={styles.futureCard} activeOpacity={0.8} onPress={() => router.push('/(tabs)/finance')}><View style={[styles.logo,{backgroundColor:'#EEF7F1'}]}><Ionicons name="wallet-outline" size={22} color={H.green} /></View><View style={styles.flex}><Text style={styles.name}>Banks & Household Finance</Text><Text style={styles.desc}>{isInternalBankingSandboxBuild ? 'Internal bank Sandbox tests and household bill tracking.' : 'Manage household bills. Bank connections are coming later.'}</Text></View><Ionicons name="chevron-forward" size={19} color={H.muted} /></TouchableOpacity>
           
           <TouchableOpacity style={styles.futureCard} onPress={() => router.push('/(tabs)/utilities')}><View style={[styles.logo,{backgroundColor:H.amberBg}]}><Ionicons name="flash-outline" size={22} color={H.amber} /></View><View style={styles.flex}><Text style={styles.name}>Utilities</Text><Text style={styles.desc}>Canadian and Nigerian utilities, shared household bills and provider connection readiness.</Text></View><Ionicons name="chevron-forward" size={19} color={H.muted}/></TouchableOpacity>
         </View>

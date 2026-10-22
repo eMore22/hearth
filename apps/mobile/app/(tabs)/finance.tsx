@@ -7,6 +7,7 @@ import { useBillStore } from '../../src/stores/billStore';
 import { H } from '../../src/theme/hearthDesign';
 import PlaidSandboxPreview from '../../src/components/finance/PlaidSandboxPreview';
 import MonoSandboxPanel from '../../src/components/finance/MonoSandboxPanel';
+import { isInternalBankingSandboxBuild } from '../../src/config/bankingRelease';
 
 const monthlyEquivalent = (amount: number, cycle: string) => {
   switch ((cycle || '').toLowerCase()) {
@@ -46,18 +47,20 @@ export default function HouseholdFinance() {
         <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back"><Ionicons name="arrow-back" size={23} color={H.navy} /></TouchableOpacity>
         <Text style={styles.title}>Household Finance</Text>
       </View>
-      <Text style={styles.subtitle}>Canadian and Nigerian banking tests, bills and subscriptions in one place.</Text>
+      <Text style={styles.subtitle}>{isInternalBankingSandboxBuild ? 'Internal banking tests, bills and subscriptions in one place.' : 'Manage bills, subscriptions and monthly household commitments.'}</Text>
 
       <View style={styles.card}>
-        <View style={styles.status}><Ionicons name="lock-closed-outline" size={17} color={H.muted} /><Text style={styles.statusTitle}>Real bank connections are not enabled</Text></View>
-        <Text style={styles.body}>Hearth cannot access real bank accounts or move money. Canadian Plaid and Nigerian Mono test accounts can be linked only with your consent. They use simulated data, not real funds.</Text>
+        <View style={styles.status}><Ionicons name="lock-closed-outline" size={17} color={H.muted} /><Text style={styles.statusTitle}>Bank connections are not available yet</Text></View>
+        <Text style={styles.body}>{isInternalBankingSandboxBuild ? 'Allowlisted testers can connect simulated Plaid and Mono accounts. Real bank access and payments remain disabled.' : 'Live bank linking is in development. You can still track household bills and estimated commitments without a bank connection.'}</Text>
       </View>
 
-      <Text style={styles.heading}>Canadian banks</Text>
-      <PlaidSandboxPreview />
-      <Text style={styles.heading}>Nigerian banks</Text>
-      <MonoSandboxPanel />
-      <Text style={[styles.note,{ marginHorizontal:20, marginBottom:16 }]}>Bank balances are private and available only to the household owner in Profile. Shared bills and utilities remain accessible to authorized household members.</Text>
+      {isInternalBankingSandboxBuild && <>
+        <Text style={styles.heading}>Canadian bank Sandbox</Text>
+        <PlaidSandboxPreview />
+        <Text style={styles.heading}>Nigerian bank Sandbox</Text>
+        <MonoSandboxPanel />
+        <Text style={[styles.note,{ marginHorizontal:20, marginBottom:16 }]}>Sandbox balances are only available to the household owner in Profile.</Text>
+      </>}
 
       <Text style={styles.heading}>Estimated monthly commitments</Text>
       <Text style={styles.note}>Calculated only from manually tracked bills. This is not an account balance or confirmed bank spending.</Text>
@@ -82,7 +85,7 @@ export default function HouseholdFinance() {
         <Text style={styles.ctaText}>Manage bills & subscriptions</Text>
         <Ionicons name="arrow-forward" size={19} color="#fff" />
       </TouchableOpacity>
-      <Text style={styles.footer}>Sandbox banking is for internal testers. Real banking and money movement are disabled. Household bills are shared, but private bank balances are never shared.</Text>
+      <Text style={styles.footer}>{isInternalBankingSandboxBuild ? 'Sandbox bank testing is for allowlisted internal testers only. Real banking and payments remain disabled.' : 'Live banking and payments are not available. Manually tracked household bills remain available.'}</Text>
     </ScrollView>
   );
 }

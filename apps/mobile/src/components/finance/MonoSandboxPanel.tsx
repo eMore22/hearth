@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, Linking, StyleSheet, Switch, Text, TouchableO
 import { Ionicons } from '@expo/vector-icons';
 import { H } from '../../theme/hearthDesign';
 import api from '../../services/api';
+import { isInternalBankingSandboxBuild } from '../../config/bankingRelease';
 
 type Capabilities = { discovery_available: boolean; bank_linking_enabled: boolean; payment_execution_enabled: boolean };
 type Bank = { id: string; name: string; country: string };
@@ -33,7 +34,7 @@ export default function MonoSandboxPanel() {
       setError('Unable to check the Mono Sandbox. Please try again.');
     }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (isInternalBankingSandboxBuild) void load(); }, []);
 
   const discover = async () => {
     setBusy(true);
@@ -97,6 +98,8 @@ export default function MonoSandboxPanel() {
       } },
     ]);
   };
+
+  if (!isInternalBankingSandboxBuild) return null;
 
   return <View style={s.body}>
         <View style={s.banner}>
