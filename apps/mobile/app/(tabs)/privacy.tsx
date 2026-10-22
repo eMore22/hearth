@@ -18,10 +18,10 @@ export default function PrivacyScreen(){
     <Text style={styles.section}>Data controls</Text><AccountDeletionCard />
     <Text style={styles.section}>Legal &amp; transparency</Text>
     <View style={styles.card}>
-      <TouchableOpacity accessibilityRole="link" accessibilityLabel="Read Hearth HQ Privacy Policy" style={styles.row} onPress={() => legal('https://www.hearthhq.online/privacy.html')}>
+      <TouchableOpacity accessibilityRole="link" accessibilityLabel="Read Hearth HQ Privacy Policy" style={styles.row} onPress={() => legal('https://hearth-hq.onrender.com/privacy-policy')}>
         <View style={styles.icon}><Ionicons name="document-text-outline" size={18} color={H.navy}/></View><View style={styles.flex}><Text style={styles.title}>Privacy Policy</Text><Text style={styles.sub}>How Hearth handles household and sensitive information</Text></View><Ionicons name="open-outline" size={18} color={H.muted2}/>
       </TouchableOpacity>
-      <TouchableOpacity accessibilityRole="link" accessibilityLabel="Read Hearth HQ Terms of Service" style={[styles.row,styles.border]} onPress={() => legal('https://www.hearthhq.online/terms.html')}>
+      <TouchableOpacity accessibilityRole="link" accessibilityLabel="Read Hearth HQ Terms of Service" style={[styles.row,styles.border]} onPress={() => legal('https://hearth-hq.onrender.com/terms-of-service')}>
         <View style={styles.icon}><Ionicons name="reader-outline" size={18} color={H.navy}/></View><View style={styles.flex}><Text style={styles.title}>Terms of Service</Text><Text style={styles.sub}>Service rules and important limitations</Text></View><Ionicons name="open-outline" size={18} color={H.muted2}/>
       </TouchableOpacity>
     </View><View style={styles.card}><View style={styles.infoRow}><Ionicons name="lock-closed-outline" size={18} color={H.purple}/><Text style={styles.infoText}>Documents, health information and household records are scoped to your household account.</Text></View><View style={[styles.infoRow,styles.border]}><Ionicons name="hardware-chip-outline" size={18} color={H.blue}/><Text style={styles.infoText}>Home Assistant access tokens are used only to connect Hearth HQ to the Home Assistant instance you provide.</Text></View></View>
