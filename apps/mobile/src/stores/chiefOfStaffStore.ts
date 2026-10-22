@@ -107,7 +107,7 @@ export const useChiefOfStaffStore = create<ChiefOfStaffState>((set, get) => ({
   },
 
   fetchHistory: async () => {
-    // Household-shared thread, loaded once per app session rather than
+    // Private per-user thread, loaded once per app session rather than
     // every time the screen mounts — avoids clobbering messages sent
     // seconds ago by re-fetching mid-conversation.
     if (get().historyLoaded) return;
@@ -135,7 +135,7 @@ export const useChiefOfStaffStore = create<ChiefOfStaffState>((set, get) => ({
       await chiefService.clearHistory();
     } catch (error: any) {
       // Server-side clear failed — restore local state rather than show
-      // an empty thread that isn't actually cleared for the household.
+      // an empty thread while the user's saved conversation remains.
       set({ messages: previous, error: error.message });
     }
   },
