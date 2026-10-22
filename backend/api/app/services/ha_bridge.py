@@ -1,109 +1,115 @@
+"""Outbound Home Assistant REST bridge with DNS-rebinding-safe socket resolution.
+
+The connection's actual TCP address is selected from checked public addresses;
+TLS SNI and certificate verification still use the original HTTPS hostname.
+No redirects, proxy inheritance, private-network targets or custom ports.
 """
-Home Assistant Bridge Service
-Handles all outbound communication with a household's HA instance.
-Called by the automation router and the Chief of Staff agent.
-"""
-import httpx
+import asyncio
+import ipaddress
 import json
-from app.services.ha_security import validate_public_ha_url
+import socket
+import ssl
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from urllib.parse import quote
+
+import aiohttp
+from aiohttp.abc import AbstractResolver
+from fastapi import HTTPException
+
+from app.services.ha_security import public_https_host
+
+
+def _public_ip(raw: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(raw)
+        return ip.is_global and not (ip.version == 6 and ip.ipv4_mapped and not ip.ipv4_mapped.is_global)
+    except ValueError:
+        return False
+
+
+class PublicOnlyResolver(AbstractResolver):
+    """The addresses used for TCP connect are exactly the vetted DNS answers."""
+
+    async def resolve(self, host: str, port: int = 0, family: int = socket.AF_INET):
+        public_https_host("https://" + host)
+        if port != 443:
+            raise OSError("Only standard HTTPS port is allowed")
+        try:
+            addresses = await asyncio.wait_for(
+                asyncio.get_running_loop().getaddrinfo(
+                    host, port, type=socket.SOCK_STREAM, family=socket.AF_UNSPEC),
+                timeout=3.0)
+        except Exception as exc:
+            raise OSError("Home Assistant DNS resolution unavailable") from exc
+        if not addresses or any(not _public_ip(a[4][0]) for a in addresses):
+            raise OSError("Home Assistant resolves to disallowed network address")
+        unique = {}
+        for family_id, _type, _proto, _canon, addr in addresses:
+            resolved = addr[0]
+            unique[(resolved, family_id)] = {
+                "hostname": host, "host": resolved, "port": port,
+                "family": family_id, "proto": socket.IPPROTO_TCP, "flags": 0,
+            }
+        return list(unique.values())
+
+    async def close(self) -> None:
+        return None
 
 
 class HABridgeService:
-    """
-    Thin async wrapper around Home Assistant's REST API.
-    Each method maps to one HA endpoint.
-    """
-
     def __init__(self, ha_url: str, access_token: str):
-        # Strip trailing slash so we can always append paths cleanly
-        self.base_url = ha_url.rstrip("/")
-        self.headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
-        # 10s timeout — HA is local so anything slower means something is wrong
-        self.timeout = httpx.Timeout(10.0)
+        host = public_https_host(ha_url)
+        self.base_url = f"https://{host}"
+        self.headers = {"Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json"}
+        self.timeout = aiohttp.ClientTimeout(total=10.0, connect=5.0)
 
-    # ── Connection test ───────────────────────────────────────────────────────
+    async def _request(self, method: str, path: str, payload: Optional[dict] = None):
+        connector = aiohttp.TCPConnector(
+            resolver=PublicOnlyResolver(), use_dns_cache=False,
+            ssl=ssl.create_default_context(), force_close=True, limit=4)
+        async with aiohttp.ClientSession(
+                connector=connector, timeout=self.timeout, trust_env=False) as client:
+            async with client.request(
+                    method, self.base_url + path, headers=self.headers,
+                    json=payload, allow_redirects=False) as response:
+                # Never follow a 3xx to an unvalidated internal address.
+                if 300 <= response.status < 400:
+                    raise OSError("Home Assistant redirects are not permitted")
+                response.raise_for_status()
+                if response.status == 204:
+                    return {}
+                return await response.json(content_type=None)
+
     async def ping(self) -> bool:
-        """Return True if the HA instance is reachable and the token is valid."""
         try:
-            await validate_public_ha_url(self.base_url)
-            async with httpx.AsyncClient(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
-                resp = await client.get(
-                    f"{self.base_url}/api/",
-                    headers=self.headers,
-                )
-                return resp.status_code == 200
+            await self._request("GET", "/api/")
+            return True
         except Exception:
             return False
 
-    # ── Device discovery ──────────────────────────────────────────────────────
     async def get_all_states(self) -> List[Dict]:
-        """
-        Fetch the full state list from HA.
-        Returns every entity with its current state and attributes.
-        """
-        await validate_public_ha_url(self.base_url)
-        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
-            resp = await client.get(
-                f"{self.base_url}/api/states",
-                headers=self.headers,
-            )
-            resp.raise_for_status()
-            return resp.json()
+        return await self._request("GET", "/api/states")
 
     async def get_entity_state(self, entity_id: str) -> Dict:
-        """Fetch the current state of a single entity."""
-        await validate_public_ha_url(self.base_url)
-        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
-            resp = await client.get(
-                f"{self.base_url}/api/states/{entity_id}",
-                headers=self.headers,
-            )
-            resp.raise_for_status()
-            return resp.json()
+        return await self._request("GET", "/api/states/" + quote(entity_id, safe="._-"))
 
-    # ── Command execution ─────────────────────────────────────────────────────
     async def call_service(
-        self,
-        domain: str,
-        service: str,
-        entity_id: str,
+        self, domain: str, service: str, entity_id: str,
         extra_data: Optional[Dict] = None,
     ) -> Dict:
-        """
-        Call a Home Assistant service (the mechanism behind all device control).
-        Examples:
-          call_service("switch", "turn_off", "switch.garage_door")
-          call_service("light", "turn_on", "light.kitchen", {"brightness": 128})
-          call_service("lock", "lock", "lock.front_door")
-          call_service("cover", "close_cover", "cover.garage")
-        """
         payload = {"entity_id": entity_id}
         if extra_data:
             payload.update(extra_data)
+        domain = quote(domain, safe="")
+        service = quote(service, safe="")
+        return await self._request("POST", f"/api/services/{domain}/{service}", payload)
 
-        await validate_public_ha_url(self.base_url)
-        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
-            resp = await client.post(
-                f"{self.base_url}/api/services/{domain}/{service}",
-                headers=self.headers,
-                json=payload,
-            )
-            resp.raise_for_status()
-            return resp.json() if resp.content else {"status": "ok"}
-
-    # ── Convenience wrappers ──────────────────────────────────────────────────
     async def turn_on(self, entity_id: str) -> Dict:
-        domain = entity_id.split(".")[0]
-        return await self.call_service(domain, "turn_on", entity_id)
+        return await self.call_service(entity_id.split(".")[0], "turn_on", entity_id)
 
     async def turn_off(self, entity_id: str) -> Dict:
-        domain = entity_id.split(".")[0]
-        return await self.call_service(domain, "turn_off", entity_id)
+        return await self.call_service(entity_id.split(".")[0], "turn_off", entity_id)
 
     async def close_cover(self, entity_id: str) -> Dict:
         return await self.call_service("cover", "close_cover", entity_id)
@@ -117,44 +123,26 @@ class HABridgeService:
     async def unlock(self, entity_id: str) -> Dict:
         return await self.call_service("lock", "unlock", entity_id)
 
-    # ── Device list builder ───────────────────────────────────────────────────
     @staticmethod
     def parse_devices_from_states(states: List[Dict]) -> List[Dict]:
-        """
-        Convert the raw HA states list into a clean device list
-        that we store in ha_devices and show in the app.
-        Only includes domains that Hearth cares about.
-        """
-        ACTIONABLE_DOMAINS = {
-            "switch", "light", "lock", "cover",
-            "input_boolean", "fan", "climate",
-        }
-        SENSOR_DOMAINS = {
-            "sensor", "binary_sensor", "water_heater",
-        }
-        RELEVANT_DOMAINS = ACTIONABLE_DOMAINS | SENSOR_DOMAINS
-
+        actionable = {"switch", "light", "lock", "cover", "input_boolean", "fan", "climate"}
+        relevant = actionable | {"sensor", "binary_sensor", "water_heater"}
         devices = []
         for state in states:
             entity_id = state.get("entity_id", "")
             domain = entity_id.split(".")[0]
-            if domain not in RELEVANT_DOMAINS:
+            if domain not in relevant:
                 continue
-
             attrs = state.get("attributes", {})
             devices.append({
-                "entity_id": entity_id,
-                "friendly_name": attrs.get("friendly_name", entity_id),
-                "domain": domain,
-                "device_class": attrs.get("device_class"),
-                "area": attrs.get("area_id"),
-                "last_state": state.get("state"),
+                "entity_id": entity_id, "friendly_name": attrs.get("friendly_name", entity_id),
+                "domain": domain, "device_class": attrs.get("device_class"),
+                "area": attrs.get("area_id"), "last_state": state.get("state"),
                 "last_state_at": state.get("last_changed"),
-                "is_actionable": domain in ACTIONABLE_DOMAINS,
+                "is_actionable": domain in actionable,
             })
-
         return devices
 
 
 def build_ha_bridge(ha_url: str, access_token: str) -> HABridgeService:
-    return HABridgeService(ha_url=ha_url, access_token=access_token)
+    return HABridgeService(ha_url, access_token)

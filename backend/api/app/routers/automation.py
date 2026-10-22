@@ -14,6 +14,8 @@ import re
 import traceback
 import logging
 import httpx
+import asyncio
+import aiohttp
 import json
 from datetime import datetime
 from typing import Optional
@@ -621,11 +623,11 @@ async def execute_action(
     except Exception as e:
         # DNS and network errors must not leak raw hostnames, access tokens or
         # a misleading 500 to the user. Save a sanitized failure marker.
-        if isinstance(e, httpx.TimeoutException):
+        if isinstance(e, (httpx.TimeoutException, asyncio.TimeoutError)):
             code, detail = 503, "Home Assistant timed out. Check that your Home Assistant address is reachable from the internet."
-        elif isinstance(e, httpx.HTTPStatusError):
+        elif isinstance(e, (httpx.HTTPStatusError, aiohttp.ClientResponseError)):
             code, detail = 502, "Home Assistant rejected the command. Check its connection and permissions."
-        elif isinstance(e, httpx.RequestError):
+        elif isinstance(e, (httpx.RequestError, aiohttp.ClientError, OSError)):
             code, detail = 503, "Home Assistant is unreachable. Verify the public HTTPS address and DNS."
         else:
             code, detail = 500, "Could not complete the smart-home command."
