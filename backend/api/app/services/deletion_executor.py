@@ -17,11 +17,12 @@ from fastapi import HTTPException
 from app.config import settings
 from app.dependencies import get_supabase_admin
 from app.services.deletion_plan import build_deletion_plan
+from app.services.document_security import storage_path
 from app.services.subscriptions import _lookup_remote, BillingUnavailable
 
 CLEANUP_TABLES = ("chat_messages", "push_tokens", "analytics_events")
 BLOCK_IF_PRESENT = (
-    "households", "tasks", "documents", "finance_connections",
+    "households", "tasks", "finance_connections",
     "finance_accounts", "finance_transactions", "finance_consent_events",
     "finance_payment_proposals",
 )
@@ -46,17 +47,82 @@ def _confirm_no_rows(db, table: str, col: str, user_id: str) -> None:
         _refuse(f"{table} deletion could not be verified")
 
 
-def _assert_no_storage_for_household(db, household_id: str) -> None:
-    """Conservative: reject if any household Storage entry may remain.
+def _list_storage_paths(db, household_id: str) -> set[str]:
+    """Enumerate all nested Storage objects in one household, or fail closed.
 
-    The existing Storage objects lack owner attribution. Until an explicit
-    reconciliation process exists, removing a member from a household with
-    Storage objects could leave personal orphan files behind. Never assume
-    the absence of 'documents' rows proves Storage is empty.
+    Supabase returns virtual folders (id=None) for paths like
+    household-id/document-uuid/file.pdf. Every file must match a DB row.
+    We cap depth, entries and total objects to avoid incomplete inventories.
     """
-    items = db.storage.from_("documents").list(household_id, {"limit": 1000})
-    if not isinstance(items, list) or items:
-        _refuse("Household document Storage requires an independently verified cleanup")
+    bucket = db.storage.from_("documents")
+    pending = [(household_id, 0)]
+    found: set[str] = set()
+    visited: set[str] = set()
+    while pending:
+        folder, depth = pending.pop()
+        if folder in visited or depth > 5 or len(visited) > 400:
+            _refuse("Document Storage inventory exceeded safety limits")
+        visited.add(folder)
+        entries = bucket.list(folder, {"limit": 1001, "offset": 0})
+        if not isinstance(entries, list) or len(entries) >= 1001:
+            _refuse("Document Storage listing incomplete")
+        for entry in entries:
+            if not isinstance(entry, dict):
+                _refuse("Document Storage listing invalid")
+            name = entry.get("name")
+            if (not isinstance(name, str) or not name or
+                    name in (".", "..") or "/" in name or "\\" in name):
+                _refuse("Unrecognized document Storage path")
+            path = folder + "/" + name
+            if entry.get("id") or entry.get("metadata") is not None:
+                found.add(path)
+            else:
+                pending.append((path, depth + 1))
+            if len(found) + len(pending) > 4000:
+                _refuse("Document Storage inventory exceeded limits")
+    return found
+
+
+def _reconcile_documents(db, user_id: str, household_id: str) -> set[str]:
+    """Only private uploader-owned objects may be removed.
+
+    Every document in household Storage must be accounted for by a
+    metadata record, including those belonging to OTHER family members.
+    An unknown orphan or duplicate path blocks all deletion.
+    """
+    rows = (db.table("documents")
+            .select("id,household_id,uploaded_by,visibility,file_url")
+            .eq("household_id", household_id).limit(1001).execute().data or [])
+    if len(rows) >= 1001:
+        _refuse("Too many household documents for safe reconciliation")
+    paths = {}
+    owned = set()
+    for doc in rows:
+        path = storage_path(doc.get("file_url"), household_id)
+        if not path or path in paths:
+            _refuse("Invalid or duplicate document Storage reference")
+        paths[path] = doc
+        if str(doc.get("uploaded_by")) == user_id:
+            if doc.get("visibility") != "private":
+                _refuse("Shared documents require family rights review")
+            owned.add(path)
+    current = _list_storage_paths(db, household_id)
+    if current != set(paths):
+        _refuse("Untracked or missing Storage objects require manual review")
+    return owned
+
+
+def _remove_and_verify_private_documents(db, user_id: str,
+                                        household_id: str, owned: set[str]) -> None:
+    if not owned:
+        return
+    db.storage.from_("documents").remove(sorted(owned))
+    after = _list_storage_paths(db, household_id)
+    if any(path in after for path in owned):
+        raise HTTPException(status_code=503, detail="Document removal not fully verified")
+    db.table("documents").delete().eq("uploaded_by", user_id).eq(
+        "household_id", household_id).eq("visibility", "private").execute()
+    _confirm_no_rows(db, "documents", "uploaded_by", user_id)
 
 
 def execute_member_deletion(*, request_id: str, expected_digest: str,
@@ -91,6 +157,8 @@ def execute_member_deletion(*, request_id: str, expected_digest: str,
         _refuse("Cannot establish single-member ownership")
     if any(counts.get(t) is None or counts.get(t) for t in BLOCK_IF_PRESENT):
         _refuse("Shared or provider-owned data requires individual resolution")
+    if counts.get("documents") is None:
+        _refuse("Document inventory unavailable")
     shared = plan["shared_sensitive_row_counts"]
     if any(value for value in shared.values()):
         _refuse("Household medical or preference records need an individual rights review")
@@ -114,7 +182,7 @@ def execute_member_deletion(*, request_id: str, expected_digest: str,
     if not owner.get("created_by") or str(owner["created_by"]) == uid:
         _refuse("Household owner identity requires manual resolution")
 
-    _assert_no_storage_for_household(db, household_id)
+    private_document_paths = _reconcile_documents(db, uid, household_id)
     # A RevenueCat outage is a hard stop: deleting Hearth does not cancel a
     # Google Play subscription. Require verified non-paying access first.
     verify = subscription_verifier or _lookup_remote
@@ -134,6 +202,7 @@ def execute_member_deletion(*, request_id: str, expected_digest: str,
 
     # All writes are scoped by user ID; abort if a step did not verify.
     # A mid-run error intentionally leaves 'processing' for manual recovery.
+    _remove_and_verify_private_documents(db, uid, household_id, private_document_paths)
     for table in CLEANUP_TABLES:
         db.table(table).delete().eq("user_id", uid).execute()
         _confirm_no_rows(db, table, "user_id", uid)
@@ -155,5 +224,5 @@ def execute_member_deletion(*, request_id: str, expected_digest: str,
     if completed.get("status") != "completed" or not completed.get("completed_at"):
         raise HTTPException(status_code=503, detail="Deletion completion receipt could not be verified")
     return {"request_id": request_id, "status": "completed",
-            "member_scope": "single_household_no_shared_storage_or_providers",
+            "member_scope": "single_household_private_documents_reconciled_no_providers",
             "additional_audit_verification_required": True}

@@ -36,11 +36,30 @@ class Q:
         return SimpleNamespace(data=result)
 
 class Storage:
-    def __init__(self):self.objects=[]
+    def __init__(self):
+        self.objects=set()
     def from_(self,bucket):
         if bucket != "documents":raise AssertionError()
         return self
-    def list(self,*args):return self.objects
+    def list(self,path,options=None):
+        folder=path.rstrip("/") + "/"
+        children=set()
+        for name in self.objects:
+            if not name.startswith(folder):
+                continue
+            rest=name[len(folder):]
+            child=rest.split("/",1)[0]
+            if "/" in rest:
+                children.add((child,True))
+            else:
+                children.add((child,False))
+        return [{"name":name,"id":None if directory else "file-object",
+                 "metadata":None if directory else {"size":1}}
+                for name,directory in sorted(children)]
+    def remove(self,paths):
+        for path in paths:
+            self.objects.discard(path)
+
 
 class AuthAdmin:
     def __init__(self,db):self.db=db;self.deleted=[]
@@ -99,9 +118,60 @@ class ExecutorTests(unittest.TestCase):
         with self.assertRaises(HTTPException):execute_member_deletion(db=db,**args)
         self.assertEqual(db.writes,0)
     def test_storage_objects_block_delete(self):
-        db=DB();db.storage.objects=[{"name":"other.pdf"}]
+        db=DB();db.storage.objects={HOME+"/unknown/orphan.pdf"}
         with self.assertRaises(HTTPException):execute_member_deletion(db=db,**approved(db))
         self.assertEqual(db.writes,0)
+    def test_deletes_private_documents_but_keeps_other_members_storage(self):
+        db=DB()
+        my_file=HOME+"/doc-a/personal.pdf"
+        other_file=HOME+"/doc-b/household-insurance.pdf"
+        db.rows["documents"]=[
+            {"id":"a","household_id":HOME,"uploaded_by":USER,
+             "file_url":"storage://documents/"+my_file,"visibility":"private"},
+            {"id":"b","household_id":HOME,"uploaded_by":OWNER,
+             "file_url":"storage://documents/"+other_file,"visibility":"private"},
+        ]
+        db.storage.objects={my_file,other_file}
+        result=execute_member_deletion(db=db,**approved(db))
+        self.assertEqual(result["status"],"completed")
+        self.assertEqual(db.storage.objects,{other_file})
+        self.assertEqual([d["id"] for d in db.rows["documents"]],["b"])
+
+    def test_shared_uploaded_document_requires_family_review(self):
+        db=DB()
+        own_file=HOME+"/doc-a/shared.pdf"
+        db.rows["documents"]=[{"id":"a","household_id":HOME,
+                               "uploaded_by":USER,"visibility":"household",
+                               "file_url":"storage://documents/"+own_file}]
+        db.storage.objects={own_file}
+        with self.assertRaises(HTTPException):
+            execute_member_deletion(db=db,**approved(db))
+        self.assertEqual(db.writes,0)
+        self.assertEqual(db.storage.objects,{own_file})
+
+    def test_missing_orphan_storage_blocks_before_writes(self):
+        db=DB()
+        own_file=HOME+"/doc-a/private.pdf"
+        orphan_file=HOME+"/doc-z/orphan.pdf"
+        db.rows["documents"]=[{"id":"a","household_id":HOME,"uploaded_by":USER,
+                               "visibility":"private",
+                               "file_url":"storage://documents/"+own_file}]
+        db.storage.objects={own_file,orphan_file}
+        with self.assertRaises(HTTPException):
+            execute_member_deletion(db=db,**approved(db))
+        self.assertEqual(db.writes,0)
+        self.assertEqual(db.storage.objects,{own_file,orphan_file})
+
+    def test_unlisted_document_object_blocks_before_writes(self):
+        db=DB()
+        own_file=HOME+"/doc-a/missing.pdf"
+        db.rows["documents"]=[{"id":"a","household_id":HOME,"uploaded_by":USER,
+                               "visibility":"private",
+                               "file_url":"storage://documents/"+own_file}]
+        with self.assertRaises(HTTPException):
+            execute_member_deletion(db=db,**approved(db))
+        self.assertEqual(db.writes,0)
+
     def test_finance_connections_block_delete(self):
         db=DB();db.rows["finance_connections"]=[{"id":"bank","owner_user_id":USER,"household_id":HOME}]
         with self.assertRaises(HTTPException):execute_member_deletion(db=db,**approved(db))
