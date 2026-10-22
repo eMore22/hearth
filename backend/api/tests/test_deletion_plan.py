@@ -76,6 +76,30 @@ class PlanTests(unittest.TestCase):
         newer=build_deletion_plan(REQ,db)["snapshot_sha256"]
         self.assertNotEqual(initial,newer)
 
+    def test_metadata_changes_invalidate_previous_review(self):
+        db=DB()
+        db.rows["finance_connections"].append({
+            "id":"own-bank","owner_user_id":USER,"household_id":HOME,
+            "provider":"plaid","status":"linked"})
+        initial=build_deletion_plan(REQ,db)["snapshot_sha256"]
+        db.rows["documents"][0]["file_url"]=f"storage://documents/{HOME}/replaced/private.pdf"
+        changed_file=build_deletion_plan(REQ,db)["snapshot_sha256"]
+        self.assertNotEqual(initial,changed_file)
+        db.rows["household_members"][0]["role"]="owner"
+        changed_role=build_deletion_plan(REQ,db)["snapshot_sha256"]
+        self.assertNotEqual(changed_file,changed_role)
+        db.rows["finance_connections"][1]["status"]="revoked"
+        changed_provider=build_deletion_plan(REQ,db)["snapshot_sha256"]
+        self.assertNotEqual(changed_role,changed_provider)
+        db.rows["finance_connections"][0]["status"]="revoked"  # Other member's bank
+        self.assertEqual(changed_provider,build_deletion_plan(REQ,db)["snapshot_sha256"])
+
+    def test_shared_health_record_replacement_invalidates_snapshot(self):
+        db=DB()
+        initial=build_deletion_plan(REQ,db)["snapshot_sha256"]
+        db.rows["health_events"]=[{"id":"different-shared-health","household_id":HOME}]
+        self.assertNotEqual(initial,build_deletion_plan(REQ,db)["snapshot_sha256"])
+
     def test_owner_household_requires_transfer(self):
         db=DB()
         db.rows["households"]=[{"id":HOME,"created_by":USER}]

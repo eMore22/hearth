@@ -75,7 +75,12 @@ def build_deletion_plan(request_id: str, db=None) -> dict:
                 blockers.append(f"{name}: missing row identifier")
             if truncated:
                 blockers.append(f"{name}: inventory exceeds {MAX_ROWS} rows")
-            snapshot[name] = ids
+            # Include every selected field in the opaque digest so edits to
+            # document references, sharing, household roles and provider
+            # connection state invalidate a previously reviewed snapshot.
+            snapshot[name] = sorted(
+                [{field: row.get(field) for field in fields.split(",")}
+                 for row in rows], key=lambda row: str(row.get("id") or ""))
             counts[name] = len(rows)
             if name == "documents":
                 documents = rows
@@ -97,17 +102,20 @@ def build_deletion_plan(request_id: str, db=None) -> dict:
     household_ids = sorted({str(m.get("household_id") or "") for m in memberships
                             if m.get("household_id")})
     shared_counts = {}
+    shared_snapshot = {}
     for hid in household_ids:
         for table in SHARED_SENSITIVE:
             try:
                 rows, truncated = _bounded_rows(db, table, "household_id", hid, "id")
                 shared_counts[f"{table}:{hid}"] = len(rows)
+                shared_snapshot[f"{table}:{hid}"] = sorted(str(row.get("id") or "") for row in rows)
                 if truncated:
                     blockers.append(f"{table}: shared data inventory exceeds {MAX_ROWS}")
                 if rows:
                     blockers.append(f"{table}: household-wide data requires other members' rights review")
             except Exception:
                 shared_counts[f"{table}:{hid}"] = None
+                shared_snapshot[f"{table}:{hid}"] = None
                 blockers.append(f"{table}: shared data inventory unavailable")
 
     document_checks = {"rows": len(documents), "invalid_paths": 0,
@@ -141,7 +149,7 @@ def build_deletion_plan(request_id: str, db=None) -> dict:
 
     digest = hashlib.sha256(json.dumps(
         {"request": preflight["request_id"], "user": user_id, "status": preflight["status"],
-         "snapshot": snapshot, "shared_counts": shared_counts,
+         "snapshot": snapshot, "shared_snapshot": shared_snapshot,
          "doc": document_checks},
         sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     role = "multiple" if len(memberships) > 1 else (
