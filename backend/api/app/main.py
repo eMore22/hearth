@@ -17,6 +17,7 @@ async def lifespan(app: FastAPI):
         startup_logger.warning("HA encryption migration deferred")
     yield
 from fastapi.responses import HTMLResponse
+from app.routers.legal_pages import router as legal_pages_router
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import (
@@ -73,6 +74,7 @@ app.include_router(finance.router,        prefix="/api/finance",       tags=["Fi
 app.include_router(utilities.router,      prefix="/api/utilities",     tags=["Utilities"])
 app.include_router(nigeria_sandbox.router,prefix="/api/finance/sandbox/mono",tags=["NigeriaSandbox"])
 app.include_router(mono_webhooks.router, prefix="/api/webhooks", tags=["MonoSandboxWebhook"])
+app.include_router(legal_pages_router)
 
 
 @app.get("/")
